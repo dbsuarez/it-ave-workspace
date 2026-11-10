@@ -12,7 +12,7 @@ Project root: `D:\Development\itavenue-workspace`
 | Planning | Architecture, stack, target platform decisions | Done |
 | Phase 1 | Backend (Express + Socket.io + PostgreSQL + JWT) with Docker Compose | Done and tested |
 | Phase 2 | Electron desktop client (login, sidebar, messaging, threads, reactions, attachments) | Done and tested |
-| Phase 3 | Rich features: real Files upload, Notes backend integration, unread counts, presence, actual audio huddle | Mostly done (Files, Notes, unread, presence); audio huddle remains mock |
+| Phase 3 | Rich features: real Files upload, Notes backend integration, unread counts, presence, read receipts, actual audio huddle | Mostly done (Files, Notes, unread, presence, read receipts); audio huddle remains mock |
 | Phase 4 | Deployment to Hostinger KVM (domain + TLS + build + installers) | Not started |
 
 ## Implemented and verified
@@ -22,6 +22,7 @@ Project root: `D:\Development\itavenue-workspace`
 - `/api/channels` list, `/api/channels/my` for user membership with unread counts
 - `POST /api/channels` create channel (name: lowercase, numbers, hyphens only; auto-join on create)
 - `POST /api/channels/:id/read` mark channel read (clears unread badge)
+- `GET /api/channels/:id/read-receipts` lists members who have read the channel's latest message
 - `/api/messages` channel history (paginated)
 - `GET|POST /api/messages/:id/replies` thread endpoints
 - `POST /api/messages/:messageId/reactions` emoji reaction add/remove
@@ -63,6 +64,8 @@ Desktop client (`frontend/`):
 - Activity view lists channels with unread messages, with an aggregate rail badge
 - Channel switching, search field (client-side filter of visible channel)
 - Unread badges on channels (white pill on the dark pane); clears on open/read
+- Latest-message read receipts show reader avatars/names and refresh when opening a channel or
+  receiving a message in the active channel
 - Compact inline SVG icons throughout (no emoji-in-UI)
 - Toast notifications instead of native `alert()`
 - Responsive rules: scrollbars eliminated on desktop; sidebar + layout adapt below 1000px
@@ -98,27 +101,26 @@ Also resolved:
 - **Search**: client-side filter of the currently rendered channel; not server-side full-text search.
 - **Profile / Preferences / Account settings**: menu entries exist and report that editing is not
   implemented yet.
-- **Read receipts**: not implemented.
-
 ## Planned remaining work
 
 Priority order, by user-visible value:
 
-1. **Read receipts**
-   - Track who has read the latest message per channel
-2. **Real huddle**
+1. **Real huddle**
    - WebRTC audio via PeerJS or a small Node relay
    - Cross-check: does the office actually want this, or is it enough to hop on a call elsewhere?
-3. **Deployment to Hostinger KVM**
+2. **Deployment to Hostinger KVM**
    - Point DNS at the VPS IP
    - Install Node/Docker, pull this repository
    - Reverse proxy (Nginx) + TLS (Let's Encrypt)
    - Build Windows installer (electron-builder) or distribute a portable exe
    - Rate-limit login, add request logging, consider helmet + CSP
-4. **Android**
+3. **Android**
    - Capacitor-based wrapper around the existing frontend
    - Reuse the same business logic / API client
    - Android will refuse plain HTTP; requires domain + TLS
+
+Read receipts currently cover the latest message in each channel. They do not provide a
+per-message read-state history or a dedicated receipt-change event.
 
 ## Known defects being carried right now
 
@@ -145,6 +147,7 @@ Priority order, by user-visible value:
 |---|---|
 | Registration + login + JWT | curl, PowerShell `Invoke-WebRequest` |
 | Socket auth + send + receive + persisted | Node CDP probe of actual Electron window |
+| Latest-message read receipts and channel access | Docker API integration check: two members marked read; both receipts returned; non-member denied |
 | Channel create modal + creation | CDP (real click path) |
 | Responsive CSS | No overflow horizontal, no default scrollbars in window |
 | Messages persist in Postgres | `docker exec itavenue-db psql -c ...` |
