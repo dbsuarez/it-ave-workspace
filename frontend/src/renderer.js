@@ -26,6 +26,19 @@ let state = {
   view: 'channel',
   section: 'home',
   socket: null,
+  socketAuthenticated: false,
+  huddle: {
+    channelId: null,
+    localStream: null,
+    peers: new Map(),
+    participants: new Map(),
+    iceServers: [],
+    joining: false,
+    joinAttempt: 0,
+    muted: false,
+    status: 'Choose a channel and join to start an audio huddle.',
+    statusType: '',
+  },
   files: [],
   notes: [],
 };
@@ -252,7 +265,14 @@ function setupEventListeners() {
   on('btn-send-thread', 'click', sendThreadReply);
 
   // Views
-  on('btn-huddle-close', 'click', () => setSection('home'));
+  on('btn-huddle-close', 'click', async () => {
+    await cleanupHuddle();
+    setSection('home');
+  });
+  on('btn-huddle-join', 'click', joinHuddle);
+  on('btn-huddle-leave', 'click', () => cleanupHuddle());
+  on('btn-huddle-mute', 'click', toggleHuddleMute);
+  on('huddle-channel-select', 'change', renderHuddleView);
   on('btn-refresh-activity', 'click', () => renderActivity());
 
   // Files / Notes
@@ -419,6 +439,7 @@ async function handleRegister(e) {
 }
 
 async function handleLogout() {
+  cleanupHuddle(false);
   state.token = null;
   state.user = null;
   state.channels = [];
@@ -429,6 +450,7 @@ async function handleLogout() {
   await electronAPI.storeDelete('user');
 
   if (state.socket) {
+    state.socketAuthenticated = false;
     state.socket.disconnect();
     state.socket = null;
   }
@@ -453,7 +475,31 @@ function connectSocket() {
   });
 
   state.socket.on('authenticated', (data) => {
+    state.socketAuthenticated = true;
     console.log('Socket authenticated:', data.username);
+  });
+
+  state.socket.on('huddle:joined', handleHuddleJoined);
+  state.socket.on('huddle:participant-joined', (participant) => {
+    if (Number(state.huddle.channelId) !== Number(participant.channelId)) return;
+    state.huddle.participants.set(participant.peerId, participant);
+    renderHuddleParticipants();
+  });
+  state.socket.on('huddle:participant-left', ({ peerId }) => {
+    removeHuddlePeer(peerId);
+  });
+  state.socket.on('huddle:signal', (message) => {
+    handleHuddleSignal(message).catch((err) => {
+      console.error('Huddle signaling error:', err);
+      setHuddleStatus('Could not establish an audio connection.', 'error');
+    });
+  });
+  state.socket.on('huddle:error', ({ error }) => {
+    if (state.huddle.joining || state.huddle.channelId) {
+      cleanupHuddle(false);
+    }
+    setHuddleStatus(error || 'Unable to join huddle.', 'error');
+    renderHuddleView();
   });
 
   state.socket.on('new_message', (msg) => {
@@ -496,6 +542,12 @@ function connectSocket() {
   });
 
   state.socket.on('disconnect', () => {
+    state.socketAuthenticated = false;
+    if (state.huddle.channelId || state.huddle.joining) {
+      cleanupHuddle(false);
+      setHuddleStatus('Disconnected from the call server. Rejoin to continue.', 'error');
+      renderHuddleView();
+    }
     console.log('Disconnected from socket server');
   });
 }
@@ -532,6 +584,7 @@ async function loadChannels() {
 
     state.channels = data.channels;
     renderSidebar();
+    renderHuddleView();
 
     // Open first channel if none selected
     if (!state.currentChannelId && state.channels.length > 0) {
@@ -1157,7 +1210,318 @@ async function setSection(section) {
     await loadNotes();
   } else if (section === 'activity') {
     renderActivity();
+  } else if (section === 'huddle') {
+    renderHuddleView();
   }
+}
+
+function setHuddleStatus(message, type = '') {
+  state.huddle.status = message;
+  state.huddle.statusType = type;
+  const status = document.getElementById('huddle-status');
+  if (status) status.textContent = message;
+  const badge = document.getElementById('huddle-status-badge');
+  if (badge) {
+    badge.classList.toggle('connected', type === 'connected');
+    badge.classList.toggle('error', type === 'error');
+  }
+}
+
+function renderHuddleView() {
+  const select = document.getElementById('huddle-channel-select');
+  const joinButton = document.getElementById('btn-huddle-join');
+  const muteButton = document.getElementById('btn-huddle-mute');
+  const leaveButton = document.getElementById('btn-huddle-leave');
+  const title = document.getElementById('huddle-title');
+  if (!select) return;
+
+  const selectedChannelId = state.huddle.channelId
+    || select.value
+    || state.currentChannelId
+    || state.channels[0]?.id;
+  select.replaceChildren();
+
+  if (!state.channels.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No channels available';
+    select.appendChild(option);
+  } else {
+    state.channels.forEach((channel) => {
+      const option = document.createElement('option');
+      option.value = String(channel.id);
+      option.textContent = `#${channel.name}`;
+      select.appendChild(option);
+    });
+    select.value = String(selectedChannelId || state.channels[0].id);
+  }
+
+  const joined = state.huddle.channelId !== null;
+  const channel = state.channels.find((item) => Number(item.id) === Number(selectedChannelId));
+  if (title) title.textContent = joined && channel ? `Huddle in #${channel.name}` : 'Channel huddle';
+  select.disabled = joined || state.huddle.joining || !state.channels.length;
+  if (joinButton) {
+    joinButton.disabled = joined || state.huddle.joining || !state.channels.length;
+    joinButton.textContent = state.huddle.joining ? 'Connecting…' : joined ? 'In huddle' : 'Join huddle';
+  }
+  if (muteButton) {
+    muteButton.disabled = !joined;
+    muteButton.classList.toggle('muted', state.huddle.muted);
+    muteButton.title = state.huddle.muted ? 'Unmute microphone' : 'Mute microphone';
+    muteButton.setAttribute('aria-label', muteButton.title);
+    muteButton.setAttribute('aria-pressed', String(state.huddle.muted));
+  }
+  if (leaveButton) leaveButton.disabled = !joined && !state.huddle.joining;
+  setHuddleStatus(state.huddle.status, state.huddle.statusType);
+  renderHuddleParticipants();
+}
+
+function renderHuddleParticipants() {
+  const container = document.getElementById('huddle-participants');
+  if (!container) return;
+  container.replaceChildren();
+
+  const participants = Array.from(state.huddle.participants.values());
+  if (!participants.length) {
+    const empty = document.createElement('p');
+    empty.className = 'huddle-empty';
+    empty.textContent = state.huddle.channelId
+      ? 'You are the first person in this huddle. Others can join from the same channel.'
+      : 'Participants will appear here when someone joins.';
+    container.appendChild(empty);
+    return;
+  }
+
+  participants.forEach((participant) => {
+    const item = document.createElement('div');
+    item.className = 'huddle-participant';
+    const avatar = document.createElement('span');
+    avatar.className = 'huddle-participant-avatar';
+    avatar.textContent = (participant.username || 'U').charAt(0).toUpperCase();
+    const name = document.createElement('span');
+    name.textContent = participant.peerId === state.socket?.id
+      ? `${participant.username} (you)`
+      : participant.username || 'Workspace member';
+    item.append(avatar, name);
+    container.appendChild(item);
+  });
+}
+
+async function joinHuddle() {
+  const select = document.getElementById('huddle-channel-select');
+  const channelId = Number(select?.value);
+  if (!Number.isSafeInteger(channelId) || !state.channels.some((channel) => Number(channel.id) === channelId)) {
+    setHuddleStatus('Choose a channel you belong to before joining.', 'error');
+    return;
+  }
+  if (!state.socket?.connected || !state.socketAuthenticated) {
+    setHuddleStatus('Connecting to the call server. Try again in a moment.', 'error');
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === 'undefined') {
+    setHuddleStatus('This environment does not support WebRTC audio.', 'error');
+    return;
+  }
+
+  state.huddle.joining = true;
+  const joinAttempt = ++state.huddle.joinAttempt;
+  state.huddle.muted = false;
+  setHuddleStatus('Requesting microphone access…');
+  renderHuddleView();
+
+  try {
+    state.huddle.localStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+    if (!state.huddle.joining || state.huddle.joinAttempt !== joinAttempt) {
+      state.huddle.localStream.getTracks().forEach((track) => track.stop());
+      state.huddle.localStream = null;
+      return;
+    }
+    state.huddle.participants.set(state.socket.id, {
+      peerId: state.socket.id,
+      id: state.user.id,
+      username: state.user.username,
+    });
+    setHuddleStatus('Joining channel huddle…');
+    state.socket.emit('huddle:join', channelId);
+  } catch (err) {
+    if (state.huddle.joinAttempt !== joinAttempt) return;
+    console.error('Huddle microphone access failed:', err);
+    cleanupHuddle(false);
+    const message = err.name === 'NotAllowedError'
+      ? 'Microphone access was denied. Allow microphone access in your system settings and try again.'
+      : err.name === 'NotFoundError'
+        ? 'No microphone was found on this device.'
+        : 'Could not start the microphone. Check your audio device and try again.';
+    setHuddleStatus(message, 'error');
+    renderHuddleView();
+  }
+}
+
+function handleHuddleJoined(data) {
+  if (!state.huddle.joining || !state.huddle.localStream) {
+    state.socket.emit('huddle:leave');
+    return;
+  }
+
+  state.huddle.channelId = data.channelId;
+  state.huddle.iceServers = data.iceServers || [];
+  state.huddle.joining = false;
+  state.huddle.participants.set(state.socket.id, {
+    peerId: state.socket.id,
+    id: state.user.id,
+    username: state.user.username,
+  });
+
+  (data.participants || []).forEach((participant) => {
+    state.huddle.participants.set(participant.peerId, participant);
+  });
+
+  const channel = state.channels.find((item) => Number(item.id) === Number(data.channelId));
+  setHuddleStatus(
+    `Connected to #${channel?.name || 'channel'}${data.participants?.length ? '' : '. Waiting for others to join.'}`,
+    'connected'
+  );
+  renderHuddleView();
+
+  (data.participants || []).forEach((participant) => {
+    createHuddlePeer(participant, true).catch((err) => {
+      console.error('Could not create huddle connection:', err);
+      setHuddleStatus('Could not connect to a huddle participant.', 'error');
+    });
+  });
+}
+
+async function createHuddlePeer(participant, createOffer = false) {
+  const existing = state.huddle.peers.get(participant.peerId);
+  if (existing) return existing.connection;
+
+  const connection = new RTCPeerConnection({ iceServers: state.huddle.iceServers });
+  const peer = { connection, participant, audio: null, pendingCandidates: [] };
+  state.huddle.peers.set(participant.peerId, peer);
+  state.huddle.localStream.getTracks().forEach((track) => connection.addTrack(track, state.huddle.localStream));
+
+  connection.onicecandidate = ({ candidate }) => {
+    if (candidate && state.socket?.connected) {
+      state.socket.emit('huddle:signal', {
+        to: participant.peerId,
+        signal: { candidate: candidate.toJSON() },
+      });
+    }
+  };
+  connection.ontrack = (event) => {
+    const stream = event.streams[0];
+    if (!stream) return;
+    if (!peer.audio) {
+      peer.audio = document.createElement('audio');
+      peer.audio.autoplay = true;
+      peer.audio.playsInline = true;
+      peer.audio.dataset.peerId = participant.peerId;
+      document.getElementById('huddle-audio-container')?.appendChild(peer.audio);
+    }
+    peer.audio.srcObject = stream;
+    peer.audio.play().catch((err) => {
+      console.error('Remote huddle audio playback failed:', err);
+      setHuddleStatus('Remote audio playback was blocked by the system.', 'error');
+    });
+  };
+  connection.onconnectionstatechange = () => {
+    if (connection.connectionState === 'failed') {
+      setHuddleStatus('Audio connection failed. This network may require a TURN server.', 'error');
+    }
+  };
+
+  if (createOffer) {
+    const offer = await connection.createOffer();
+    await connection.setLocalDescription(offer);
+    state.socket.emit('huddle:signal', {
+      to: participant.peerId,
+      signal: { description: connection.localDescription.toJSON() },
+    });
+  }
+
+  return connection;
+}
+
+async function handleHuddleSignal(message) {
+  if (!state.huddle.channelId || !message.from || !message.signal) return;
+
+  const participant = {
+    peerId: message.from,
+    id: message.id,
+    username: message.username,
+  };
+  state.huddle.participants.set(participant.peerId, participant);
+  const connection = await createHuddlePeer(participant);
+  const peer = state.huddle.peers.get(participant.peerId);
+
+  if (message.signal.description) {
+    await connection.setRemoteDescription(new RTCSessionDescription(message.signal.description));
+    for (const candidate of peer.pendingCandidates.splice(0)) {
+      await connection.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+    if (message.signal.description.type === 'offer') {
+      const answer = await connection.createAnswer();
+      await connection.setLocalDescription(answer);
+      state.socket.emit('huddle:signal', {
+        to: participant.peerId,
+        signal: { description: connection.localDescription.toJSON() },
+      });
+    }
+  } else if (message.signal.candidate) {
+    const candidate = new RTCIceCandidate(message.signal.candidate);
+    if (connection.remoteDescription) {
+      await connection.addIceCandidate(candidate);
+    } else {
+      peer.pendingCandidates.push(message.signal.candidate);
+    }
+  }
+  renderHuddleParticipants();
+}
+
+function removeHuddlePeer(peerId) {
+  const peer = state.huddle.peers.get(peerId);
+  if (peer) {
+    peer.connection.close();
+    peer.audio?.remove();
+    state.huddle.peers.delete(peerId);
+  }
+  state.huddle.participants.delete(peerId);
+  renderHuddleParticipants();
+}
+
+function cleanupHuddle(notifyServer = true) {
+  state.huddle.joinAttempt += 1;
+  if (notifyServer && state.socket?.connected && (state.huddle.channelId || state.huddle.joining)) {
+    state.socket.emit('huddle:leave');
+  }
+  state.huddle.peers.forEach((peer) => {
+    peer.connection.close();
+    peer.audio?.remove();
+  });
+  state.huddle.localStream?.getTracks().forEach((track) => track.stop());
+  state.huddle.localStream = null;
+  state.huddle.peers.clear();
+  state.huddle.participants.clear();
+  state.huddle.channelId = null;
+  state.huddle.iceServers = [];
+  state.huddle.joining = false;
+  state.huddle.muted = false;
+  const audioContainer = document.getElementById('huddle-audio-container');
+  if (audioContainer) audioContainer.replaceChildren();
+  setHuddleStatus('Choose a channel and join to start an audio huddle.');
+  renderHuddleView();
+}
+
+function toggleHuddleMute() {
+  if (!state.huddle.localStream) return;
+  state.huddle.muted = !state.huddle.muted;
+  state.huddle.localStream.getAudioTracks().forEach((track) => {
+    track.enabled = !state.huddle.muted;
+  });
+  renderHuddleView();
 }
 
 function renderActivity() {

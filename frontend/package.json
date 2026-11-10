@@ -28,7 +28,10 @@
     },
     "mac": {
       "target": "dmg",
-      "icon": "src/assets/icon.icns"
+      "icon": "src/assets/icon.icns",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "IT Avenue Workspace uses your microphone for audio huddles."
+      }
     },
     "linux": {
       "target": "AppImage",

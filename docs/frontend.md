@@ -63,7 +63,7 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | Unread badges | ✅ |
 | Presence (online/away/offline) | ✅ |
 | Frameless window + custom controls | ✅ |
-| Huddle (UI only, mocked) | ✅ |
+| Huddle (audio-only peer mesh, max 6 participants) | MVP implemented; two-client audio verification pending |
 | Canvas / Lists | ⏳ Planned (menu entries report not implemented) |
 | Auto-updater | ⏳ Planned |
 
@@ -127,6 +127,6 @@ This creates platform-specific installers (Windows NSIS, macOS DMG, Linux AppIma
 - Planning: Complete
 - Phase 1 (Backend + Database): Built and verified
 - Phase 2 (Electron Desktop App): Built and verified
-- Phase 3 (Rich Features): Files, Notes, unread, presence, and Activity done; audio Huddle remains
-  UI-only; Canvas and Lists are not started
+- Phase 3 (Rich Features): Files, Notes, unread, presence, Activity, and read receipts done;
+  audio Huddle MVP implemented; Canvas and Lists are not started
 - Phase 4 (Deploy to Hostinger KVM): Planned

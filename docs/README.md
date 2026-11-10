@@ -63,7 +63,8 @@ npm run dev
 - Planning: Complete
 - Phase 1 (Backend + Database): Built and verified
 - Phase 2 (Electron Desktop App): Built and verified end to end
-- Phase 3 (Rich Features): Files, Notes, unread badges, presence, and Activity done; Huddle is UI-only
+- Phase 3 (Rich Features): Files, Notes, unread badges, presence, Activity, and read receipts done;
+  audio Huddle MVP implemented with two-client validation pending
 - Phase 4 (Deploy to Hostinger KVM): Planned
 
 See [ROADMAP.md](ROADMAP.md) for what is built and what is still mocked,

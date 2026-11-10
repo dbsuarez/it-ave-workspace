@@ -69,6 +69,12 @@ Node.js + Express + Socket.io API server with PostgreSQL.
 | `send_message` | Client → Server | Send a message to a channel |
 | `send_direct_message` | Client → Server | Send a DM |
 | `typing` | Client → Server | Typing indicator |
+| `huddle:join` | Client → Server | Join an authorized channel audio huddle |
+| `huddle:signal` | Client ↔ Server | Relay WebRTC offers, answers, and ICE candidates between huddle members |
+| `huddle:leave` | Client → Server | Leave the active channel huddle |
+| `huddle:joined` | Server → Client | Huddle participants and ICE server configuration |
+| `huddle:participant-joined` / `huddle:participant-left` | Server → Client | Huddle roster updates |
+| `huddle:error` | Server → Client | Huddle authorization or connection error |
 | `new_message` | Server → Client | New message received |
 | `new_direct_message` | Server → Client | New DM received |
 | `user_typing` | Server → Client | User typing indicator |
@@ -90,3 +96,8 @@ mapping is IPv4 only).
 ## Environment Variables
 
 See `../../.env.example` for required variables.
+
+`WEBRTC_ICE_SERVERS` is a JSON array used by channel huddles. The default public STUN server
+supports many direct connections; configure a TURN server in this variable for users behind
+restrictive NATs/firewalls. TURN credentials are sent to authenticated huddle participants, so use
+short-lived credentials where your TURN provider supports them.

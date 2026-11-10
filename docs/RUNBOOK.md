@@ -34,6 +34,20 @@ curl.exe -s http://127.0.0.1:3001/api/health
 
 Expect `{"status":"ok",...}` and `pg_isready` healthy. If health fails, check `docker logs itavenue-backend`.
 
+### Huddle audio connectivity
+
+Huddles use peer-to-peer audio with a public STUN server by default. Some office, VPN, and mobile
+networks require TURN relay connectivity. Set `WEBRTC_ICE_SERVERS` in `.env` to a JSON array, for
+example:
+
+```env
+WEBRTC_ICE_SERVERS='[{"urls":"turn:turn.example.com:3478","username":"user","credential":"password"},{"urls":"stun:stun.example.com:3478"}]'
+```
+
+Recreate the backend after changing ICE settings with `docker compose up -d --force-recreate backend`.
+TURN credentials are delivered to authenticated huddle participants; use temporary credentials if
+the TURN service supports them. Do not commit real credentials.
+
 ## Starting the desktop app
 
 Do **not** run plain `npm start`. Your environment exports `ELECTRON_RUN_AS_NODE=1`,
@@ -148,8 +162,9 @@ node --check D:\Development\itavenue-workspace\frontend\src\renderer.js
 
 IT Avenue Workspace is original code. The purple theme, name, IA logo, channels-and-messages
 across it are industry-standard chat patterns we implemented ourselves from scratch. No Slack code,
-assets, or branding are included or were copied. The Huddle, Files-tab and Notes-tab screens are mock
-UI unless explicitly wired to the backend; labels on those views say so.
+assets, or branding are included or were copied. Files and Notes are integrated with the backend.
+Huddle is an audio-only peer-to-peer MVP; verify it with two desktop clients and configure TURN for
+networks that do not allow direct peer connections. Canvas and Lists remain unimplemented.
 
 ## Where things live
 
@@ -187,4 +202,3 @@ coming from the database, and a working `+ New channel` flow.
 ## See also
 
 - [REA-GHIDRA-SETUP.md](REA-GHIDRA-SETUP.md) - Ghidra and REA installation, configuration, and analysis usage (separate from this app's stack).
-

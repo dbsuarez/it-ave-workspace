@@ -286,22 +286,26 @@
           <div class="channel-header">
             <div class="channel-info">
               <h1>Huddle</h1>
-              <p>Audio huddle interface. No real audio or video is transmitted.</p>
-              <span class="demo-pill">DEMO — UI only</span>
+              <p>Join a channel huddle for a live audio call.</p>
             </div>
             <div class="channel-actions">
-              <button class="icon-btn" id="btn-huddle-close" title="Leave" aria-label="Leave"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              <button class="icon-btn" id="btn-huddle-close" title="Close huddle view" aria-label="Close huddle view"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </div>
           </div>
           <div class="huddle-view">
-            <div class="huddle-badge"><span class="live"></span> Live huddle (mock)</div>
-            <div class="huddle-avatar"><img src="assets/icon-purple.png" alt="IT Avenue Workspace" width="96" height="96"></div>
-            <h2>Huddle in #general</h2>
-            <p>This interface is mocked. No real audio or video is transmitted.</p>
-            <div class="huddle-controls">
-              <button class="huddle-btn mic" id="btn-huddle-mute" title="Mute/unmute" aria-label="Mute"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
-              <button class="huddle-btn leave" id="btn-huddle-leave" title="Leave huddle" aria-label="Leave huddle"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l2.1-2.1a2 2 0 0 1 2.55-.34 12.59 12.59 0 0 0 4.42 1.05A2 2 0 0 1 25 18.61v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 7.12 2h3a2 2 0 0 1 2 1.78 12.59 12.59 0 0 0 1.05 4.42 2 2 0 0 1-.34 2.55l-2.15 2.56z"/></svg></button>
+            <div class="huddle-badge" id="huddle-status-badge"><span class="live"></span><span id="huddle-status">Choose a channel to start an audio huddle.</span></div>
+            <div class="huddle-setup">
+              <label for="huddle-channel-select">Channel</label>
+              <select id="huddle-channel-select"></select>
+              <button class="huddle-join" id="btn-huddle-join">Join huddle</button>
             </div>
+            <h2 id="huddle-title">Channel huddle</h2>
+            <div class="huddle-participants" id="huddle-participants" aria-live="polite"></div>
+            <div class="huddle-controls">
+              <button class="huddle-btn mic" id="btn-huddle-mute" title="Mute microphone" aria-label="Mute microphone" disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
+              <button class="huddle-btn leave" id="btn-huddle-leave" title="Leave huddle" aria-label="Leave huddle" disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l2.1-2.1a2 2 0 0 1 2.55-.34 12.59 12.59 0 0 0 4.42 1.05A2 2 0 0 1 25 18.61v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 7.12 2h3a2 2 0 0 1 2 1.78 12.59 12.59 0 0 0 1.05 4.42 2 2 0 0 1-.34 2.55l-2.15 2.56z"/></svg></button>
+            </div>
+            <div id="huddle-audio-container" hidden></div>
           </div>
         </div>
 

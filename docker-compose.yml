@@ -33,6 +33,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB}
       UPLOAD_DIR: ${UPLOAD_DIR}
+      WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-}
     ports:
       - "3001:3001"
     volumes:

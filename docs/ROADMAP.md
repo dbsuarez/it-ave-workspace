@@ -12,7 +12,7 @@ Project root: `D:\Development\itavenue-workspace`
 | Planning | Architecture, stack, target platform decisions | Done |
 | Phase 1 | Backend (Express + Socket.io + PostgreSQL + JWT) with Docker Compose | Done and tested |
 | Phase 2 | Electron desktop client (login, sidebar, messaging, threads, reactions, attachments) | Done and tested |
-| Phase 3 | Rich features: real Files upload, Notes backend integration, unread counts, presence, read receipts, actual audio huddle | Mostly done (Files, Notes, unread, presence, read receipts); audio huddle remains mock |
+| Phase 3 | Rich features: real Files upload, Notes backend integration, unread counts, presence, read receipts, actual audio huddle | Mostly done; audio huddle MVP implemented, two-client audio validation pending |
 | Phase 4 | Deployment to Hostinger KVM (domain + TLS + build + installers) | Not started |
 
 ## Implemented and verified
@@ -36,6 +36,8 @@ Project root: `D:\Development\itavenue-workspace`
 - Socket.io realtime: `authenticate`, `join_channel`, `leave_channel`,
   `send_message`, `send_direct_message`, `typing`, presence status updates
   (online on authenticate, offline on disconnect)
+- Huddle signaling: authenticated channel huddle join/leave, participant roster, and
+  membership-checked WebRTC offer/answer/ICE relays
 - Database schema and seed data (general, random, dev, announcements) auto-applied on first boot
 
 Desktop client (`frontend/`):
@@ -66,6 +68,8 @@ Desktop client (`frontend/`):
 - Unread badges on channels (white pill on the dark pane); clears on open/read
 - Latest-message read receipts show reader avatars/names and refresh when opening a channel or
   receiving a message in the active channel
+- Huddle MVP: audio-only WebRTC peer mesh, microphone mute, participant list, and leave controls;
+  limited to six participants per channel
 - Compact inline SVG icons throughout (no emoji-in-UI)
 - Toast notifications instead of native `alert()`
 - Responsive rules: scrollbars eliminated on desktop; sidebar + layout adapt below 1000px
@@ -83,7 +87,7 @@ Also resolved:
 - Demo banner now gated to `IAV_DEV=1`; real users never see it
 - Emoji icons replaced with inline SVG icons throughout
 - Native `alert()` replaced with a toast notification system
-- "Demo" pill remains on the Huddle view only (Files and Notes are now live and no longer labeled demo)
+- Files and Notes are live; Huddle now has an audio-only MVP rather than a demo screen
 - Skeleton loading state for message lists (channels and DMs)
 - `Ctrl/Cmd+K` focuses the search box; `Esc` closes menus, the thread panel, and modals
 - Focus-visible outlines on all interactive elements for keyboard accessibility
@@ -96,18 +100,19 @@ Also resolved:
 
 ## Mocked / not implemented (labeled honestly in the UI)
 
-- **Huddle**: static mock screen. No microphone, no audio, no WebRTC. Label visible on screen.
 - **Canvas / Lists**: entries exist in the create menu but report "not implemented yet" when used.
 - **Search**: client-side filter of the currently rendered channel; not server-side full-text search.
 - **Profile / Preferences / Account settings**: menu entries exist and report that editing is not
   implemented yet.
+
 ## Planned remaining work
 
 Priority order, by user-visible value:
 
-1. **Real huddle**
-   - WebRTC audio via PeerJS or a small Node relay
-   - Cross-check: does the office actually want this, or is it enough to hop on a call elsewhere?
+1. **Huddle validation and connectivity**
+   - Verify live audio with two desktop clients and real microphones
+   - Configure a TURN service for networks where direct peer connections fail
+   - Decide whether to replace the six-person mesh with an SFU if larger calls are needed
 2. **Deployment to Hostinger KVM**
    - Point DNS at the VPS IP
    - Install Node/Docker, pull this repository
@@ -121,6 +126,9 @@ Priority order, by user-visible value:
 
 Read receipts currently cover the latest message in each channel. They do not provide a
 per-message read-state history or a dedicated receipt-change event.
+Huddle uses a peer-to-peer mesh with a six-participant cap and public STUN by default; reliable
+calls across restrictive networks require a configured TURN service. Audio has not yet been
+verified end to end on two desktop devices.
 
 ## Known defects being carried right now
 
@@ -148,6 +156,7 @@ per-message read-state history or a dedicated receipt-change event.
 | Registration + login + JWT | curl, PowerShell `Invoke-WebRequest` |
 | Socket auth + send + receive + persisted | Node CDP probe of actual Electron window |
 | Latest-message read receipts and channel access | Docker API integration check: two members marked read; both receipts returned; non-member denied |
+| Huddle signaling and audio | Docker Socket.IO check: authorization, concurrent joins, signal relay, six-person cap, and leave; two-client microphone/audio verification remains |
 | Channel create modal + creation | CDP (real click path) |
 | Responsive CSS | No overflow horizontal, no default scrollbars in window |
 | Messages persist in Postgres | `docker exec itavenue-db psql -c ...` |

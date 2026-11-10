@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, session } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 
@@ -76,6 +76,15 @@ function createLoginWindow() {
 }
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const isMainApp = webContents === mainWindow?.webContents;
+    const requestsAudioOnly = details?.isMainFrame
+      && Array.isArray(details.mediaTypes)
+      && details.mediaTypes.includes('audio')
+      && !details.mediaTypes.includes('video');
+    callback(isMainApp && permission === 'media' && requestsAudioOnly);
+  });
+
   // Check if we have a stored token
   const token = store.get('authToken');
   const user = store.get('user');

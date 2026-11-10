@@ -2,9 +2,46 @@ const jwt = require('jsonwebtoken');
 const config = require('../config');
 const { ensureChannelMembership, ensureDirectMessageAccess } = require('../security');
 
+const MAX_HUDDLE_PARTICIPANTS = 6;
+const huddleJoinLocks = new Map();
+
+async function withHuddleJoinLock(channelId, operation) {
+  const previous = huddleJoinLocks.get(channelId) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  huddleJoinLocks.set(channelId, current);
+  await previous;
+
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (huddleJoinLocks.get(channelId) === current) {
+      huddleJoinLocks.delete(channelId);
+    }
+  }
+}
+
 // Socket.io handlers for real-time chat
 module.exports = (io, socket) => {
   let currentUserId = null;
+  let huddleChannelId = null;
+  let huddleJoining = false;
+  let huddleJoinGeneration = 0;
+
+  const leaveHuddle = () => {
+    huddleJoinGeneration += 1;
+    huddleJoining = false;
+    if (!huddleChannelId) return;
+    const room = `huddle_${huddleChannelId}`;
+    socket.to(room).emit('huddle:participant-left', { peerId: socket.id });
+    socket.leave(room);
+    huddleChannelId = null;
+    socket.huddleChannelId = null;
+    socket.data.huddleChannelId = null;
+  };
 
   // Authenticate socket connection
   socket.on('authenticate', async (token) => {
@@ -13,6 +50,8 @@ module.exports = (io, socket) => {
       currentUserId = decoded.userId;
       socket.userId = currentUserId;
       socket.username = decoded.username;
+      socket.data.userId = currentUserId;
+      socket.data.username = decoded.username;
 
       // Mark the user online (presence)
       try {
@@ -49,6 +88,137 @@ module.exports = (io, socket) => {
     socket.leave(`channel_${channelId}`);
     socket.emit('left_channel', { channelId });
   });
+
+  socket.on('huddle:join', async (channelId) => {
+    if (!currentUserId) {
+      socket.emit('huddle:error', { error: 'Authentication required' });
+      return;
+    }
+    if (huddleJoining) {
+      socket.emit('huddle:error', { error: 'A huddle join is already in progress' });
+      return;
+    }
+
+    const parsedChannelId = Number(channelId);
+    if (!Number.isSafeInteger(parsedChannelId) || parsedChannelId < 1) {
+      socket.emit('huddle:error', { error: 'A valid channel is required' });
+      return;
+    }
+
+    huddleJoining = true;
+    const joinGeneration = ++huddleJoinGeneration;
+    try {
+      await withHuddleJoinLock(parsedChannelId, async () => {
+        if (!huddleJoining || joinGeneration !== huddleJoinGeneration) return;
+        const { query } = require('../db');
+        await ensureChannelMembership(query, currentUserId, parsedChannelId);
+        if (!huddleJoining || joinGeneration !== huddleJoinGeneration) return;
+
+        if (huddleChannelId === parsedChannelId) {
+          socket.emit('huddle:error', { error: 'You are already in this huddle' });
+          return;
+        }
+
+        const room = `huddle_${parsedChannelId}`;
+        const connectedPeers = await io.in(room).fetchSockets();
+        if (!huddleJoining || joinGeneration !== huddleJoinGeneration) return;
+
+        if (connectedPeers.some((peer) => Number(peer.data.userId) === Number(currentUserId))) {
+          socket.emit('huddle:error', { error: 'You are already in this huddle from another session' });
+          return;
+        }
+        if (connectedPeers.length >= MAX_HUDDLE_PARTICIPANTS) {
+          socket.emit('huddle:error', { error: 'This huddle is full (maximum 6 participants)' });
+          return;
+        }
+
+        if (huddleChannelId) {
+          const previousRoom = `huddle_${huddleChannelId}`;
+          socket.to(previousRoom).emit('huddle:participant-left', { peerId: socket.id });
+          socket.leave(previousRoom);
+          huddleChannelId = null;
+          socket.huddleChannelId = null;
+          socket.data.huddleChannelId = null;
+        }
+        socket.join(room);
+        huddleChannelId = parsedChannelId;
+        socket.huddleChannelId = parsedChannelId;
+        socket.data.huddleChannelId = parsedChannelId;
+
+        const participants = connectedPeers.map((peer) => ({
+          peerId: peer.id,
+          id: peer.data.userId,
+          username: peer.data.username,
+        }));
+
+        socket.emit('huddle:joined', {
+          channelId: parsedChannelId,
+          participants,
+          iceServers: config.WEBRTC_ICE_SERVERS,
+        });
+        socket.to(room).emit('huddle:participant-joined', {
+          peerId: socket.id,
+          channelId: parsedChannelId,
+          id: currentUserId,
+          username: socket.username,
+        });
+      });
+    } catch (err) {
+      if (joinGeneration !== huddleJoinGeneration) return;
+      if (err.status !== 403) {
+        console.error('Huddle join authorization failed:', err);
+      }
+      socket.emit('huddle:error', { error: err.message || 'Unable to join huddle' });
+    } finally {
+      if (joinGeneration === huddleJoinGeneration) huddleJoining = false;
+    }
+  });
+
+  socket.on('huddle:signal', async ({ to, signal } = {}) => {
+    if (!currentUserId || !huddleChannelId) {
+      socket.emit('huddle:error', { error: 'Join a channel huddle before signaling' });
+      return;
+    }
+
+    const hasDescription = signal?.description
+      && ['offer', 'answer'].includes(signal.description.type)
+      && typeof signal.description.sdp === 'string';
+    const hasCandidate = signal?.candidate
+      && typeof signal.candidate.candidate === 'string';
+    if (typeof to !== 'string' || (!hasDescription && !hasCandidate)) {
+      socket.emit('huddle:error', { error: 'Invalid WebRTC signaling data' });
+      return;
+    }
+
+    const target = io.sockets.sockets.get(to);
+    if (!target || target.huddleChannelId !== huddleChannelId) {
+      socket.emit('huddle:error', { error: 'Huddle participant is no longer available' });
+      return;
+    }
+
+    try {
+      const { query } = require('../db');
+      const channelId = huddleChannelId;
+      await ensureChannelMembership(query, currentUserId, channelId);
+      await ensureChannelMembership(query, target.userId, channelId);
+      if (huddleChannelId !== channelId || target.huddleChannelId !== channelId) return;
+
+      target.emit('huddle:signal', {
+        from: socket.id,
+        id: currentUserId,
+        username: socket.username,
+        signal,
+      });
+    } catch (err) {
+      if (err.status !== 403) {
+        console.error('Huddle signaling authorization failed:', err);
+      }
+      socket.emit('huddle:error', { error: 'Channel access is required to continue this huddle' });
+      leaveHuddle();
+    }
+  });
+
+  socket.on('huddle:leave', leaveHuddle);
 
   // Send a message to a channel
   socket.on('send_message', async (data) => {
@@ -227,6 +397,10 @@ module.exports = (io, socket) => {
   });
 
   // Disconnect
+  socket.on('disconnecting', () => {
+    leaveHuddle();
+  });
+
   socket.on('disconnect', async () => {
     if (currentUserId) {
       console.log(`User ${currentUserId} disconnected`);
