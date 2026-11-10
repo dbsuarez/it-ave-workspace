@@ -1,0 +1,38 @@
+{
+  "name": "itavenue-frontend",
+  "productName": "IT Avenue Workspace",
+  "version": "1.0.0",
+  "description": "IT Avenue Workspace desktop client",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "@fontsource/lato": "^5.3.0",
+    "electron-store": "^8.1.0",
+    "socket.io-client": "^4.7.2"
+  },
+  "build": {
+    "appId": "com.itavenue.workspace",
+    "productName": "IT Avenue Workspace",
+    "win": {
+      "target": "nsis",
+      "icon": "src/assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "src/assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "src/assets/icon.png"
+    }
+  }
+}

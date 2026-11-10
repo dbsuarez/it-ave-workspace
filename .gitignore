@@ -1,0 +1,11 @@
+# IT Avenue Workspace
+# Ignore
+node_modules/
+.env
+*.log
+uploads/
+.DS_Store
+Thumbs.db
+coverage/
+dist/
+build/

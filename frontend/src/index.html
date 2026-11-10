@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IT Avenue Workspace</title>
+<link rel="icon" type="image/png" href="assets/icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Dev-only banner: only rendered when body has class `iav-dev` (set from renderer init via IAV_DEV=1) -->
+  <div class="demo-banner" id="dev-banner">
+    <span class="mock-tag">DEV MODE</span>
+    <span>IT Avenue Workspace is being built. Huddle is mocked - no real audio/video.</span>
+  </div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-rail">
+        <button class="icon-btn app-menu-btn" id="btn-app-menu" title="Menu" aria-label="App menu" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="topbar-brand">
+        <img class="logo-img" src="assets/icon-purple.png" alt="IT Avenue Workspace" width="24" height="24">
+        <div class="workspace-name">IT Avenue Workspace</div>
+      </div>
+      <div class="topbar-search">
+        <div class="search-box">
+          <span class="glass"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+          <input type="text" id="global-search" placeholder="Search messages, people, files…">
+        </div>
+      </div>
+      <div class="topbar-controls">
+        <button class="icon-btn" id="btn-help" title="Help" aria-label="Help"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+        <div class="window-controls">
+          <button class="win-btn" id="btn-win-min" title="Minimize" aria-label="Minimize">
+            <svg viewBox="0 0 12 12" width="12" height="12"><rect x="2" y="5.5" width="8" height="1" fill="currentColor"/></svg>
+          </button>
+          <button class="win-btn" id="btn-win-max" title="Maximize" aria-label="Maximize">
+            <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.2" y="2.2" width="7.6" height="7.6"/></svg>
+          </button>
+          <button class="win-btn win-close" id="btn-win-close" title="Close" aria-label="Close">
+            <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><line x1="2.5" y1="2.5" x2="9.5" y2="9.5"/><line x1="9.5" y1="2.5" x2="2.5" y2="9.5"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- App menu: groups are submenus (File / Edit / View / Window / Help) -->
+      <div class="menu app-menu" id="app-menu" role="menubar" aria-label="Application menu">
+        <div class="menu-item has-submenu" data-submenu="sub-file" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+          <span>File</span>
+          <svg class="submenu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <div class="submenu" id="sub-file" role="menu" aria-label="File">
+            <button class="menu-item" data-command="new-message" role="menuitem">New message <span class="menu-kbd">Ctrl N</span></button>
+            <button class="menu-item" data-command="new-channel" role="menuitem">New channel</button>
+            <button class="menu-item" data-command="new-note" role="menuitem">New note</button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" data-command="sign-out" role="menuitem">Sign out</button>
+            <button class="menu-item" data-command="quit" role="menuitem">Quit <span class="menu-kbd">Ctrl Q</span></button>
+          </div>
+        </div>
+
+        <div class="menu-item has-submenu" data-submenu="sub-edit" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+          <span>Edit</span>
+          <svg class="submenu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <div class="submenu" id="sub-edit" role="menu" aria-label="Edit">
+            <button class="menu-item" data-command="undo" role="menuitem">Undo <span class="menu-kbd">Ctrl Z</span></button>
+            <button class="menu-item" data-command="redo" role="menuitem">Redo <span class="menu-kbd">Ctrl Y</span></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" data-command="cut" role="menuitem">Cut <span class="menu-kbd">Ctrl X</span></button>
+            <button class="menu-item" data-command="copy" role="menuitem">Copy <span class="menu-kbd">Ctrl C</span></button>
+            <button class="menu-item" data-command="paste" role="menuitem">Paste <span class="menu-kbd">Ctrl V</span></button>
+            <button class="menu-item" data-command="delete" role="menuitem">Delete</button>
+            <button class="menu-item" data-command="select-all" role="menuitem">Select all <span class="menu-kbd">Ctrl A</span></button>
+          </div>
+        </div>
+
+        <div class="menu-item has-submenu" data-submenu="sub-view" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+          <span>View</span>
+          <svg class="submenu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <div class="submenu" id="sub-view" role="menu" aria-label="View">
+            <button class="menu-item" data-command="reload" role="menuitem">Reload <span class="menu-kbd">Ctrl R</span></button>
+            <button class="menu-item" data-command="force-reload" role="menuitem">Force reload <span class="menu-kbd">Ctrl Shift R</span></button>
+            <button class="menu-item" data-command="devtools" role="menuitem">Toggle developer tools <span class="menu-kbd">Ctrl Shift I</span></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" data-command="zoom-reset" role="menuitem">Actual size <span class="menu-kbd">Ctrl 0</span></button>
+            <button class="menu-item" data-command="zoom-in" role="menuitem">Zoom in <span class="menu-kbd">Ctrl +</span></button>
+            <button class="menu-item" data-command="zoom-out" role="menuitem">Zoom out <span class="menu-kbd">Ctrl -</span></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" data-command="fullscreen" role="menuitem">Toggle full screen <span class="menu-kbd">F11</span></button>
+          </div>
+        </div>
+
+        <div class="menu-item has-submenu" data-submenu="sub-window" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+          <span>Window</span>
+          <svg class="submenu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <div class="submenu" id="sub-window" role="menu" aria-label="Window">
+            <button class="menu-item" data-command="minimize" role="menuitem">Minimize</button>
+            <button class="menu-item" data-command="toggle-maximize" role="menuitem">Maximize / Restore</button>
+            <button class="menu-item" data-command="close-window" role="menuitem">Close window</button>
+          </div>
+        </div>
+
+        <div class="menu-item has-submenu" data-submenu="sub-help" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+          <span>Help</span>
+          <svg class="submenu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <div class="submenu" id="sub-help" role="menu" aria-label="Help">
+            <button class="menu-item" data-command="shortcuts" role="menuitem">Keyboard shortcuts</button>
+            <button class="menu-item" data-command="about" role="menuitem">About IT Avenue Workspace</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <!-- Icon rail -->
+      <nav class="rail" aria-label="Sections">
+        <button class="rail-item active" data-rail="home" aria-current="page">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Home</span>
+        </button>
+        <button class="rail-item" data-rail="dms">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>DMs</span>
+        </button>
+        <button class="rail-item" data-rail="activity">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>Activity</span>
+          <span class="rail-badge" id="activity-badge" hidden></span>
+        </button>
+        <button class="rail-item" data-rail="files">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span>Files</span>
+        </button>
+        <button class="rail-item" data-rail="notes">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>Notes</span>
+        </button>
+        <button class="rail-item" data-rail="huddle">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          <span>Huddle</span>
+        </button>
+
+        <div class="rail-spacer"></div>
+
+        <!-- Create menu -->
+        <div class="rail-bottom">
+          <button class="rail-icon-btn" id="btn-create" title="Create" aria-label="Create" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="menu rail-menu create-menu" id="create-menu" role="menu" aria-label="Create">
+            <button class="menu-item" data-create="message" role="menuitem">Message</button>
+            <button class="menu-item" data-create="channel" role="menuitem">Channel</button>
+            <button class="menu-item" data-create="huddle" role="menuitem">Huddle</button>
+            <button class="menu-item" data-create="canvas" role="menuitem">Canvas</button>
+            <button class="menu-item" data-create="list" role="menuitem">List</button>
+          </div>
+
+          <button class="rail-avatar" id="btn-user-menu" title="Account" aria-label="Account menu" aria-haspopup="true" aria-expanded="false" style="display:none;">
+            <span id="user-avatar">E</span>
+          </button>
+          <div class="menu rail-menu user-menu" id="user-menu" role="menu" aria-label="Account">
+            <div class="menu-account">
+              <div class="menu-account-name" id="user-name"></div>
+              <div class="menu-account-sub" id="user-email"></div>
+            </div>
+            <div class="menu-sep"></div>
+            <button class="menu-item" data-account="profile" role="menuitem">Profile</button>
+            <button class="menu-item" data-account="preferences" role="menuitem">Preferences</button>
+            <button class="menu-item" data-account="account" role="menuitem">Account settings</button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" data-account="signout" role="menuitem">Sign out</button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- List pane (channels / DMs / activity) -->
+      <aside class="list-pane" id="list-pane">
+        <div class="pane-header">
+          <h2 id="pane-title">Home</h2>
+          <button class="icon-btn" id="btn-pane-action" title="New channel" aria-label="New channel" style="display:none;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+        <div class="pane-scroll">
+          <div id="pane-home">
+            <h4 class="nav-label">Channels</h4>
+            <div id="channel-list"></div>
+          </div>
+          <div id="pane-dms" hidden>
+            <h4 class="nav-label">Direct Messages</h4>
+            <div id="dm-list"></div>
+          </div>
+          <div id="pane-activity" hidden>
+            <h4 class="nav-label">Unread</h4>
+            <div id="activity-list"></div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <!-- Channel View -->
+        <div class="view view-channel active" id="view-channel">
+          <div class="channel-header">
+            <div class="channel-info">
+              <h1 id="channel-title">#general</h1>
+              <p id="channel-topic"></p>
+              <div id="channel-read-receipts" class="read-receipts" aria-live="polite"></div>
+            </div>
+            <div class="channel-actions">
+              <button class="icon-btn" id="btn-threads" title="Threads" aria-label="Threads"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+              <button class="icon-btn" id="btn-view-files" title="Files" aria-label="Files"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></button>
+              <button class="icon-btn" id="btn-compose" title="New message" aria-label="New message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L10 16l-4 1 1-4 9.5-9.5z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="messages" id="messages"></div>
+
+          <div class="input-area">
+            <div class="input-row">
+              <div class="toolbar">
+                <button class="icon-btn" id="btn-attach" title="Attach file" aria-label="Attach file"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4.5 4.5 0 0 1 6.36 6.36l-9.2 9.19a3 3 0 0 1-4.24-4.24l8.49-8.48"/></svg></button>
+                <input type="file" id="file-picker" style="display:none;" multiple>
+              </div>
+              <textarea id="message-input" placeholder="Say something…" rows="1"></textarea>
+              <button class="send-btn" id="send-btn">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- DM View -->
+        <div class="view" id="view-dm">
+          <div class="channel-header">
+            <div class="channel-info">
+              <h1 id="dm-title">Direct Message</h1>
+              <p id="dm-topic"></p>
+            </div>
+            <div class="channel-actions">
+              <button class="icon-btn" id="btn-dm-compose" title="New message" aria-label="New message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L10 16l-4 1 1-4 9.5-9.5z"/></svg></button>
+            </div>
+          </div>
+          <div class="messages" id="dm-messages"></div>
+          <div class="input-area">
+            <div class="input-row">
+              <div class="toolbar">
+                <button class="icon-btn" id="btn-dm-attach" title="Attach file" aria-label="Attach file"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4.5 4.5 0 0 1 6.36 6.36l-9.2 9.19a3 3 0 0 1-4.24-4.24l8.49-8.48"/></svg></button>
+                <input type="file" id="dm-file-picker" style="display:none;" multiple>
+              </div>
+              <textarea id="dm-message-input" placeholder="Send a message…" rows="1"></textarea>
+              <button class="send-btn" id="send-dm-btn">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Files View -->
+        <div class="view" id="view-files">
+          <div class="channel-header">
+            <div class="channel-info">
+              <h1>Files</h1>
+              <p>Files attached to messages you can see.</p>
+            </div>
+            <div class="channel-actions">
+              <button class="icon-btn" id="btn-refresh-files" title="Refresh" aria-label="Refresh files"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+            </div>
+          </div>
+          <div class="grid" id="files-grid"></div>
+        </div>
+
+        <!-- Notes View -->
+        <div class="view" id="view-notes">
+          <div class="channel-header">
+            <div class="channel-info">
+              <h1>Notes</h1>
+              <p>Your workspace notes.</p>
+            </div>
+            <div class="channel-actions">
+              <button class="icon-btn" id="btn-new-note" title="New note" aria-label="New note"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+            </div>
+          </div>
+          <div class="grid" id="notes-grid"></div>
+        </div>
+
+        <!-- Huddle View -->
+        <div class="view" id="view-huddle">
+          <div class="channel-header">
+            <div class="channel-info">
+              <h1>Huddle</h1>
+              <p>Audio huddle interface. No real audio or video is transmitted.</p>
+              <span class="demo-pill">DEMO — UI only</span>
+            </div>
+            <div class="channel-actions">
+              <button class="icon-btn" id="btn-huddle-close" title="Leave" aria-label="Leave"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+          </div>
+          <div class="huddle-view">
+            <div class="huddle-badge"><span class="live"></span> Live huddle (mock)</div>
+            <div class="huddle-avatar"><img src="assets/icon-purple.png" alt="IT Avenue Workspace" width="96" height="96"></div>
+            <h2>Huddle in #general</h2>
+            <p>This interface is mocked. No real audio or video is transmitted.</p>
+            <div class="huddle-controls">
+              <button class="huddle-btn mic" id="btn-huddle-mute" title="Mute/unmute" aria-label="Mute"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
+              <button class="huddle-btn leave" id="btn-huddle-leave" title="Leave huddle" aria-label="Leave huddle"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l2.1-2.1a2 2 0 0 1 2.55-.34 12.59 12.59 0 0 0 4.42 1.05A2 2 0 0 1 25 18.61v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 7.12 2h3a2 2 0 0 1 2 1.78 12.59 12.59 0 0 0 1.05 4.42 2 2 0 0 1-.34 2.55l-2.15 2.56z"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity View -->
+        <div class="view" id="view-activity">
+          <div class="channel-header">
+            <div class="channel-info">
+              <h1>Activity</h1>
+              <p>Channels with unread messages.</p>
+            </div>
+            <div class="channel-actions">
+              <button class="icon-btn" id="btn-refresh-activity" title="Refresh" aria-label="Refresh activity"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+            </div>
+          </div>
+          <div class="grid" id="activity-grid"></div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Thread Panel -->
+    <div class="thread-panel closed" id="thread-panel">
+      <div class="thread-header">
+        <div style="display:flex; align-items:center; gap:10px; flex:1;">
+          <button class="close-panel" id="btn-close-thread" aria-label="Close thread"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <h3>Thread</h3>
+        </div>
+        <span id="thread-count">0 replies</span>
+      </div>
+      <div class="thread-messages" id="thread-messages"></div>
+      <div class="thread-input">
+        <input type="text" id="thread-input" placeholder="Add a reply…">
+        <button class="btn primary" id="btn-send-thread">Send</button>
+      </div>
+    </div>
+
+    <!-- Toast stack for non-blocking notifications -->
+    <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="modal-overlay"></div>
+
+    <div class="modal" id="modal-create-channel">
+      <div class="modal-header">
+        <h3>Create Channel</h3>
+        <button class="modal-close" id="btn-close-create-channel" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Channel name</label>
+          <input type="text" id="new-channel-name" placeholder="e.g. marketing">
+          <div class="form-note">Lowercase letters, numbers, hyphens only.</div>
+        </div>
+        <div class="form-group">
+          <label>Topic (optional)</label>
+          <input type="text" id="new-channel-topic" placeholder="What is this channel about?">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="btn-cancel-create">Cancel</button>
+        <button class="btn primary" id="btn-save-create">Create</button>
+      </div>
+    </div>
+
+    <!-- Note editor modal -->
+    <div class="modal note-editor" id="note-editor">
+      <div class="modal-header">
+        <h3 id="note-editor-title">New note</h3>
+        <button class="modal-close" id="btn-close-note-editor" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="note-title-input">Title</label>
+          <input type="text" id="note-title-input" placeholder="Note title">
+        </div>
+        <div class="form-group">
+          <label for="note-body-input">Content</label>
+          <textarea id="note-body-input" rows="8" placeholder="Write something…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="btn-cancel-note">Cancel</button>
+        <button class="btn primary" id="btn-save-note-editor">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../node_modules/socket.io-client/dist/socket.io.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
