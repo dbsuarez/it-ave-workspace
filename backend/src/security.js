@@ -85,7 +85,13 @@ async function ensureChannelMembership(query, userId, channelId) {
   }
 
   const result = await query(
-    'SELECT 1 FROM channel_members WHERE channel_id = $1 AND user_id = $2',
+    `SELECT 1 FROM channels c
+     CROSS JOIN users u
+     WHERE c.id = $1 AND u.id = $2
+       AND (u.is_superadmin = TRUE OR EXISTS (
+         SELECT 1 FROM channel_members cm
+         WHERE cm.channel_id = $1 AND cm.user_id = u.id
+       ))`,
     [channelId, userId]
   );
 
@@ -93,6 +99,86 @@ async function ensureChannelMembership(query, userId, channelId) {
     const err = new Error('Access denied');
     err.status = 403;
     throw err;
+  }
+}
+
+async function ensureChannelModerator(query, userId, channelId) {
+  if (!userId || !channelId) {
+    const err = new Error('Channel ID is required');
+    err.status = userId ? 400 : 401;
+    throw err;
+  }
+  const result = await query(
+    `SELECT 1
+     FROM users u
+     WHERE u.id = $2 AND EXISTS (SELECT 1 FROM channels WHERE id = $1) AND (
+       u.is_superadmin = TRUE OR EXISTS (
+         SELECT 1 FROM channel_members cm
+         WHERE cm.channel_id = $1 AND cm.user_id = u.id AND cm.role = 'moderator'
+       )
+     )`,
+    [channelId, userId]
+  );
+  if (result.rows.length === 0) {
+    const err = new Error('Channel moderator access required');
+    err.status = 403;
+    throw err;
+  }
+}
+
+async function ensureNotTimedOut(query, userId, channelId) {
+  const timeout = await query(
+    `SELECT expires_at FROM channel_timeouts
+     WHERE channel_id = $1 AND user_id = $2 AND expires_at > NOW()
+     ORDER BY expires_at DESC LIMIT 1`,
+    [channelId, userId]
+  );
+  if (timeout.rows.length) {
+    const err = new Error(`You are timed out in this channel until ${new Date(timeout.rows[0].expires_at).toISOString()}`);
+    err.status = 403;
+    err.expiresAt = timeout.rows[0].expires_at;
+    throw err;
+  }
+}
+
+async function ensureCanPostToChannel(query, userId, channelId) {
+  await ensureChannelMembership(query, userId, channelId);
+  await ensureNotTimedOut(query, userId, channelId);
+  const account = await query('SELECT is_superadmin FROM users WHERE id = $1', [userId]);
+  if (account.rows[0]?.is_superadmin) return;
+
+  const channel = await query(
+    `SELECT c.slowmode_seconds, cm.last_message_at
+     FROM channels c
+     LEFT JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
+     WHERE c.id = $1`,
+    [channelId, userId]
+  );
+  if (!channel.rows.length) return;
+  const { slowmode_seconds: seconds, last_message_at: lastMessageAt } = channel.rows[0];
+  if (seconds > 0) {
+    if (!lastMessageAt) {
+      const membership = await query(
+        'SELECT 1 FROM channel_members WHERE channel_id = $1 AND user_id = $2',
+        [channelId, userId]
+      );
+      if (!membership.rows.length) return;
+    }
+    const update = await query(
+      `UPDATE channel_members
+       SET last_message_at = NOW()
+       WHERE channel_id = $1 AND user_id = $2
+         AND (last_message_at IS NULL OR last_message_at <= NOW() - ($3 * INTERVAL '1 second'))
+       RETURNING last_message_at`,
+      [channelId, userId, seconds]
+    );
+    if (!update.rows.length) {
+      const remaining = Math.max(1, Math.ceil(seconds - (Date.now() - new Date(lastMessageAt).getTime()) / 1000));
+      const err = new Error(`Slow mode is on. Try again in ${remaining} seconds.`);
+      err.status = 429;
+      err.retryAfterSeconds = remaining;
+      throw err;
+    }
   }
 }
 
@@ -179,6 +265,9 @@ async function ensureFileAccess(query, userId, fileId) {
 module.exports = {
   getUploadValidationError,
   ensureChannelMembership,
+  ensureChannelModerator,
+  ensureNotTimedOut,
+  ensureCanPostToChannel,
   ensureDirectMessageAccess,
   ensureFileAccess,
   isExtensionAllowed,

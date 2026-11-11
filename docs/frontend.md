@@ -31,7 +31,9 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 - **Frameless window**: the native title bar is removed. The topbar carries custom minimize,
   maximize/restore, and close buttons (46 px each, close turns red on hover). The topbar is the
   drag region; interactive controls opt out with `-webkit-app-region: no-drag`.
-- **Icon rail** (76 px): Home, DMs, Activity, Files, Notes, Huddle as icon-plus-label buttons.
+- **Icon rail** (76 px): Home, DMs, Activity, Files, Notes, Lists, Canvas, Huddle, and
+  role-gated Moderation as
+  icon-plus-label buttons.
 - **List pane** (232 px): channels on Home, direct messages on DMs; collapsed for full-width
   sections. It uses a dark purple (#2A0D36), slightly darker than the rail gradient.
 - **Topbar alignment**: the hamburger sits over the rail column (76 px), the workspace name starts
@@ -50,21 +52,28 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 |---|---|
 | Login / Register | ✅ |
 | JWT auth (stored locally) | ✅ |
+| Profile editing | ✅ Username and avatar color |
+| Preferences | ✅ Device-local theme and Enter-to-send |
+| Account settings | ✅ Email/password update; manual UI verification pending |
 | Channel list + switch | ✅ |
 | Direct messages | ✅ |
-| Real-time messaging (Socket.io) | ✅ |
-| Threaded replies | ✅ |
+| Real-time messaging (Socket.io) | ✅ Optimistic message display with send-failure rollback |
+| Channel replies | ✅ Inline preview and jump-to-original |
+| Pinned messages | ✅ Channel pin panel, pin/unpin actions, and jump-to-message |
 | Emoji reactions | ✅ |
-| File attachments (upload, link to message, download) | ✅ |
+| File attachments (upload, link to message, download, uploader deletion, moderator removal with reason) | ✅ Permanent for everyone; moderator removals are audited |
 | Search | ✅ |
-| Files tab (live) | ✅ |
+| Files tab (live) | ✅ Animated, centered no-files state; uploader can delete shared files |
 | Notes tab (live, create/edit/delete) | ✅ |
+| Shared channel Lists | ✅ Checklists with completion, assignees, and due dates |
+| Shared channel Canvas | ✅ Saved Markdown documents with safe preview |
 | Activity view (unread channels) | ✅ |
 | Unread badges | ✅ |
 | Presence (online/away/offline) | ✅ |
+| Global search | ✅ Channel messages, DMs, people, and accessible files |
 | Frameless window + custom controls | ✅ |
 | Huddle (audio-only peer mesh, max 6 participants) | MVP implemented; two-client audio verification pending |
-| Canvas / Lists | ⏳ Planned (menu entries report not implemented) |
+| Moderation | ✅ Channel-scoped roles, timeout policy, timeouts, slow mode, reports, message and attachment removal, and audit log |
 | Auto-updater | ⏳ Planned |
 
 ## Keyboard shortcuts
@@ -78,9 +87,29 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | `Ctrl+Shift+I` | Toggle developer tools |
 | `F11` | Toggle full screen |
 | `Ctrl+Q` | Quit |
-| `Esc` | Close menus, thread panel, note editor, modals |
+| `Esc` | Cancel a reply or close menus, note editor, and modals |
 
 Standard text editing shortcuts (`Ctrl+Z/X/C/V/A`) continue to work inside inputs.
+
+Channel replies appear inline in the conversation with a preview of the message
+they reference. Select the preview to jump to the original message.
+Pin a channel message from its message actions, then open the pin icon in the channel
+header to browse pinned messages and jump back to their original locations.
+Global search opens with `Ctrl+K`; use the arrow keys and Enter to navigate
+matching messages, people, and files.
+Message reactions use a built-in searchable picker of Unicode emoji (no paid emoji pack
+or external image assets required); choose a category or search by name.
+Profile and account settings are saved through the backend; theme and Enter-to-send
+preferences are stored locally on the desktop device.
+Lists are shared with channel members. Choose a channel in the Lists view, then create
+checklists and assign items to channel members with optional due dates.
+Canvas documents are also shared per channel. The editor supports Markdown headings,
+unordered lists, emphasis, and inline/fenced code, with an explicit Save action; it does
+not perform simultaneous real-time co-editing.
+Moderation is visible to Superadmins and assigned channel moderators. Superadmins control
+private-channel membership and the default/maximum timeout policy; channel moderators manage
+timeouts, slow mode, reports, and message removal only in their assigned channels. Timeouts
+default to five minutes and expire automatically.
 
 ## Local Development
 
@@ -128,5 +157,5 @@ This creates platform-specific installers (Windows NSIS, macOS DMG, Linux AppIma
 - Phase 1 (Backend + Database): Built and verified
 - Phase 2 (Electron Desktop App): Built and verified
 - Phase 3 (Rich Features): Files, Notes, unread, presence, Activity, and read receipts done;
-  audio Huddle MVP implemented; Canvas and Lists are not started
+  Lists and Canvas implemented; audio Huddle MVP awaits two-client audio verification
 - Phase 4 (Deploy to Hostinger KVM): Planned

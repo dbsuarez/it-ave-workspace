@@ -16,6 +16,9 @@ require.cache[dbPath] = {
   loaded: true,
   exports: {
     query: async (sql, params) => {
+      if (sql.includes('SELECT token_version FROM users')) {
+        return { rows: [{ token_version: 0 }] };
+      }
       if (sql.includes('FROM channel_members')) {
         return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{}] : [] };
       }

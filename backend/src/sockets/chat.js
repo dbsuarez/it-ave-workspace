@@ -1,6 +1,11 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
-const { ensureChannelMembership, ensureDirectMessageAccess } = require('../security');
+const {
+  ensureChannelMembership,
+  ensureNotTimedOut,
+  ensureCanPostToChannel,
+  ensureDirectMessageAccess,
+} = require('../security');
 
 const MAX_HUDDLE_PARTICIPANTS = 6;
 const huddleJoinLocks = new Map();
@@ -47,6 +52,18 @@ module.exports = (io, socket) => {
   socket.on('authenticate', async (token) => {
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
+      const { query } = require('../db');
+      const account = await query(
+        'SELECT token_version FROM users WHERE id = $1',
+        [decoded.userId]
+      );
+      if (account.rows.length === 0
+        || Number(account.rows[0].token_version || 0) !== Number(decoded.tokenVersion || 0)) {
+        socket.emit('auth_error', { error: 'Session expired; sign in again' });
+        socket.disconnect();
+        return;
+      }
+
       currentUserId = decoded.userId;
       socket.userId = currentUserId;
       socket.username = decoded.username;
@@ -55,7 +72,6 @@ module.exports = (io, socket) => {
 
       // Mark the user online (presence)
       try {
-        const { query } = require('../db');
         await query(
           'UPDATE users SET status = $1, last_seen = NOW() WHERE id = $2',
           ['online', currentUserId]
@@ -76,10 +92,16 @@ module.exports = (io, socket) => {
   });
 
   // Join a channel room
-  socket.on('join_channel', (channelId) => {
+  socket.on('join_channel', async (channelId) => {
     if (!currentUserId) return;
-    socket.join(`channel_${channelId}`);
-    socket.emit('joined_channel', { channelId });
+    try {
+      const { query } = require('../db');
+      await ensureChannelMembership(query, currentUserId, channelId);
+      socket.join(`channel_${channelId}`);
+      socket.emit('joined_channel', { channelId });
+    } catch (err) {
+      socket.emit('channel_error', { channelId, error: err.message || 'Channel access denied' });
+    }
   });
 
   // Leave a channel room
@@ -225,15 +247,39 @@ module.exports = (io, socket) => {
     if (!currentUserId) return;
 
     const { channelId, content, replyTo, attachmentId } = data;
+    const clientMessageId = typeof data.clientMessageId === 'string'
+      ? data.clientMessageId.slice(0, 100)
+      : null;
 
     if (!channelId || (!content && !attachmentId)) {
-      socket.emit('message_error', { error: 'Channel ID and content/attachment are required' });
+      socket.emit('message_error', { error: 'Channel ID and content/attachment are required', clientMessageId });
       return;
     }
 
     try {
       const { query } = require('../db');
-      await ensureChannelMembership(query, currentUserId, channelId);
+      await ensureCanPostToChannel(query, currentUserId, channelId);
+
+      let replyToMessage = null;
+      if (replyTo) {
+        const parentResult = await query(
+          `SELECT m.id, m.content, u.username
+           FROM messages m
+           JOIN users u ON u.id = m.user_id
+           WHERE m.id = $1 AND m.channel_id = $2`,
+          [replyTo, channelId]
+        );
+        if (parentResult.rows.length === 0) {
+          socket.emit('message_error', { error: 'Reply target not found in this channel', clientMessageId });
+          return;
+        }
+        const parent = parentResult.rows[0];
+        replyToMessage = {
+          id: parent.id,
+          username: parent.username,
+          content: parent.content,
+        };
+      }
 
       if (attachmentId) {
         const attachmentResult = await query(
@@ -241,7 +287,7 @@ module.exports = (io, socket) => {
           [attachmentId]
         );
         if (attachmentResult.rows.length === 0 || Number(attachmentResult.rows[0].uploaded_by) !== Number(currentUserId)) {
-          socket.emit('message_error', { error: 'Attachment not found or not owned by you' });
+          socket.emit('message_error', { error: 'Attachment not found or not owned by you', clientMessageId });
           return;
         }
       }
@@ -269,7 +315,7 @@ module.exports = (io, socket) => {
       const user = userResult.rows[0];
 
       const attachmentsResult = await query(
-        `SELECT id, filename, original_name, size, mime_type
+        `SELECT id, filename, original_name, size, mime_type, uploaded_by
          FROM files WHERE message_id = $1`,
         [message.id]
       );
@@ -278,6 +324,7 @@ module.exports = (io, socket) => {
         filename: f.original_name,
         size: f.size,
         mimeType: f.mime_type,
+        uploadedBy: f.uploaded_by,
       }));
 
       const messageData = {
@@ -288,16 +335,18 @@ module.exports = (io, socket) => {
         avatarColor: user.avatar_color,
         content: message.content,
         replyTo: message.reply_to,
+        replyToMessage,
         createdAt: message.created_at,
         attachments,
         reactions: [],
+        clientMessageId,
       };
 
       io.to(`channel_${channelId}`).emit('new_message', messageData);
-      socket.emit('message_sent', { messageId: message.id });
+      socket.emit('message_sent', { messageId: message.id, clientMessageId, message: messageData });
     } catch (err) {
       console.error('Send message error:', err);
-      socket.emit('message_error', { error: err.message || 'Failed to send message' });
+      socket.emit('message_error', { error: err.message || 'Failed to send message', clientMessageId });
     }
   });
 
@@ -306,9 +355,12 @@ module.exports = (io, socket) => {
     if (!currentUserId) return;
 
     const { receiverId, content, attachmentId } = data;
+    const clientMessageId = typeof data.clientMessageId === 'string'
+      ? data.clientMessageId.slice(0, 100)
+      : null;
 
     if (!receiverId || (!content && !attachmentId)) {
-      socket.emit('message_error', { error: 'Receiver ID and content/attachment are required' });
+      socket.emit('message_error', { error: 'Receiver ID and content/attachment are required', clientMessageId });
       return;
     }
 
@@ -322,7 +374,7 @@ module.exports = (io, socket) => {
           [attachmentId]
         );
         if (attachmentResult.rows.length === 0 || Number(attachmentResult.rows[0].uploaded_by) !== Number(currentUserId)) {
-          socket.emit('message_error', { error: 'Attachment not found or not owned by you' });
+          socket.emit('message_error', { error: 'Attachment not found or not owned by you', clientMessageId });
           return;
         }
       }
@@ -350,7 +402,7 @@ module.exports = (io, socket) => {
       const user = userResult.rows[0];
 
       const attachmentsResult = await query(
-        `SELECT id, filename, original_name, size, mime_type
+        `SELECT id, filename, original_name, size, mime_type, uploaded_by
          FROM files WHERE dm_message_id = $1`,
         [dm.id]
       );
@@ -359,6 +411,7 @@ module.exports = (io, socket) => {
         filename: f.original_name,
         size: f.size,
         mimeType: f.mime_type,
+        uploadedBy: f.uploaded_by,
       }));
 
       const dmData = {
@@ -370,6 +423,7 @@ module.exports = (io, socket) => {
         senderUsername: user.username,
         senderAvatarColor: user.avatar_color,
         attachments,
+        clientMessageId,
       };
 
       io.to(`user_${receiverId}`).emit('new_direct_message', dmData);
@@ -386,13 +440,14 @@ module.exports = (io, socket) => {
     try {
       const { query } = require('../db');
       await ensureChannelMembership(query, currentUserId, channelId);
+      await ensureNotTimedOut(query, currentUserId, channelId);
       socket.to(`channel_${channelId}`).emit('user_typing', {
         userId: currentUserId,
         channelId,
         isTyping,
       });
     } catch (err) {
-      console.error('Typing auth check failed:', err);
+      if (err.status !== 403) console.error('Typing auth check failed:', err);
     }
   });
 

@@ -5,7 +5,16 @@ const fs = require('fs');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
-const { getUploadValidationError, ensureChannelMembership } = require('../security');
+const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel } = require('../security');
+
+const emojiSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+function isValidReactionEmoji(value) {
+  if (typeof value !== 'string' || Array.from(value).length > 10) return false;
+  if (Array.from(emojiSegmenter.segment(value)).length !== 1) return false;
+  return /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(value)
+    || /^[#*0-9]\uFE0F?\u20E3$/u.test(value);
+}
 
 // File upload setup
 const uploadDir = config.UPLOAD_DIR;
@@ -70,6 +79,65 @@ router.post('/upload', authenticateToken, (req, res) => {
   });
 });
 
+router.get('/:channelId/pins', authenticateToken, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    await ensureChannelMembership(query, req.user.userId, channelId);
+    const result = await query(
+      `SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at,
+              m.pinned_at, m.pinned_by, u.username, u.avatar_color,
+              pinner.username AS pinned_by_username
+       FROM messages m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN users pinner ON pinner.id = m.pinned_by
+       WHERE m.channel_id = $1 AND m.pinned_at IS NOT NULL
+       ORDER BY m.pinned_at DESC, m.id DESC`,
+      [channelId]
+    );
+    const messageIds = result.rows.map((message) => message.id);
+    let attachmentsByMessage = {};
+    if (messageIds.length > 0) {
+      const files = await query(
+        `SELECT id, message_id, original_name, size, mime_type, uploaded_by, uploaded_by
+         FROM files WHERE message_id = ANY($1)`,
+        [messageIds]
+      );
+      for (const file of files.rows) {
+        if (!attachmentsByMessage[file.message_id]) attachmentsByMessage[file.message_id] = [];
+        attachmentsByMessage[file.message_id].push({
+          id: file.id,
+          filename: file.original_name,
+          size: file.size,
+          mimeType: file.mime_type,
+          uploadedBy: file.uploaded_by,
+          uploadedBy: file.uploaded_by,
+        });
+      }
+    }
+
+    res.json({
+      messages: result.rows.map((message) => ({
+        id: message.id,
+        channelId: message.channel_id,
+        userId: message.user_id,
+        username: message.username,
+        avatarColor: message.avatar_color,
+        content: message.content,
+        createdAt: message.created_at,
+        pinned: true,
+        pinnedAt: message.pinned_at,
+        pinnedBy: message.pinned_by,
+        pinnedByUsername: message.pinned_by_username,
+        attachments: attachmentsByMessage[message.id] || [],
+      })),
+    });
+  } catch (err) {
+    console.error('Get pinned messages error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Server error' });
+  }
+});
+
 // Get messages for a channel (paginated)
 router.get('/:channelId', authenticateToken, async (req, res) => {
   try {
@@ -86,11 +154,16 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
 
     const result = await query(`
       SELECT m.id, m.channel_id, m.user_id, m.content, m.reply_to, m.edited_at, m.created_at,
-             u.username, u.avatar_color
+             m.pinned_at, m.pinned_by,
+             u.username, u.avatar_color,
+             parent.id AS reply_to_message_id, parent.content AS reply_to_content,
+             parent_user.username AS reply_to_username
       FROM messages m
       JOIN users u ON m.user_id = u.id
+      LEFT JOIN messages parent ON parent.id = m.reply_to
+      LEFT JOIN users parent_user ON parent_user.id = parent.user_id
       WHERE m.channel_id = $1
-      ORDER BY m.created_at DESC
+      ORDER BY m.created_at DESC, m.id DESC
       LIMIT $2 OFFSET $3
     `, [channelId, limit, offset]);
 
@@ -137,6 +210,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
           filename: f.original_name,
           size: f.size,
           mimeType: f.mime_type,
+          uploadedBy: f.uploaded_by,
         });
       });
     }
@@ -149,8 +223,16 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       avatarColor: m.avatar_color,
       content: m.content,
       replyTo: m.reply_to,
+      replyToMessage: m.reply_to ? {
+        id: m.reply_to_message_id,
+        username: m.reply_to_username,
+        content: m.reply_to_content,
+      } : null,
       editedAt: m.edited_at,
       createdAt: m.created_at,
+      pinned: m.pinned_at !== null,
+      pinnedAt: m.pinned_at,
+      pinnedBy: m.pinned_by,
       reactions: reactionsByMessage[m.id] || [],
       attachments: attachmentsByMessage[m.id] || [],
     }));
@@ -161,6 +243,37 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
     });
   } catch (err) {
     console.error('Get messages error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Server error' });
+  }
+});
+
+router.get('/:channelId/context/:messageId', authenticateToken, async (req, res) => {
+  try {
+    const { channelId, messageId } = req.params;
+    await ensureChannelMembership(query, req.user.userId, channelId);
+
+    const target = await query(
+      'SELECT id, created_at FROM messages WHERE id = $1 AND channel_id = $2',
+      [messageId, channelId]
+    );
+    if (target.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found in this channel' });
+    }
+
+    const position = await query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE (created_at, id) < ($2, $3))::int AS older_count
+       FROM messages
+       WHERE channel_id = $1`,
+      [channelId, target.rows[0].created_at, target.rows[0].id]
+    );
+    const { total, older_count: olderCount } = position.rows[0];
+    const indexFromNewest = total - olderCount - 1;
+
+    res.json({ offset: Math.floor(indexFromNewest / 100) * 100 });
+  } catch (err) {
+    console.error('Get message context error:', err);
     const status = err.status || 500;
     res.status(status).json({ error: err.message || 'Server error' });
   }
@@ -223,6 +336,7 @@ router.post('/:messageId/replies', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Parent message not found' });
     }
     await ensureChannelMembership(query, req.user.userId, parent.rows[0].channel_id);
+    await ensureCanPostToChannel(query, req.user.userId, parent.rows[0].channel_id);
 
     const result = await query(
       `INSERT INTO messages (channel_id, user_id, content, reply_to)
@@ -289,14 +403,63 @@ router.get('/:channelId/threads/:messageId', authenticateToken, async (req, res)
   }
 });
 
+router.patch('/:messageId/pin', authenticateToken, async (req, res) => {
+  try {
+    const messageId = Number(req.params.messageId);
+    const { pinned } = req.body || {};
+    if (!Number.isSafeInteger(messageId) || messageId < 1) {
+      return res.status(400).json({ error: 'A valid message ID is required' });
+    }
+    if (typeof pinned !== 'boolean') {
+      return res.status(400).json({ error: 'Pinned must be true or false' });
+    }
+
+    const message = await query(
+      'SELECT id, channel_id FROM messages WHERE id = $1',
+      [messageId]
+    );
+    if (message.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    const { channel_id: channelId } = message.rows[0];
+    await ensureChannelMembership(query, req.user.userId, channelId);
+
+    const result = await query(
+      `UPDATE messages
+       SET pinned_at = CASE WHEN $1 THEN COALESCE(pinned_at, NOW()) ELSE NULL END,
+           pinned_by = CASE WHEN $1 THEN COALESCE(pinned_by, $2) ELSE NULL END
+       WHERE id = $3
+       RETURNING id, channel_id, pinned_at, pinned_by`,
+      [pinned, req.user.userId, messageId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    const updated = result.rows[0];
+    const event = {
+      messageId: updated.id,
+      channelId: updated.channel_id,
+      pinned: updated.pinned_at !== null,
+      pinnedAt: updated.pinned_at,
+      pinnedBy: updated.pinned_by,
+    };
+    req.io?.to(`channel_${channelId}`).emit('message_pin_updated', event);
+    res.json({ message: event });
+  } catch (err) {
+    console.error('Update message pin error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Server error' });
+  }
+});
+
 // Add reaction to a message
 router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
   try {
     const { messageId } = req.params;
-    const { emoji } = req.body;
+    const emoji = req.body && req.body.emoji;
 
-    if (!emoji) {
-      return res.status(400).json({ error: 'Emoji is required' });
+    if (!isValidReactionEmoji(emoji)) {
+      return res.status(400).json({ error: 'Choose a single supported emoji reaction' });
     }
 
     const messageCheck = await query(

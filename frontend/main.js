@@ -45,6 +45,11 @@ function createWindow() {
 }
 
 function createLoginWindow() {
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.focus();
+    return loginWindow;
+  }
+
   loginWindow = new BrowserWindow({
     width: 480,
     height: 720,
@@ -73,6 +78,8 @@ function createLoginWindow() {
       createWindow();
     }
   });
+
+  return loginWindow;
 }
 
 app.whenReady().then(() => {
@@ -124,6 +131,18 @@ ipcMain.handle('store:set', (event, key, value) => {
 
 ipcMain.handle('store:delete', (event, key) => {
   store.delete(key);
+  return true;
+});
+
+ipcMain.handle('auth:logout', (event) => {
+  store.delete('authToken');
+  store.delete('user');
+
+  const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+  createLoginWindow();
+  setTimeout(() => {
+    if (sourceWindow && !sourceWindow.isDestroyed()) sourceWindow.close();
+  }, 0);
   return true;
 });
 

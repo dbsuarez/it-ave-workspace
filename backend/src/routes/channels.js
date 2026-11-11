@@ -12,9 +12,13 @@ router.get('/', authenticateToken, async (req, res) => {
              COUNT(cm.user_id)::int AS member_count
       FROM channels c
       LEFT JOIN channel_members cm ON c.id = cm.channel_id
+      WHERE c.is_private = FALSE OR EXISTS (
+        SELECT 1 FROM channel_members mine
+        WHERE mine.channel_id = c.id AND mine.user_id = $1
+      ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)
       GROUP BY c.id
       ORDER BY c.name
-    `);
+    `, [req.user.userId]);
 
     res.json({
       channels: result.rows.map((ch) => ({
@@ -38,9 +42,9 @@ router.get('/my', authenticateToken, async (req, res) => {
     const result = await query(`
       SELECT c.id, c.name, c.topic, c.is_private, c.created_at,
              COUNT(DISTINCT cm2.user_id)::int AS member_count,
-             COUNT(m.id)::int AS unread_count
+             COUNT(DISTINCT m.id)::int AS unread_count
       FROM channels c
-      JOIN channel_members cm ON c.id = cm.channel_id
+      LEFT JOIN channel_members cm ON c.id = cm.channel_id
       LEFT JOIN channel_members cm2 ON c.id = cm2.channel_id
       LEFT JOIN messages m
         ON m.channel_id = c.id
@@ -50,7 +54,9 @@ router.get('/my', authenticateToken, async (req, res) => {
              '-infinity'::timestamptz
            )
        AND m.user_id != $1
-      WHERE cm.user_id = $1
+      WHERE cm.user_id = $1 OR EXISTS (
+        SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE
+      )
       GROUP BY c.id
       ORDER BY c.name
     `, [req.user.userId]);
@@ -97,7 +103,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Add creator as member
     await query(
-      'INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)',
+      "INSERT INTO channel_members (channel_id, user_id, role) VALUES ($1, $2, 'moderator')",
       [channel.id, req.user.userId]
     );
 
@@ -247,9 +253,18 @@ router.post('/:channelId/join', authenticateToken, async (req, res) => {
     const { channelId } = req.params;
 
     // Check channel exists
-    const channelResult = await query('SELECT id FROM channels WHERE id = $1', [channelId]);
+    const channelResult = await query('SELECT id, is_private FROM channels WHERE id = $1', [channelId]);
     if (channelResult.rows.length === 0) {
       return res.status(404).json({ error: 'Channel not found' });
+    }
+    if (channelResult.rows[0].is_private) {
+      const membership = await query(
+        `SELECT 1 FROM users WHERE id = $1 AND is_superadmin = TRUE`,
+        [req.user.userId]
+      );
+      if (!membership.rows.length) {
+        return res.status(403).json({ error: 'Private channels require an invitation from a Superadmin' });
+      }
     }
 
     // Try to join (ignore if already a member)

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   storeGet: (key) => ipcRenderer.invoke('store:get', key),
   storeSet: (key, value) => ipcRenderer.invoke('store:set', key, value),
   storeDelete: (key) => ipcRenderer.invoke('store:delete', key),
+  logout: () => ipcRenderer.invoke('auth:logout'),
 
   // Build/runtime info
   isDev: process.env.IAV_DEV === '1',

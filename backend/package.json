@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "bootstrap:superadmin": "node scripts/bootstrap-superadmin.js",
     "test": "node --test"
   },
   "dependencies": {

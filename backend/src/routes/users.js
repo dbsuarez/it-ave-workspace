@@ -95,7 +95,7 @@ router.get('/:userId/direct-messages', authenticateToken, async (req, res) => {
       JOIN users u ON dm.sender_id = u.id
       WHERE (dm.sender_id = $1 AND dm.receiver_id = $2)
          OR (dm.sender_id = $2 AND dm.receiver_id = $1)
-      ORDER BY dm.created_at DESC
+      ORDER BY dm.created_at DESC, dm.id DESC
       LIMIT $3 OFFSET $4
     `, [req.user.userId, userId, limit, offset]);
 
@@ -104,7 +104,7 @@ router.get('/:userId/direct-messages', authenticateToken, async (req, res) => {
     let attachmentsByDm = {};
     if (dmIds.length > 0) {
       const fileResult = await query(
-        `SELECT id, dm_message_id, filename, original_name, size, mime_type
+        `SELECT id, dm_message_id, filename, original_name, size, mime_type, uploaded_by
          FROM files WHERE dm_message_id = ANY($1)`,
         [dmIds]
       );
@@ -117,6 +117,7 @@ router.get('/:userId/direct-messages', authenticateToken, async (req, res) => {
           filename: f.original_name,
           size: f.size,
           mimeType: f.mime_type,
+          uploadedBy: f.uploaded_by,
         });
       });
     }
@@ -135,6 +136,43 @@ router.get('/:userId/direct-messages', authenticateToken, async (req, res) => {
     });
   } catch (err) {
     console.error('Get direct messages error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Server error' });
+  }
+});
+
+router.get('/:userId/direct-messages/context/:messageId', authenticateToken, async (req, res) => {
+  try {
+    const { userId, messageId } = req.params;
+    await ensureDirectMessageAccess(query, req.user.userId, userId);
+
+    const target = await query(
+      `SELECT id, created_at
+       FROM direct_messages
+       WHERE id = $1 AND (
+         (sender_id = $2 AND receiver_id = $3)
+         OR (sender_id = $3 AND receiver_id = $2)
+       )`,
+      [messageId, req.user.userId, userId]
+    );
+    if (target.rows.length === 0) {
+      return res.status(404).json({ error: 'Direct message not found' });
+    }
+
+    const position = await query(
+      `SELECT COUNT(*)::int AS newer_count
+       FROM direct_messages
+       WHERE (
+         (sender_id = $1 AND receiver_id = $2)
+         OR (sender_id = $2 AND receiver_id = $1)
+       )
+         AND (created_at, id) > ($3, $4)`,
+      [req.user.userId, userId, target.rows[0].created_at, target.rows[0].id]
+    );
+
+    res.json({ offset: Math.floor(position.rows[0].newer_count / 100) * 100 });
+  } catch (err) {
+    console.error('Get direct message context error:', err);
     const status = err.status || 500;
     res.status(status).json({ error: err.message || 'Server error' });
   }
