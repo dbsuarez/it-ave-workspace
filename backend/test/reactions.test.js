@@ -19,6 +19,7 @@ const dbPath = require.resolve('../src/db');
 const previousDbModule = require.cache[dbPath];
 const reactions = new Set();
 const queryCalls = [];
+const emitted = [];
 
 require.cache[dbPath] = {
   id: dbPath,
@@ -44,6 +45,16 @@ require.cache[dbPath] = {
         reactions.delete(`${params[0]}:${params[1]}:${params[2]}`);
         return { rows: [] };
       }
+      if (sql.includes('FROM reactions') && sql.includes('GROUP BY emoji')) {
+        const byEmoji = new Map();
+        for (const key of reactions) {
+          const [messageId, userId, emoji] = key.split(':');
+          if (Number(messageId) !== Number(params[0])) continue;
+          if (!byEmoji.has(emoji)) byEmoji.set(emoji, []);
+          byEmoji.get(emoji).push(Number(userId));
+        }
+        return { rows: [...byEmoji].map(([emoji, users]) => ({ emoji, count: users.length, users })) };
+      }
       throw new Error(`Unexpected reaction query: ${sql}`);
     },
   },
@@ -51,6 +62,14 @@ require.cache[dbPath] = {
 
 const app = express();
 app.use(express.json());
+app.use((req, res, next) => {
+  req.io = {
+    to: (room) => ({
+      emit: (event, payload) => emitted.push({ room, event, payload }),
+    }),
+  };
+  next();
+});
 app.use('/api/messages', require('../src/routes/messages'));
 let server;
 let baseUrl;
@@ -109,4 +128,24 @@ test('clicking the same emoji toggles the reaction off', async () => {
   assert.equal(second.status, 200);
   assert.equal(reactions.has('5:1:🎉'), false);
   assert.ok(queryCalls.some(({ sql }) => sql.includes('DELETE FROM reactions')));
+});
+
+test('reaction changes are broadcast to the channel with current counts and users', async () => {
+  reactions.clear();
+  emitted.length = 0;
+
+  await react('🚀');
+  assert.deepEqual(emitted.at(-1), {
+    room: 'channel_7',
+    event: 'message_reactions_updated',
+    payload: {
+      messageId: 5,
+      channelId: 7,
+      reactions: [{ emoji: '🚀', count: 1, users: [1] }],
+    },
+  });
+
+  await react('🚀');
+  assert.equal(emitted.length, 2);
+  assert.deepEqual(emitted.at(-1).payload.reactions, []);
 });

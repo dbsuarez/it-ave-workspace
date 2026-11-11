@@ -782,6 +782,7 @@ function connectSocket() {
     if (Number(state.huddle.channelId) !== Number(participant.channelId)) return;
     state.huddle.participants.set(participant.peerId, participant);
     renderHuddleParticipants();
+    updateHuddleConnectedStatus();
   });
   state.socket.on('huddle:participant-left', ({ peerId }) => {
     removeHuddlePeer(peerId);
@@ -840,6 +841,20 @@ function connectSocket() {
     }
     if (Number(state.currentChannelId) === channelId) {
       loadPinnedMessages(channelId);
+    }
+  });
+
+  state.socket.on('message_reactions_updated', (event) => {
+    const channelId = Number(event.channelId);
+    const messages = state.messages[channelId] || [];
+    const message = messages.find((item) => Number(item.id) === Number(event.messageId));
+    if (!message) return;
+    message.reactions = event.reactions || [];
+    if (Number(state.currentChannelId) === channelId && state.view === 'channel') {
+      const container = document.getElementById('messages');
+      const scrollTop = container.scrollTop;
+      renderMessages('messages', messages);
+      container.scrollTop = scrollTop;
     }
   });
 
@@ -2508,11 +2523,8 @@ function handleHuddleJoined(data) {
     state.huddle.participants.set(participant.peerId, participant);
   });
 
-  const channel = state.channels.find((item) => Number(item.id) === Number(data.channelId));
-  setHuddleStatus(
-    `Connected to #${channel?.name || 'channel'}${data.participants?.length ? '' : '. Waiting for others to join.'}`,
-    'connected'
-  );
+  state.huddle.statusType = 'connected';
+  updateHuddleConnectedStatus();
   renderHuddleView();
 
   (data.participants || []).forEach((participant) => {
@@ -2619,6 +2631,18 @@ function removeHuddlePeer(peerId) {
   }
   state.huddle.participants.delete(peerId);
   renderHuddleParticipants();
+  updateHuddleConnectedStatus();
+}
+
+// Keep the connected status in step with who is in the call (the map includes this client).
+function updateHuddleConnectedStatus() {
+  if (!state.huddle.channelId || state.huddle.statusType !== 'connected') return;
+  const channel = state.channels.find((item) => Number(item.id) === Number(state.huddle.channelId));
+  const alone = state.huddle.participants.size <= 1;
+  setHuddleStatus(
+    `Connected to #${channel?.name || 'channel'}${alone ? '. Waiting for others to join.' : ''}`,
+    'connected'
+  );
 }
 
 function cleanupHuddle(notifyServer = true) {

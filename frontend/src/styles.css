@@ -72,6 +72,10 @@ body.theme-dark {
   --shadow-modal: 0 12px 36px rgba(0, 0, 0, 0.5);
 }
 
+body.theme-dark .topbar-brand .workspace-name {
+  color: var(--text);
+}
+
 html, body {
   height: 100%;
   font-family: var(--font);

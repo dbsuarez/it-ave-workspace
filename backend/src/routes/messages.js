@@ -172,7 +172,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
     let reactions = [];
     if (messageIds.length > 0) {
       const reactionResult = await query(
-        `SELECT message_id, emoji, COUNT(*)::int AS count
+        `SELECT message_id, emoji, COUNT(*)::int AS count, ARRAY_AGG(user_id) AS users
          FROM reactions
          WHERE message_id = ANY($1)
          GROUP BY message_id, emoji`,
@@ -190,6 +190,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       reactionsByMessage[r.message_id].push({
         emoji: r.emoji,
         count: r.count,
+        users: r.users || [],
       });
     });
 
@@ -469,7 +470,31 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
     if (messageCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Message not found' });
     }
-    await ensureChannelMembership(query, req.user.userId, messageCheck.rows[0].channel_id);
+    const channelId = messageCheck.rows[0].channel_id;
+    await ensureChannelMembership(query, req.user.userId, channelId);
+
+    // Tell everyone in the channel about the new reaction state for this message.
+    const broadcastReactions = async () => {
+      const current = await query(
+        `SELECT emoji, COUNT(*)::int AS count, ARRAY_AGG(user_id) AS users
+         FROM reactions
+         WHERE message_id = $1
+         GROUP BY emoji
+         ORDER BY MIN(id)`,
+        [messageId]
+      );
+      const reactions = current.rows.map((row) => ({
+        emoji: row.emoji,
+        count: row.count,
+        users: row.users || [],
+      }));
+      req.io?.to(`channel_${channelId}`).emit('message_reactions_updated', {
+        messageId: Number(messageId),
+        channelId: Number(channelId),
+        reactions,
+      });
+      return reactions;
+    };
 
     const existing = await query(
       'SELECT id FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
@@ -481,13 +506,13 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
         'DELETE FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
         [messageId, req.user.userId, emoji]
       );
-      res.json({ message: 'Reaction removed' });
+      res.json({ message: 'Reaction removed', reactions: await broadcastReactions() });
     } else {
       await query(
         'INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)',
         [messageId, req.user.userId, emoji]
       );
-      res.status(201).json({ message: 'Reaction added' });
+      res.status(201).json({ message: 'Reaction added', reactions: await broadcastReactions() });
     }
   } catch (err) {
     console.error('Add reaction error:', err);
