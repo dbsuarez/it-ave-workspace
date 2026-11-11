@@ -318,14 +318,145 @@ function attachCanvasSlash(textarea) {
   });
 }
 
+// ---------------------------------------------------------------------------------------------
+// Formatting toolbar (buttons for the same things). Pure part first.
+// ---------------------------------------------------------------------------------------------
+
+const TOOLBAR_BUTTONS = [
+  { id: 'bold', label: 'B', title: 'Bold (Ctrl+B)', style: 'bold' },
+  { id: 'italic', label: 'I', title: 'Italic (Ctrl+I)', style: 'italic' },
+  { id: 'link', label: 'Link', title: 'Link (Ctrl+K)' },
+  { sep: true },
+  { id: 'h1', label: 'H1', title: 'Heading 1' },
+  { id: 'h2', label: 'H2', title: 'Heading 2' },
+  { id: 'h3', label: 'H3', title: 'Heading 3' },
+  { sep: true },
+  { id: 'list', label: '• List', title: 'Bulleted list' },
+  { id: 'numbered', label: '1. List', title: 'Numbered list' },
+  { id: 'todo', label: '☑ Todo', title: 'Checklist' },
+  { id: 'quote', label: 'Quote', title: 'Quote' },
+  { sep: true },
+  { id: 'table', label: 'Table', title: 'Insert a table' },
+  { id: 'code', label: 'Code', title: 'Insert a code block' },
+  { id: 'tip', label: 'Callout', title: 'Insert a callout' },
+  { id: 'divider', label: 'Divider', title: 'Insert a divider' },
+];
+
+const LINE_MARKER = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+\. |> )/;
+
+// What a toolbar button does to the text. Returns { value, selectStart, selectEnd }.
+function toolbarAction(value, start, end, id) {
+  if (id === 'bold' || id === 'italic' || id === 'link') return wrapSelection(value, start, end, id);
+  const item = slashItemById(id);
+  if (!item) return { value, selectStart: start, selectEnd: end };
+  const line = lineAt(value, start);
+  if (item.prefix !== undefined && item.prefix !== '') {
+    // headings, lists, quote: set the line's marker; pressing the same button again removes it
+    const m = LINE_MARKER.exec(line.text);
+    const indent = m ? m[1] : /^\s*/.exec(line.text)[0];
+    const current = m ? m[2] : '';
+    const rest = line.text.slice(indent.length + current.length);
+    const same = current === item.prefix || (id === 'numbered' && /^\d+\. $/.test(current));
+    const marker = same ? '' : item.prefix;
+    const text = indent + marker + rest;
+    const delta = text.length - line.text.length;
+    return {
+      value: value.slice(0, line.start) + text + value.slice(line.end),
+      selectStart: Math.max(line.start, start + delta),
+      selectEnd: Math.max(line.start, end + delta),
+    };
+  }
+  // table, code, callout, divider: a new block after the current line, separated by a blank line
+  const built = buildSlashInsert(item, '');
+  const emptyLine = line.text.trim() === '';
+  const lead = emptyLine ? '' : '\n\n';
+  const at = emptyLine ? line.start : line.end;
+  const tail = at === value.length ? '\n' : '';
+  const insert = lead + built.insert + tail;
+  const offset = at + lead.length;
+  return {
+    value: value.slice(0, at) + insert + value.slice(emptyLine ? line.end : at),
+    selectStart: offset + built.selectStart,
+    selectEnd: offset + built.selectEnd,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Toolbar DOM: one bar per editor, shown only while the editor is in Edit mode and the user has it on.
+// The on/off choice is remembered per person on this computer.
+// ---------------------------------------------------------------------------------------------
+
+const CANVAS_TOOLBAR_KEY = 'canvasToolbar';
+const canvasToolbars = [];
+
+function canvasToolbarEnabled() {
+  try { return localStorage.getItem(CANVAS_TOOLBAR_KEY) !== 'off'; } catch (e) { return true; }
+}
+
+function setCanvasToolbarEnabled(on) {
+  try { localStorage.setItem(CANVAS_TOOLBAR_KEY, on ? 'on' : 'off'); } catch (e) { /* storage unavailable: just not remembered */ }
+  canvasToolbars.forEach((bar) => bar.sync());
+}
+
+function attachCanvasToolbar(textarea, modeButton) {
+  if (!textarea || textarea.dataset.toolbarAttached) return;
+  textarea.dataset.toolbarAttached = '1';
+
+  const bar = document.createElement('div');
+  bar.className = 'canvas-toolbar';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'Formatting');
+  bar.innerHTML = TOOLBAR_BUTTONS.map((b) => (b.sep
+    ? '<span class="canvas-toolbar-sep" aria-hidden="true"></span>'
+    : `<button type="button" class="canvas-toolbar-btn ${b.style || ''}" data-fmt="${b.id}" title="${b.title}" aria-label="${b.title}">${b.label}</button>`)).join('');
+  textarea.parentNode.insertBefore(bar, textarea);
+
+  // keep the selection in the textarea while a button is pressed
+  bar.addEventListener('mousedown', (event) => { if (event.target.closest('button')) event.preventDefault(); });
+  bar.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-fmt]');
+    if (!button) return;
+    const result = toolbarAction(textarea.value, textarea.selectionStart, textarea.selectionEnd, button.dataset.fmt);
+    textarea.value = result.value;
+    textarea.focus();
+    textarea.setSelectionRange(result.selectStart, result.selectEnd);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'btn canvas-mode-btn canvas-toolbar-toggle';
+  toggle.textContent = 'Aa';
+  if (modeButton && modeButton.parentNode) modeButton.parentNode.insertBefore(toggle, modeButton);
+  toggle.addEventListener('click', () => setCanvasToolbarEnabled(!canvasToolbarEnabled()));
+
+  const sync = () => {
+    const editing = !textarea.hidden && !textarea.readOnly;
+    const on = canvasToolbarEnabled();
+    bar.hidden = !(editing && on);
+    toggle.hidden = !editing;
+    toggle.classList.toggle('active', on);
+    toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    toggle.title = on ? 'Hide the formatting toolbar' : 'Show the formatting toolbar';
+  };
+  new MutationObserver(sync).observe(textarea, { attributes: true, attributeFilter: ['hidden', 'readonly'] });
+  canvasToolbars.push({ sync });
+  sync();
+}
+
 if (typeof document !== 'undefined') {
   // Scripts load at the end of <body>, so both editors already exist.
-  attachCanvasSlash(document.getElementById('canvas-sheet-editor'));
-  attachCanvasSlash(document.getElementById('canvas2-editor'));
+  const sheet = document.getElementById('canvas-sheet-editor');
+  const standalone = document.getElementById('canvas2-editor');
+  attachCanvasSlash(sheet);
+  attachCanvasSlash(standalone);
+  attachCanvasToolbar(sheet, document.getElementById('btn-canvas-sheet-mode'));
+  attachCanvasToolbar(standalone, document.getElementById('btn-canvas2-mode'));
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SLASH_ITEMS, filterSlashItems, slashTrigger, parseSlashLine, applySlashItem, continueList, wrapSelection, lineAt,
+    toolbarAction, TOOLBAR_BUTTONS,
   };
 }

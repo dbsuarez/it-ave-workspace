@@ -5334,3 +5334,50 @@ h4.cv-h { font-size: 15px; }
 .slash-label { grid-area: label; font-size: 13px; font-weight: 600; }
 .slash-hint { grid-area: hint; font-size: 11px; color: var(--text-muted); }
 .slash-key { grid-area: key; font-size: 11px; color: var(--text-muted); font-family: Consolas, monospace; }
+
+/* Canvas formatting toolbar */
+.canvas-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted-bg);
+}
+
+.canvas-toolbar[hidden] {
+  display: none;
+}
+
+.canvas-toolbar-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.canvas-toolbar-btn:hover {
+  background: var(--surface);
+}
+
+.canvas-toolbar-btn.bold { font-weight: 800; }
+.canvas-toolbar-btn.italic { font-style: italic; }
+
+.canvas-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.canvas-toolbar-toggle.active {
+  border-color: var(--purple);
+}

@@ -83,3 +83,26 @@ test('formatting shortcuts wrap and unwrap the selection', () => {
   assert.equal(link.value, 'see [docs](https://)');
   assert.equal(link.value.slice(link.selectStart, link.selectEnd), 'https://');
 });
+
+const { toolbarAction, TOOLBAR_BUTTONS } = require('../src/features/canvas-slash');
+
+test('toolbar: line buttons set, switch and remove the marker', () => {
+  assert.equal(toolbarAction('hello', 5, 5, 'h1').value, '# hello');
+  assert.equal(toolbarAction('# hello', 7, 7, 'h1').value, 'hello', 'same button again removes it');
+  assert.equal(toolbarAction('# hello', 7, 7, 'h2').value, '## hello', 'a different one switches it');
+  assert.equal(toolbarAction('one\ntwo', 5, 5, 'list').value, 'one\n- two', 'only the cursor line changes');
+  assert.equal(toolbarAction('- item', 6, 6, 'todo').value, '- [ ] item');
+  assert.equal(toolbarAction('4. item', 7, 7, 'numbered').value, 'item');
+  assert.equal(toolbarAction('hi', 2, 2, 'quote').value, '> hi');
+  assert.equal(toolbarAction('hello', 3, 3, 'h1').selectStart, 5, 'cursor stays on the same character');
+});
+
+test('toolbar: block buttons add a block after the current line', () => {
+  assert.equal(toolbarAction('intro', 5, 5, 'divider').value, 'intro\n\n---\n');
+  assert.equal(toolbarAction('', 0, 0, 'divider').value, '---\n');
+  const t = toolbarAction('intro\nmore', 2, 2, 'table');
+  assert.equal(t.value, 'intro\n\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\nmore');
+  assert.equal(t.value.slice(t.selectStart, t.selectEnd), 'Column 1');
+  assert.equal(toolbarAction('say hi', 4, 6, 'bold').value, 'say **hi**');
+  assert.ok(TOOLBAR_BUTTONS.filter((b) => !b.sep).every((b) => b.id && b.title));
+});
