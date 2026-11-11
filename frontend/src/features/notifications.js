@@ -68,7 +68,7 @@ function notifyUser(kind, text, payload) {
       const notification = new Notification('IT Avenue Workspace', { body: text, silent: false });
       notification.onclick = () => {
         window.focus();
-        if (payload?.channelId && payload?.messageId) openActivityItem(payload);
+        if ((payload?.channelId && payload?.messageId) || payload?.canvasId) openActivityItem(payload);
       };
       entry.desktop = true;
     } catch (err) {

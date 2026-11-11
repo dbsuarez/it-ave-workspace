@@ -166,7 +166,24 @@ function updateActivityBadge() {
   badge.textContent = total > 99 ? '99+' : String(total);
 }
 
+// What to call the canvas in a sentence: a channel's canvas by channel name, a personal one by its title.
+function activityCanvasLabel(item) {
+  if (item.canvasKind === 'channel') return `#${item.channelName || 'channel'}`;
+  if (item.canvasKind === 'dm') return 'a direct message canvas';
+  return item.canvasTitle || 'a canvas';
+}
+
+function activityCanvasSentence(item, html) {
+  const wrap = (text) => (html ? `<strong>${escapeHtml(text)}</strong>` : text);
+  const actor = wrap(item.actorUsername || 'Someone');
+  const label = wrap(activityCanvasLabel(item));
+  if (item.source === 'reply') return `${actor} replied to your comment on ${label}`;
+  if (item.source === 'comment') return `${actor} mentioned you in a comment on ${label}`;
+  return `${actor} mentioned you in the canvas ${label}`;
+}
+
 function activitySentence(item) {
+  if (item.type === 'canvas_mention') return activityCanvasSentence(item, true);
   const actor = `<strong>${escapeHtml(item.actorUsername || 'Someone')}</strong>`;
   const channel = `<strong>#${escapeHtml(item.channelName || 'channel')}</strong>`;
   if (item.type === 'mention') return `${actor} mentioned you in ${channel}`;
@@ -175,6 +192,7 @@ function activitySentence(item) {
 }
 
 function activityPlainSentence(item) {
+  if (item.type === 'canvas_mention') return activityCanvasSentence(item, false);
   const actor = item.actorUsername || 'Someone';
   const channel = `#${item.channelName || 'channel'}`;
   if (item.type === 'mention') return `${actor} mentioned you in ${channel}`;
@@ -206,9 +224,12 @@ function renderActivityFeed() {
   grid.hidden = !showUnread;
   if (showUnread) return;
 
+  // canvas mentions and comment replies sit with mentions and replies
+  const inTab = (item) => item.type === activity.tab
+    || (item.type === 'canvas_mention' && (item.source === 'reply' ? activity.tab === 'reply' : activity.tab === 'mention'));
   const items = activity.tab === 'all'
     ? activity.items
-    : activity.items.filter((item) => item.type === activity.tab);
+    : activity.items.filter(inTab);
   feed.classList.toggle('has-empty-record', items.length === 0);
   if (!items.length) {
     const empty = {
@@ -255,8 +276,44 @@ async function loadActivity({ markSeen = false } = {}) {
 }
 
 async function openActivityItem(item) {
+  if (item.type === 'canvas_mention') { await openCanvasFromActivity(item); return; }
   await openChannel(item.channelId);
   await scrollToMessage(item.messageId);
+}
+
+// Open the canvas an Activity item is about: a personal canvas in the canvas manager, a channel or direct
+// message canvas in its side panel.
+async function openCanvasFromActivity(item) {
+  try {
+    if (item.canvasKind === 'standalone') {
+      await setSection('canvas2');
+      await openCanvas2Standalone(item.canvasId);
+    } else if (item.canvasKind === 'channel' && item.channelId) {
+      await openChannel(item.channelId);
+      await openCanvas2('channel', { channelId: item.channelId });
+    } else if (item.canvasKind === 'dm' && item.actorId) {
+      await openDM(Number(item.actorId));
+      await openCanvas2('dm', { userId: Number(item.actorId) });
+    }
+  } catch (err) {
+    console.error('Open canvas from activity error:', err);
+    showToast('That canvas is no longer available.', 'error');
+  }
+}
+
+// A canvas mention or reply arrives while the app is open.
+function handleCanvasActivityEvent(event) {
+  const activity = activityState();
+  activity.items.unshift({ ...event, unseen: true });
+  activity.items = activity.items.slice(0, 100);
+  if (state.section === 'activity') {
+    renderActivityFeed();
+    api('/api/activity/seen', { method: 'POST' }).catch(() => {});
+  } else {
+    activity.unseenCount += 1;
+  }
+  updateActivityBadge();
+  notifyUser(event.source === 'reply' ? 'reply' : 'mention', activityPlainSentence(event), event);
 }
 
 function handleActivityEvent(event) {

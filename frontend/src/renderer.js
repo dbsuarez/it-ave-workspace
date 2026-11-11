@@ -995,6 +995,7 @@ function connectSocket() {
   });
 
   state.socket.on('activity', handleActivityEvent);
+  state.socket.on('canvas_activity', handleCanvasActivityEvent);
   state.socket.on('user_groups_updated', handleUserGroupsUpdated);
   state.socket.on('scheduled_message_sent', handleScheduledDelivered);
   state.socket.on('scheduled_message_failed', handleScheduledFailed);

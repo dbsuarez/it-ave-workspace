@@ -502,6 +502,18 @@ BEGIN
 END
 $$;
 
+-- Canvas mentions and comment replies (Activity feed); mirrors backend/src/migrations.js.
+CREATE TABLE IF NOT EXISTS canvas_mentions (
+  id SERIAL PRIMARY KEY,
+  canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  source VARCHAR(12) NOT NULL,
+  snippet TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_mentions_user ON canvas_mentions(user_id, created_at DESC);
+
 -- Job title on profiles; mirrors backend/src/migrations.js.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) NOT NULL DEFAULT '';
 

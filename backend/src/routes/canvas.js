@@ -14,6 +14,7 @@ const { ensureNotGuest } = require('../guests');
 const { describeSections, applyOperation } = require('../canvasSections');
 const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
+const canvasMentions = require('../canvasMentions');
 
 // Images inside a canvas: pictures only (SVG is left out: it can carry script), a cap per canvas.
 const CANVAS_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
@@ -417,10 +418,17 @@ router.patch('/:canvasId', authenticateToken, async (req, res) => {
     }
     const content = req.body?.content === undefined ? null : parseContent(req.body.content);
     const baseRevision = parseBaseRevision(req.body?.baseRevision);
-    await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const before = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
     const saved = await saveCanvasChanges(canvasId, title, content, baseRevision, req.user.userId);
     if (!saved.canvas) return conflictResponse(res, saved.conflict);
     const result = { rows: [saved.canvas] };
+    if (content !== null) {
+      // new @mentions in the text notify those people (never blocks or fails the save)
+      canvasMentions.notifyMentions({
+        query, io: req.io, canvas: saved.canvas, actorId: req.user.userId, text: content,
+        usernames: canvasMentions.addedMentions(before.content, content), source: 'content',
+      }).catch((err) => console.error('Canvas mention notify error:', err.message));
+    }
     req.io?.to(`canvas:${canvasId}`).emit('canvas_updated', {
       canvasId, kind: result.rows[0].kind, title: result.rows[0].title, content: result.rows[0].content,
       revision: Number(result.rows[0].revision), updatedAt: result.rows[0].updated_at,
@@ -485,7 +493,7 @@ router.post('/:canvasId/comments', authenticateToken, async (req, res) => {
   try {
     const canvasId = parseId(req.params.canvasId);
     if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
-    await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
     const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
     if (!body || body.length > MAX_COMMENT_LENGTH) {
       return res.status(400).json({ error: `A comment must be 1 to ${MAX_COMMENT_LENGTH} characters` });
@@ -515,6 +523,23 @@ router.post('/:canvasId/comments', authenticateToken, async (req, res) => {
     const row = await query(`${COMMENT_SELECT} WHERE c.id = $1`, [inserted.rows[0].id]);
     notifyComments(req, canvasId);
     res.status(201).json({ comment: mapComment(row.rows[0]) });
+    // people mentioned in the comment, and the author of the thread being replied to, are told
+    (async () => {
+      const told = new Set();
+      const mentioned = await canvasMentions.notifyMentions({
+        query, io: req.io, canvas, actorId: req.user.userId, text: body, source: 'comment', snippet: body.slice(0, 160),
+      });
+      mentioned.forEach((id) => told.add(Number(id)));
+      if (parentId) {
+        const thread = await query('SELECT user_id FROM canvas_comments WHERE id = $1', [parentId]);
+        const starter = thread.rows[0] && thread.rows[0].user_id;
+        if (starter && !told.has(Number(starter))) {
+          await canvasMentions.deliver({
+            query, io: req.io, canvas, actorId: req.user.userId, userIds: [starter], source: 'reply', snippet: body.slice(0, 160),
+          });
+        }
+      }
+    })().catch((err) => console.error('Canvas comment notify error:', err.message));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Add canvas comment error:', err);

@@ -38,6 +38,44 @@ const SOURCES = {
     WHERE m.user_id = $1 AND r.user_id <> $1`,
 };
 
+// Canvas mentions and replies, for canvases the person can still read (and that are not in the trash).
+const CANVAS_ITEMS_SQL = `
+  SELECT cm.id, cm.source, cm.snippet AS preview, cm.created_at, cm.canvas_id,
+         c.kind AS canvas_kind, c.title AS canvas_title, c.channel_id, ch.name AS channel_name,
+         u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color
+  FROM canvas_mentions cm
+  JOIN canvases c ON c.id = cm.canvas_id AND c.deleted_at IS NULL
+  LEFT JOIN channels ch ON ch.id = c.channel_id
+  LEFT JOIN users u ON u.id = cm.actor_id
+  WHERE cm.user_id = $1
+    AND (
+      (c.kind = 'standalone' AND (
+        COALESCE(c.owner_id, c.created_by) = $1
+        OR EXISTS (SELECT 1 FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1)
+        OR EXISTS (SELECT 1 FROM canvas_channel_grants g JOIN channel_members m ON m.channel_id = g.channel_id
+                   WHERE g.canvas_id = c.id AND m.user_id = $1)))
+      OR (c.kind = 'channel' AND EXISTS (SELECT 1 FROM channel_members WHERE channel_id = c.channel_id AND user_id = $1))
+      OR (c.kind = 'dm' AND $1 IN (c.dm_user_low, c.dm_user_high))
+    )`;
+
+function mapCanvasItem(row, seenAt) {
+  return {
+    type: 'canvas_mention',
+    source: row.source,
+    canvasId: row.canvas_id,
+    canvasKind: row.canvas_kind,
+    canvasTitle: row.canvas_title,
+    channelId: row.channel_id,
+    channelName: row.channel_name,
+    actorId: row.actor_id,
+    actorUsername: row.actor_username,
+    actorAvatarColor: row.actor_avatar_color,
+    preview: String(row.preview || '').slice(0, 200),
+    createdAt: row.created_at,
+    unseen: !seenAt || new Date(row.created_at) > new Date(seenAt),
+  };
+}
+
 function feedSql(types) {
   const union = types.map((type) => SOURCES[type]).join('\n UNION ALL \n');
   return `
@@ -60,9 +98,11 @@ router.get('/', async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const types = requested === 'all' ? TYPES : [requested];
 
-    const [items, account] = await Promise.all([
+    const wantsCanvas = requested === 'all' || requested === 'mention';
+    const [items, account, canvasItems] = await Promise.all([
       query(`${feedSql(types)} ORDER BY e.created_at DESC LIMIT $2`, [req.user.userId, limit]),
       query('SELECT activity_seen_at FROM users WHERE id = $1', [req.user.userId]),
+      wantsCanvas ? query(`${CANVAS_ITEMS_SQL} ORDER BY cm.created_at DESC LIMIT $2`, [req.user.userId, limit]) : { rows: [] },
     ]);
     const seenAt = account.rows[0]?.activity_seen_at || null;
     const unseen = await query(
@@ -70,11 +110,16 @@ router.get('/', async (req, res) => {
        WHERE $2::timestamptz IS NULL OR feed.created_at > $2::timestamptz`,
       [req.user.userId, seenAt]
     );
+    const canvasUnseen = await query(
+      `SELECT COUNT(*)::int AS count FROM (${CANVAS_ITEMS_SQL}) feed
+       WHERE $2::timestamptz IS NULL OR feed.created_at > $2::timestamptz`,
+      [req.user.userId, seenAt]
+    );
 
     res.json({
       seenAt,
-      unseenCount: unseen.rows[0]?.count || 0,
-      items: items.rows.map((row) => ({
+      unseenCount: (unseen.rows[0]?.count || 0) + (canvasUnseen.rows[0]?.count || 0),
+      items: [...items.rows.map((row) => ({
         type: row.type,
         messageId: row.message_id,
         channelId: row.channel_id,
@@ -86,7 +131,9 @@ router.get('/', async (req, res) => {
         emoji: row.emoji,
         createdAt: row.created_at,
         unseen: !seenAt || new Date(row.created_at) > new Date(seenAt),
-      })),
+      })), ...canvasItems.rows.map((row) => mapCanvasItem(row, seenAt))]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, limit),
     });
   } catch (err) {
     console.error('Get activity error:', err);

@@ -142,6 +142,18 @@ module.exports = [
   // Guests are not part of group messages (see routes/conversations.js)
   "DELETE FROM conversation_members WHERE user_id IN (SELECT id FROM users WHERE account_type = 'guest')",
 
+  // Who was mentioned in a canvas or replied to in its comments (source: content, comment or reply); feeds Activity
+  `CREATE TABLE IF NOT EXISTS canvas_mentions (
+     id SERIAL PRIMARY KEY,
+     canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     source VARCHAR(12) NOT NULL,
+     snippet TEXT NOT NULL DEFAULT '',
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_canvas_mentions_user ON canvas_mentions(user_id, created_at DESC)',
+
   // Job title shown on profile cards (for example when someone is mentioned in a canvas)
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) NOT NULL DEFAULT ''",
 
