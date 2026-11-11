@@ -7,8 +7,9 @@
 (() => {
   'use strict';
 
-  const API_BASE = 'http://127.0.0.1:3001';
   const bridge = window.electronAPI;
+  // The server comes from the app's settings (see server-config.js), never a constant.
+  const API_BASE = (bridge && bridge.apiBase) || 'http://127.0.0.1:3001';
 
   const form = document.getElementById('auth-form');
   const title = document.getElementById('auth-title');
@@ -65,6 +66,7 @@
     errorEl.style.display = 'none';
     inviteRow.hidden = mode !== 'register';
     inviteInput.required = mode === 'register' && inviteRequired;
+    document.getElementById('password').minLength = mode === 'register' ? 8 : 0;
     inviteLabel.textContent = inviteRequired ? 'Invitation code' : 'Invitation code (optional)';
   }
 
@@ -121,6 +123,69 @@
   });
   document.getElementById('login-win-close')?.addEventListener('click', () => {
     bridge?.appCommand?.('close-window');
+  });
+
+  // ---- Server address ----
+  const serverUrlEl = document.getElementById('server-url');
+  const serverChange = document.getElementById('server-change');
+  const serverForm = document.getElementById('server-form');
+  const serverInput = document.getElementById('server-input');
+  const serverNote = document.getElementById('server-note');
+  const serverFixedNote = document.getElementById('server-fixed-note');
+
+  function setServerNote(message, isError = false) {
+    serverNote.textContent = message;
+    serverNote.classList.toggle('error', isError);
+  }
+
+  serverUrlEl.textContent = API_BASE;
+  if (bridge && bridge.serverSource === 'environment') {
+    serverChange.hidden = true;
+    serverFixedNote.textContent = 'Set by the API_BASE environment variable on this computer.';
+  }
+
+  serverChange.addEventListener('click', () => {
+    serverForm.hidden = false;
+    serverInput.value = API_BASE;
+    setServerNote('');
+    serverInput.focus();
+    serverInput.select();
+  });
+  document.getElementById('server-cancel').addEventListener('click', () => {
+    serverForm.hidden = true;
+  });
+  document.getElementById('server-reset').addEventListener('click', async () => {
+    await bridge.resetServerUrl();
+    window.location.reload();
+  });
+  serverForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const saveButton = document.getElementById('server-save');
+    saveButton.disabled = true;
+    setServerNote('Checking the server…');
+    try {
+      const checked = await bridge.checkServerUrl(serverInput.value);
+      if (!checked.ok) {
+        setServerNote(checked.error, true);
+        return;
+      }
+      if (!checked.reachable
+        && !window.confirm(`Could not reach a server at ${checked.url}.\n\nSave this address anyway?`)) {
+        setServerNote('Not saved.', true);
+        return;
+      }
+      const saved = await bridge.setServerUrl(checked.url);
+      if (!saved.ok) {
+        setServerNote(saved.error, true);
+        return;
+      }
+      window.location.reload();
+    } catch (err) {
+      console.error('Change server error:', err);
+      setServerNote('Could not change the server address.', true);
+    } finally {
+      saveButton.disabled = false;
+    }
   });
 
   if (!bridge) {

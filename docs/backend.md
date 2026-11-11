@@ -149,6 +149,28 @@ Client to server: `send_group_message`, `huddle:media-state`.
 Two background runners start with the server and check every 15 seconds: reminders
 (`routes/reminders.js`) and scheduled messages (`routes/scheduled.js`).
 
+### Security rules (2026-11-11 audit follow-up)
+
+- **One account per socket.** A second `authenticate` on a connection may repeat the same account;
+  a different account gets `auth_error` and the connection is dropped. The identity is claimed
+  before any asynchronous work, so two racing events cannot both succeed.
+- **Attachments are claimed once.** Sending a message with `attachmentId` creates the message and
+  links the upload in a single statement (`src/attachments.js`): the file must be yours and not
+  attached anywhere yet, otherwise no message is created (`Attachment not found, not yours, or
+  already used`). Two sends racing for one file produce one message.
+- **Sign-in throttling** (`src/rateLimit.js`, `src/authLimits.js`, in memory, resets on restart):
+  8 failed sign-ins per address+account and 40 per address in 15 minutes, then HTTP 429 with
+  `Retry-After`; 15 sign-up attempts per address per hour; 30 invitation-code lookups per address
+  per 15 minutes; 8 wrong current-password guesses per account on password change. Successful
+  sign-in clears the account counter. An unknown username takes as long to answer as a wrong
+  password.
+- **Passwords:** 8 to 128 characters, not equal to the username (sign-up and password change).
+  Existing shorter passwords still work for signing in.
+- **Behind a reverse proxy** set `TRUST_PROXY` (number of proxies, e.g. `1`) so limits see each
+  person's real address; leave it empty when clients connect directly.
+- **Guests are kept out of group messages** (cannot be added, cannot send); converting a member to
+  a guest removes them from their groups.
+
 ### Socket.io Events
 
 | Event | Direction | Description |

@@ -6,18 +6,39 @@ const { query } = require('../db');
 const config = require('../config');
 const authenticateToken = require('../middleware/auth');
 const { normalizeInviteCode, hashInviteCode, invitationProblem } = require('../guests');
+const {
+  loginFailuresByAccount,
+  loginFailuresByAddress,
+  registrationAttempts,
+  passwordProblem,
+  clientAddress,
+  accountKey,
+  rejectIfLimited,
+} = require('../authLimits');
+
+// Compared against when a username does not exist, so a wrong username takes as long
+// to answer as a wrong password and cannot be told apart by timing.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
 // Register a new user
 router.post('/register', async (req, res) => {
   try {
+    const address = clientAddress(req);
+    if (rejectIfLimited(res, registrationAttempts.check(address))) return;
+    registrationAttempts.record(address);
+
     const { username, email, password, inviteCode } = req.body;
 
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Username, email, and password are required' });
     }
+    if (typeof username !== 'string' || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Username, email, and password are required' });
+    }
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const passwordIssue = passwordProblem(password, username);
+    if (passwordIssue) {
+      return res.status(400).json({ error: passwordIssue });
     }
 
     // Invitations: required when sign-up is invitation-only, optional otherwise.
@@ -126,9 +147,20 @@ router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    if (!username || !password) {
+    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: 'Username and password are required' });
     }
+
+    // Slow down password guessing: failures are counted per address+account and per address.
+    const address = clientAddress(req);
+    const accountId = accountKey(req, username);
+    if (rejectIfLimited(res, loginFailuresByAccount.check(accountId), loginFailuresByAddress.check(address))) {
+      return;
+    }
+    const noteLoginFailure = () => {
+      loginFailuresByAccount.record(accountId);
+      loginFailuresByAddress.record(address);
+    };
 
     // Find user
     const result = await query(
@@ -137,6 +169,8 @@ router.post('/login', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      noteLoginFailure();
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -145,8 +179,10 @@ router.post('/login', async (req, res) => {
     // Verify password
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
+      noteLoginFailure();
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+    loginFailuresByAccount.reset(accountId);
 
     // Update last seen
     await query(
@@ -271,8 +307,9 @@ router.put('/me/account', authenticateToken, async (req, res) => {
   if (email !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Enter a valid email address' });
   }
-  if (newPassword !== undefined && (typeof newPassword !== 'string' || newPassword.length < 6)) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  const newPasswordIssue = newPassword === undefined ? null : passwordProblem(newPassword);
+  if (newPasswordIssue) {
+    return res.status(400).json({ error: newPasswordIssue.replace(/^Password/, 'New password') });
   }
   if (email === null && newPassword === undefined) {
     return res.status(400).json({ error: 'No account changes were provided' });
@@ -286,9 +323,15 @@ router.put('/me/account', authenticateToken, async (req, res) => {
     if (current.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    if (!await bcrypt.compare(currentPassword, current.rows[0].password_hash)) {
+    // A stolen session token must not be usable to guess the current password.
+    const guessKey = `account:${req.user.userId}`;
+    if (rejectIfLimited(res, loginFailuresByAccount.check(guessKey))) return;
+    if (typeof currentPassword !== 'string'
+      || !await bcrypt.compare(currentPassword, current.rows[0].password_hash)) {
+      loginFailuresByAccount.record(guessKey);
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
+    loginFailuresByAccount.reset(guessKey);
 
     const passwordHash = newPassword === undefined
       ? null

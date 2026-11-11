@@ -357,6 +357,15 @@ function setupEventListeners() {
     btn.addEventListener('click', () => setSection(btn.dataset.rail));
   });
 
+  // More menu (Lists, Canvas, Wiki)
+  on('btn-rail-more', 'click', (e) => { e.stopPropagation(); toggleMenu('more-menu', 'btn-rail-more'); });
+  document.querySelectorAll('#more-menu [data-more-section]').forEach((item) => {
+    item.addEventListener('click', () => {
+      closeAllMenus();
+      setSection(item.dataset.moreSection);
+    });
+  });
+
   // Create menu
   on('btn-create', 'click', (e) => { e.stopPropagation(); toggleMenu('create-menu', 'btn-create'); });
   document.querySelectorAll('#create-menu .menu-item').forEach((item) => {
@@ -2302,12 +2311,26 @@ const SECTIONS = {
   later:    { pane: null,       view: 'later' },
 };
 
+// Sections reached from the rail's More menu rather than their own rail buttons.
+const MORE_SECTIONS = ['lists', 'canvas2', 'canvases'];
+
 function updateRail(section) {
   document.querySelectorAll('.rail-item[data-rail]').forEach((btn) => {
     const on = btn.dataset.rail === section;
     btn.classList.toggle('active', on);
     if (on) btn.setAttribute('aria-current', 'page');
     else btn.removeAttribute('aria-current');
+  });
+  // The More button lights up while one of its sections is open, and the menu marks which.
+  const moreButton = document.getElementById('btn-rail-more');
+  const inMore = MORE_SECTIONS.includes(section);
+  if (moreButton) {
+    moreButton.classList.toggle('active', inMore);
+    if (inMore) moreButton.setAttribute('aria-current', 'page');
+    else moreButton.removeAttribute('aria-current');
+  }
+  document.querySelectorAll('#more-menu [data-more-section]').forEach((item) => {
+    item.classList.toggle('active', item.dataset.moreSection === section);
   });
 }
 
@@ -3320,7 +3343,7 @@ function closeAllMenus() {
   document.querySelectorAll('[data-message-more][aria-expanded="true"]').forEach((b) => {
     b.setAttribute('aria-expanded', 'false');
   });
-  ['btn-create', 'btn-user-menu', 'btn-app-menu'].forEach((id) => {
+  ['btn-create', 'btn-user-menu', 'btn-app-menu', 'btn-rail-more'].forEach((id) => {
     document.getElementById(id)?.setAttribute('aria-expanded', 'false');
   });
   return closed;

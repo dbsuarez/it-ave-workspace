@@ -7,6 +7,9 @@ const {
   ensureDirectMessageAccess,
 } = require('../security');
 const { findMentionedUsers } = require('../mentions');
+const {
+  insertChannelMessage, insertDirectMessage, parseAttachmentId, ATTACHMENT_UNAVAILABLE,
+} = require('../attachments');
 
 // Record @mentions for a new channel message and push activity events to the
 // people it concerns. Never throws: a notification problem must not fail a send.
@@ -111,6 +114,9 @@ async function withHuddleJoinLock(channelId, operation) {
 // Socket.io handlers for real-time chat
 module.exports = (io, socket) => {
   let currentUserId = null;
+  // The account this connection has claimed. Set before any await so two racing
+  // `authenticate` events cannot both succeed as different people.
+  let claimedUserId = null;
   let huddleChannelId = null;
   let huddleJoining = false;
   let huddleJoinGeneration = 0;
@@ -131,6 +137,16 @@ module.exports = (io, socket) => {
   socket.on('authenticate', async (token) => {
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
+
+      // One account per connection. A second `authenticate` may repeat the same account
+      // but can never switch to another one, which would keep the first account's rooms.
+      if (claimedUserId !== null && Number(decoded.userId) !== Number(claimedUserId)) {
+        socket.emit('auth_error', { error: 'This connection is already signed in as a different account' });
+        socket.disconnect();
+        return;
+      }
+      claimedUserId = decoded.userId;
+
       const { query } = require('../db');
       const account = await query(
         'SELECT token_version FROM users WHERE id = $1',
@@ -388,31 +404,18 @@ module.exports = (io, socket) => {
         };
       }
 
-      if (attachmentId) {
-        const attachmentResult = await query(
-          'SELECT id, uploaded_by FROM files WHERE id = $1',
-          [attachmentId]
-        );
-        if (attachmentResult.rows.length === 0 || Number(attachmentResult.rows[0].uploaded_by) !== Number(currentUserId)) {
-          socket.emit('message_error', { error: 'Attachment not found or not owned by you', clientMessageId });
-          return;
-        }
+      const attachment = parseAttachmentId(attachmentId);
+      if (!attachment.ok) {
+        socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
+        return;
       }
-
-      const result = await query(
-        `INSERT INTO messages (channel_id, user_id, content, reply_to)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, channel_id, user_id, content, reply_to, created_at`,
-        [channelId, currentUserId, content || '', replyTo || null]
-      );
-
-      const message = result.rows[0];
-
-      if (attachmentId) {
-        await query(
-          'UPDATE files SET message_id = $1 WHERE id = $2 AND uploaded_by = $3',
-          [message.id, attachmentId, currentUserId]
-        );
+      // The upload is claimed and the message created in one statement (see attachments.js).
+      const message = await insertChannelMessage(query, {
+        channelId, userId: currentUserId, content, replyTo, attachmentId: attachment.id,
+      });
+      if (!message) {
+        socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
+        return;
       }
 
       const userResult = await query(
@@ -476,31 +479,17 @@ module.exports = (io, socket) => {
       const { query } = require('../db');
       await ensureDirectMessageAccess(query, currentUserId, receiverId);
 
-      if (attachmentId) {
-        const attachmentResult = await query(
-          'SELECT id, uploaded_by FROM files WHERE id = $1',
-          [attachmentId]
-        );
-        if (attachmentResult.rows.length === 0 || Number(attachmentResult.rows[0].uploaded_by) !== Number(currentUserId)) {
-          socket.emit('message_error', { error: 'Attachment not found or not owned by you', clientMessageId });
-          return;
-        }
+      const attachment = parseAttachmentId(attachmentId);
+      if (!attachment.ok) {
+        socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
+        return;
       }
-
-      const result = await query(
-        `INSERT INTO direct_messages (sender_id, receiver_id, content)
-         VALUES ($1, $2, $3)
-         RETURNING id, sender_id, receiver_id, content, created_at`,
-        [currentUserId, receiverId, content || '']
-      );
-
-      const dm = result.rows[0];
-
-      if (attachmentId) {
-        await query(
-          'UPDATE files SET dm_message_id = $1 WHERE id = $2 AND uploaded_by = $3',
-          [dm.id, attachmentId, currentUserId]
-        );
+      const dm = await insertDirectMessage(query, {
+        senderId: currentUserId, receiverId, content, attachmentId: attachment.id,
+      });
+      if (!dm) {
+        socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
+        return;
       }
 
       const userResult = await query(
@@ -568,6 +557,11 @@ module.exports = (io, socket) => {
       );
       if (!members.rows.some((row) => Number(row.user_id) === Number(currentUserId))) {
         socket.emit('message_error', { error: 'Access denied', clientMessageId });
+        return;
+      }
+      const senderAccount = await query('SELECT account_type FROM users WHERE id = $1', [currentUserId]);
+      if (senderAccount.rows[0]?.account_type === 'guest') {
+        socket.emit('message_error', { error: 'Guests cannot use group messages', clientMessageId });
         return;
       }
 

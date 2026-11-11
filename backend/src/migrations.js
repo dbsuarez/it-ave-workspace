@@ -138,4 +138,7 @@ module.exports = [
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      last_used_at TIMESTAMP WITH TIME ZONE
    )`,
+
+  // Guests are not part of group messages (see routes/conversations.js)
+  "DELETE FROM conversation_members WHERE user_id IN (SELECT id FROM users WHERE account_type = 'guest')",
 ];

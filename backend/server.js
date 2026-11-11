@@ -28,9 +28,15 @@ const channelLinkRoutes = require('./src/routes/channelLinks');
 const userGroupRoutes = require('./src/routes/userGroups');
 const webhookRoutes = require('./src/routes/webhooks');
 const migrations = require('./src/migrations');
+const { parseTrustProxy } = require('./src/rateLimit');
 const chatSockets = require('./src/sockets/chat');
 
 const app = express();
+
+// Behind a reverse proxy, set TRUST_PROXY (for example 1) so rate limits see each person's
+// real address instead of the proxy's.
+const trustProxy = parseTrustProxy(config.TRUST_PROXY);
+if (trustProxy !== false) app.set('trust proxy', trustProxy);
 const server = http.createServer(app);
 
 const io = new Server(server, {

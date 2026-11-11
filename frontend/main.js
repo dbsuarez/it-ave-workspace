@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell, desktopCapturer, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
+const { normalizeServerUrl, resolveServerConfig } = require('./server-config');
+const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl } = require('./ipc-policy');
 
 // Create store for persisting auth token and settings
 const store = new Store();
@@ -152,22 +154,96 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC handlers
-ipcMain.handle('store:get', (event, key) => {
+// ---- IPC ----
+// Only the app's own pages (top-level frames loaded from ./src) may call the
+// main process. Anything else is refused.
+function isTrustedSender(event) {
+  const frame = event.senderFrame;
+  if (!frame || frame !== event.sender.mainFrame) return false;
+  return isTrustedFrameUrl(frame.url, __dirname);
+}
+
+function handleTrusted(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedSender(event)) {
+      console.warn(`Refused IPC "${channel}" from an untrusted sender`);
+      throw new Error('This request is not allowed');
+    }
+    return handler(event, ...args);
+  });
+}
+
+// The renderer can only read and write the few keys the app uses.
+handleTrusted('store:get', (event, key) => {
+  if (!isAllowedStoreKey(key)) return undefined;
   return store.get(key);
 });
 
-ipcMain.handle('store:set', (event, key, value) => {
+handleTrusted('store:set', (event, key, value) => {
+  const problem = validateStoreWrite(key, value);
+  if (problem) throw new Error(problem);
   store.set(key, value);
   return true;
 });
 
-ipcMain.handle('store:delete', (event, key) => {
+handleTrusted('store:delete', (event, key) => {
+  if (!isAllowedStoreKey(key)) throw new Error('That setting cannot be removed');
   store.delete(key);
   return true;
 });
 
-ipcMain.handle('auth:logout', (event) => {
+// Which server the app talks to. Read synchronously by the preload on every
+// page load; changed only from the sign-in window.
+function currentServerConfig() {
+  return resolveServerConfig({ env: process.env, stored: store.get('serverUrl') });
+}
+
+ipcMain.on('config:get', (event) => {
+  event.returnValue = isTrustedSender(event)
+    ? currentServerConfig()
+    : resolveServerConfig({});
+});
+
+function isLoginSender(event) {
+  return Boolean(loginWindow && !loginWindow.isDestroyed() && event.sender === loginWindow.webContents);
+}
+
+// Validates an address and checks whether a backend answers there.
+handleTrusted('config:checkServer', async (event, input) => {
+  if (!isLoginSender(event)) return { ok: false, error: 'The server address can only be changed from the sign-in window' };
+  let url;
+  try {
+    url = normalizeServerUrl(input);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  try {
+    const response = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(4000) });
+    const body = await response.json().catch(() => ({}));
+    return { ok: true, url, reachable: response.ok && body.status === 'ok' };
+  } catch (err) {
+    return { ok: true, url, reachable: false };
+  }
+});
+
+handleTrusted('config:setServer', (event, input) => {
+  if (!isLoginSender(event)) return { ok: false, error: 'The server address can only be changed from the sign-in window' };
+  try {
+    const url = normalizeServerUrl(input);
+    store.set('serverUrl', url);
+    return { ok: true, url };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+handleTrusted('config:resetServer', (event) => {
+  if (!isLoginSender(event)) return { ok: false, error: 'The server address can only be changed from the sign-in window' };
+  store.delete('serverUrl');
+  return { ok: true };
+});
+
+handleTrusted('auth:logout', (event) => {
   store.delete('authToken');
   store.delete('user');
 
@@ -179,7 +255,7 @@ ipcMain.handle('auth:logout', (event) => {
   return true;
 });
 
-ipcMain.handle('dialog:openFile', async () => {
+handleTrusted('dialog:openFile', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     multiSelections: false,
@@ -188,7 +264,7 @@ ipcMain.handle('dialog:openFile', async () => {
 });
 
 // App commands driven by the in-app menu
-ipcMain.handle('app:command', (event, command) => {
+handleTrusted('app:command', (event, command) => {
   const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
   if (!win) return false;
   const contents = win.webContents;
@@ -260,7 +336,7 @@ ipcMain.handle('app:command', (event, command) => {
 });
 
 // Copy an image (as a data: URL) to the system clipboard
-ipcMain.handle('clipboard:copyImage', (event, dataUrl) => {
+handleTrusted('clipboard:copyImage', (event, dataUrl) => {
   try {
     if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
       return { ok: false, error: 'Invalid image data' };

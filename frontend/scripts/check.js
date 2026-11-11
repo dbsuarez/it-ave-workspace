@@ -9,7 +9,7 @@ const featureDir = path.join(root, 'src', 'features');
 const featureScripts = fs.existsSync(featureDir)
   ? fs.readdirSync(featureDir).filter((name) => name.endsWith('.js')).sort().map((name) => `src/features/${name}`)
   : [];
-const scripts = ['main.js', 'preload.js', 'src/renderer.js', 'src/login.js', ...featureScripts];
+const scripts = ['main.js', 'preload.js', 'server-config.js', 'ipc-policy.js', 'src/renderer.js', 'src/login.js', ...featureScripts];
 const pages = ['src/index.html', 'src/login.html'];
 const styles = ['src/styles.css'];
 const problems = [];

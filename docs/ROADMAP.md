@@ -59,7 +59,7 @@ Desktop client (`frontend/`):
 
 - Frameless window with custom minimize, maximize/restore, and close controls; topbar acts as the
   drag region. Login window is frameless too, with its own minimize/close bar.
-- Icon rail: Home, DMs, Activity, Files, Notes, Lists, Canvas, Huddle with labels under each icon
+- Icon rail: Home, DMs, Activity, Later, Files, Notes, More (Lists, Canvas, Wiki), Huddle with labels under each icon
 - List pane in a darker purple (#2A0D36) than the rail; channel and DM lists; active-state highlighting
 - Topbar zones aligned to the columns below: hamburger over the rail (76 px), workspace name from
   76 px, search from 308 px
@@ -211,6 +211,9 @@ accounts and data were removed afterwards. Backend tests: 61 pass. Desktop forma
 - **Chat layout**: bubbles, with your own messages on the right; message actions are a hover
   toolbar.
 
+Research for the next step on Lists and Canvas (typed Lists, sectioned Canvas with revisions) is in
+[../REAGHIDRA/](../REAGHIDRA/README.md); nothing from it is implemented yet.
+
 Not built, by choice or for later:
 
 - Editing and deleting direct messages; attachments in group messages
@@ -249,12 +252,39 @@ local TURN server, but not yet with real microphones on two devices.
 
 - The backend container does not mount source; run `docker compose up -d --build backend` after
   backend changes or the app runs stale code.
+- The desktop installer is unsigned (Windows shows an "unknown publisher" warning) and has no
+  auto-update.
 - `renderer.js` and the files in `frontend/src/features` are classic scripts that share one global
   scope. The build check (below) guards the known ways that breaks, including duplicate names.
 - Rebuild the backend image from PowerShell (`docker compose up -d --build backend`). From Git
   Bash the build can fail silently and leave the old container running.
 - With many rail sections, labels are hidden in windows shorter than 740 px so every section stays
   reachable.
+
+## Security audit follow-up (2026-11-11)
+
+The ChatGPT audit in [IT_AVE_WORKSPACE_CODE_AUDIT_2026-11-11 [chatGPT].md](IT_AVE_WORKSPACE_CODE_AUDIT_2026-11-11%20%5BchatGPT%5D.md)
+was checked against the code and acted on. Each fix has a regression test that fails on the old
+code, and was verified live against PostgreSQL and in the Electron app (dev and packaged).
+
+| ID | Status |
+|---|---|
+| A01 socket re-authentication | Fixed: one account per connection (`sockets/chat.js`, `test/socket-identity.test.js`) |
+| A02 Postgres port | Already bound to `127.0.0.1` (audit was out of date) |
+| A03 Electron store bridge | Fixed: key allowlist, value checks, trusted-page check on every IPC (`frontend/ipc-policy.js`) |
+| A04 attachment re-linking | Fixed: atomic one-time claim (`src/attachments.js`); race verified live |
+| A05 throttling, password length | Fixed: limits on sign-in, sign-up, invitation lookup, password change; minimum 8 |
+| A06 upload type trust | **Open** (extension-or-MIME check, no content check or `nosniff` header) |
+| A07 CORS reflects origin | **Open**, low priority; JWT remains the boundary |
+| A08 loopback server address | Fixed: server address setting on the sign-in window; saved per user |
+| A09 schema in several places | **Open** (`server.js`, `migrations.js`, `init.sql`) |
+
+Found while checking: guests could be put in group messages, bypassing "guests only reach people in
+their channels". Fixed, with a startup cleanup of any existing guest memberships.
+
+Still to do before exposing the server beyond the LAN: TLS and reverse proxy, request logging and
+`helmet`, backups, uploads hardening (A06), schema consolidation (A09), real-database integration
+tests and CI.
 
 ## Hardening done (2026-11-11)
 

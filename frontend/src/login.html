@@ -184,6 +184,72 @@
   .switch-link:hover {
     text-decoration: underline;
   }
+  .server-box {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .server-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .server-row code {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-size: 12.5px;
+  }
+  .link-btn {
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    color: var(--purple);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .link-btn:hover {
+    text-decoration: underline;
+  }
+  .server-form {
+    margin-top: 10px;
+  }
+  .server-form[hidden] {
+    display: none;
+  }
+  .server-form label {
+    display: block;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .server-form input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    box-sizing: border-box;
+  }
+  .server-form .btn {
+    padding: 9px;
+    font-size: 13.5px;
+    margin: 8px 0 0;
+  }
+  .server-note {
+    min-height: 16px;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .server-note.error {
+    color: var(--danger);
+  }
 </style>
 </head>
 <body>
@@ -229,6 +295,23 @@
       </div>
 
       <button type="button" class="btn btn-secondary" id="switch-btn">Create an account</button>
+
+      <div class="server-box">
+        <div class="server-row">
+          <span>Server</span>
+          <code id="server-url" title="The server this app connects to"></code>
+          <button type="button" class="link-btn" id="server-change">Change</button>
+        </div>
+        <form id="server-form" class="server-form" hidden>
+          <label for="server-input">Server address</label>
+          <input id="server-input" type="text" placeholder="http://192.168.1.20:3001" autocomplete="off" spellcheck="false">
+          <button type="submit" class="btn btn-primary" id="server-save">Save and reconnect</button>
+          <button type="button" class="btn btn-secondary" id="server-reset">Use this computer (127.0.0.1)</button>
+          <button type="button" class="link-btn" id="server-cancel">Cancel</button>
+          <div class="server-note" id="server-note" aria-live="polite"></div>
+        </form>
+        <div class="server-note" id="server-fixed-note"></div>
+      </div>
 
       <div class="footer-note">
         IT Avenue Workspace runs on your own server. No cloud, no per-user fees.

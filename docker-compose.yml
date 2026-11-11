@@ -36,6 +36,7 @@ services:
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB}
       UPLOAD_DIR: ${UPLOAD_DIR}
       WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-}
     ports:
       - "3001:3001"
     volumes:

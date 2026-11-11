@@ -42,9 +42,9 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 - **Frameless window**: the native title bar is removed. The topbar carries custom minimize,
   maximize/restore, and close buttons (46 px each, close turns red on hover). The topbar is the
   drag region; interactive controls opt out with `-webkit-app-region: no-drag`.
-- **Icon rail** (76 px): Home, DMs, Activity, Files, Notes, Lists, Canvas, Huddle, and
-  role-gated Moderation as
-  icon-plus-label buttons.
+- **Icon rail** (76 px): Home, DMs, Activity, Later, Files, Notes, a **More** (⋮) button, Huddle,
+  and role-gated Moderation as icon-plus-label buttons. **More** opens a small menu with Lists,
+  Canvas and Wiki, and lights up while one of those is open.
 - **List pane** (232 px): channels on Home, direct messages on DMs; collapsed for full-width
   sections. It uses a dark purple (#2A0D36), slightly darker than the rail gradient.
 - **Topbar alignment**: the hamburger sits over the rail column (76 px), the workspace name starts
@@ -142,14 +142,36 @@ The app connects to `http://127.0.0.1:3001` by default (use the literal IPv4 add
 `localhost`: the Docker port mapping is IPv4 only). Make sure the backend is running first
 (`docker compose up -d` in the project root).
 
-## Connecting to Your Deployed Backend
+## Choosing the server (no code change needed)
 
-Edit `src/renderer.js` and change `API_BASE` and `SOCKET_URL` to your deployed server URL:
+The installed app talks to one backend. On the **sign-in window**, the bottom of the card shows
+`Server  http://...  Change`:
 
-```js
-const API_BASE = 'https://your-domain.com';
-const SOCKET_URL = 'https://your-domain.com';
-```
+1. Click **Change**, type the address (for example `192.168.18.63:3001` or `https://chat.example.com`;
+   `http://` is assumed when omitted), and click **Save and reconnect**.
+2. The app checks `/api/health`. If nothing answers it asks whether to save the address anyway.
+3. **Use this computer (127.0.0.1)** puts it back to the default.
+
+The address is saved per Windows user. It can only be changed from the sign-in window (sign out
+first), never from inside the signed-in app.
+
+For development and scripted installs, the `API_BASE` (and optional `SOCKET_URL`) environment
+variables override the saved address; the sign-in window then shows the address as fixed.
+Precedence: environment variable, then saved address, then `http://127.0.0.1:3001`.
+The logic is in `frontend/server-config.js` and is unit tested.
+
+Use the host computer's LAN address (not `127.0.0.1`) when other computers connect to it, and open
+TCP port 3001 in that computer's firewall.
+
+## Desktop bridge limits
+
+The renderer can only call a small set of main-process functions, and only from the app's own
+pages (`frontend/ipc-policy.js`):
+
+- The persistent store accepts only `authToken`, `user`, and `preferences:<id>`, with size and shape
+  checks; any other key is refused.
+- Every IPC call is refused unless it comes from the top-level frame of a page loaded from `src/`.
+- The server-address functions work only from the sign-in window.
 
 The login window is also frameless, with its own slim title bar carrying minimize and close
 buttons (it is fixed-size, so it has no maximize control).

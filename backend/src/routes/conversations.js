@@ -82,6 +82,30 @@ function emitToUsers(io, userIds, event, payload) {
   userIds.forEach((userId) => io.to(`user_${userId}`).emit(event, payload));
 }
 
+// Guests may only talk to people who share a channel with them, and a group would let
+// them reach everyone in it. So guests are kept out of group messages entirely.
+async function ensureNoGuests(userIds) {
+  const guests = await query(
+    "SELECT id FROM users WHERE id = ANY($1::int[]) AND account_type = 'guest'",
+    [userIds]
+  );
+  if (guests.rows.length) throw fail(400, 'Guests cannot be added to group messages');
+}
+
+// Sends every remaining member the current state of a group (used after someone is removed).
+async function refreshConversation(io, conversationId) {
+  const ids = await memberIds(conversationId);
+  if (!ids.length) {
+    await query('DELETE FROM conversations WHERE id = $1', [conversationId]);
+    return;
+  }
+  for (const memberId of ids) {
+    emitToUsers(io, [memberId], 'conversation_updated', {
+      conversation: await loadConversation(conversationId, memberId),
+    });
+  }
+}
+
 function validateName(name) {
   if (name === undefined || name === null) return '';
   if (typeof name !== 'string' || name.trim().length > 80) {
@@ -130,6 +154,7 @@ router.post('/', async (req, res) => {
 
     const existing = await query('SELECT id FROM users WHERE id = ANY($1)', [others]);
     if (existing.rows.length !== others.length) throw fail(404, 'One or more users were not found');
+    await ensureNoGuests(others);
 
     const created = await query(
       'INSERT INTO conversations (name, created_by) VALUES ($1, $2) RETURNING id',
@@ -229,6 +254,7 @@ router.post('/:conversationId/members', async (req, res) => {
     if (!userId) throw fail(400, 'A valid user ID is required');
     const user = await query('SELECT id FROM users WHERE id = $1', [userId]);
     if (!user.rows.length) throw fail(404, 'User not found');
+    await ensureNoGuests([userId]);
     const current = await memberIds(conversationId);
     if (current.map(Number).includes(userId)) throw fail(409, 'That person is already in this group');
     if (current.length >= MAX_MEMBERS) throw fail(400, `A group message can have at most ${MAX_MEMBERS} people`);
@@ -286,4 +312,5 @@ router.delete('/:conversationId/members/:userId', async (req, res) => {
 
 module.exports = router;
 module.exports.ensureConversationMember = ensureConversationMember;
+module.exports.refreshConversation = refreshConversation;
 module.exports.memberIds = memberIds;

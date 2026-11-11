@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Which backend to talk to, resolved by the main process (environment variable,
+// saved address, or the local default).
+const serverConfig = ipcRenderer.sendSync('config:get') || {
+  apiBase: 'http://127.0.0.1:3001', socketUrl: 'http://127.0.0.1:3001', source: 'default',
+};
+
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
   // Store operations
@@ -20,9 +26,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App info
   getAppVersion: () => process.versions.electron,
 
-  // API configuration (set via environment variables in main process)
-  apiBase: process.env.API_BASE || 'http://127.0.0.1:3001',
-  socketUrl: process.env.SOCKET_URL || 'http://127.0.0.1:3001',
+  // API configuration. `serverSource` is 'environment', 'saved' or 'default'.
+  apiBase: serverConfig.apiBase,
+  socketUrl: serverConfig.socketUrl,
+  serverSource: serverConfig.source,
+  // Server address changes (the main process only honours these from the sign-in window)
+  checkServerUrl: (url) => ipcRenderer.invoke('config:checkServer', url),
+  setServerUrl: (url) => ipcRenderer.invoke('config:setServer', url),
+  resetServerUrl: () => ipcRenderer.invoke('config:resetServer'),
 
   // Clipboard: copy an image (passed as a data: URL) to the system clipboard
   copyImageToClipboard: (dataUrl) => ipcRenderer.invoke('clipboard:copyImage', dataUrl),

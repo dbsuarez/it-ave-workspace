@@ -4,6 +4,8 @@ const authenticateToken = require('../middleware/auth');
 const {
   newInviteCode, hashInviteCode, invitationProblem, normalizeInviteCode,
 } = require('../guests');
+const { invitationLookups, clientAddress, rejectIfLimited } = require('../authLimits');
+const { refreshConversation } = require('./conversations');
 
 // Workspace administration for Superadmins: members and guests, invitations,
 // and whether sign-up is open or invitation-only.
@@ -44,6 +46,9 @@ async function audit(actorId, action, targetUserId, details) {
 // Public: lets the sign-up form show what an invitation code grants.
 router.get('/invitations/lookup', async (req, res) => {
   try {
+    const address = clientAddress(req);
+    if (rejectIfLimited(res, invitationLookups.check(address))) return;
+    invitationLookups.record(address);
     const code = normalizeInviteCode(req.query.code);
     if (!code) return res.status(400).json({ error: 'An invitation code is required' });
     const result = await query(
@@ -143,9 +148,15 @@ router.patch('/users/:userId', async (req, res) => {
       throw fail(400, 'A guest cannot be a Superadmin');
     }
 
+    let leftConversations = [];
     if (nextType === 'guest' && current.rows[0].account_type !== 'guest') {
-      // A guest holds no moderator roles.
+      // A guest holds no moderator roles and is not part of group messages.
       await query("UPDATE channel_members SET role = 'member' WHERE user_id = $1", [userId]);
+      const left = await query(
+        'DELETE FROM conversation_members WHERE user_id = $1 RETURNING conversation_id',
+        [userId]
+      );
+      leftConversations = left.rows.map((row) => row.conversation_id);
     }
     const updated = await query(
       `UPDATE users SET account_type = $1, is_superadmin = $2 WHERE id = $3
@@ -158,6 +169,10 @@ router.patch('/users/:userId', async (req, res) => {
     req.io?.to(`user_${userId}`).emit('account_updated', {
       accountType: nextType, isSuperadmin: nextSuperadmin,
     });
+    for (const conversationId of leftConversations) {
+      req.io?.to(`user_${userId}`).emit('conversation_removed', { conversationId });
+      await refreshConversation(req.io, conversationId);
+    }
     const row = updated.rows[0];
     res.json({
       user: { id: row.id, username: row.username, accountType: row.account_type, isSuperadmin: row.is_superadmin },
