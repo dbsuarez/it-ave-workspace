@@ -5290,3 +5290,47 @@ h4.cv-h { font-size: 15px; }
 .cv-block a {
   color: var(--purple);
 }
+
+/* Canvas slash menu */
+.slash-menu {
+  position: fixed;
+  z-index: 3000;
+  width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.slash-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "label key" "hint key";
+  column-gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.slash-item.active,
+.slash-item:hover {
+  background: var(--muted-bg);
+}
+
+.slash-item.active {
+  box-shadow: inset 3px 0 0 var(--purple);
+}
+
+.slash-label { grid-area: label; font-size: 13px; font-weight: 600; }
+.slash-hint { grid-area: hint; font-size: 11px; color: var(--text-muted); }
+.slash-key { grid-area: key; font-size: 11px; color: var(--text-muted); font-family: Consolas, monospace; }
