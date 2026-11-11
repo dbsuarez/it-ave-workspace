@@ -3402,6 +3402,11 @@ body.theme-dark .mention.mention-me {
   justify-content: flex-end;
 }
 
+/* Mirror the toolbar on own messages so React stays nearest the bubble, as in Messenger and WhatsApp */
+.message.own .message-actions {
+  flex-direction: row-reverse;
+}
+
 .message.own .attachments {
   flex-direction: row-reverse;
   align-items: center;
@@ -4694,10 +4699,11 @@ body.theme-dark .huddle-btn.media.active {
   flex-direction: column;
 }
 
+/* Opens upward from the button: More is the last rail item, so downward could run off a short window. */
 .more-menu {
   left: calc(100% + 6px);
-  bottom: auto;
-  top: 0;
+  top: auto;
+  bottom: 0;
   min-width: 170px;
 }
 
@@ -4719,4 +4725,13 @@ body.theme-dark .huddle-btn.media.active {
 
 .menu-item.active svg {
   color: inherit;
+}
+
+/* Reactions on an attachment-only message sit on the attachment's lower corner. */
+.attachment-row {
+  position: relative;
+}
+
+.attachments.has-reactions {
+  margin-bottom: 14px;
 }

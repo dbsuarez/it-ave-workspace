@@ -6,7 +6,7 @@
 // ("Identifier 'electronAPI' has already been declared"), which kills the
 // renderer before any handler is attached.
 
-const ICON_REACT = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M8.2 14.2s1.6 2.1 3.8 2.1 3.8-2.1 3.8-2.1"/><line x1="9" y1="9.2" x2="9.01" y2="9.2"/><line x1="15" y1="9.2" x2="15.01" y2="9.2"/></svg>';
+const ICON_REACT = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="13" r="8"/><path d="M7.6 15.2s1.3 1.9 3.4 1.9 3.4-1.9 3.4-1.9"/><line x1="8.6" y1="11" x2="8.61" y2="11"/><line x1="13.4" y1="11" x2="13.41" y2="11"/><line x1="19.5" y1="2.3" x2="19.5" y2="6.7"/><line x1="17.3" y1="4.5" x2="21.7" y2="4.5"/></svg>';
 
 const ICON_REPLY = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="10 16 5 11 10 6"/><path d="M5 11h9a5 5 0 0 1 5 5v2.5"/></svg>';
 
@@ -1769,7 +1769,12 @@ function renderMessageEl(msg, allowReply = false) {
     return `<button class="msg-action-btn" type="button" data-download-attachment="${id}" data-file-name="${name}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${ICON_DOWNLOAD}</button>`;
   }).join('');
 
-  const attachmentsHtml = (msg.attachments || []).map((a) => {
+  // With no text, the attachment itself carries the reaction pill (lower corner), not an empty bubble.
+  const reactOnAttachment = !String(msg.content || '').trim() && (msg.attachments || []).length > 0 && !!reactionsHtml;
+  const attachmentReactions = reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : '';
+  const lastAttachmentIndex = (msg.attachments || []).length - 1;
+  const attachmentsHtml = (msg.attachments || []).map((a, index) => {
+    const extra = index === lastAttachmentIndex ? attachmentReactions : '';
     const id = escapeHtml(String(a.id));
     const name = escapeHtml(a.filename);
     const mime = (a.mimeType || '').toLowerCase();
@@ -1780,7 +1785,7 @@ function renderMessageEl(msg, allowReply = false) {
           <button class="attachment-image" type="button" data-file-id="${id}" data-file-name="${name}" data-file-mime="${escapeHtml(a.mimeType || '')}" data-file-size="${escapeHtml(String(a.size || ''))}" data-uploaded-by="${escapeHtml(String(a.uploadedBy ?? ''))}" data-moderator="${Number(a.uploadedBy) !== Number(state.user.id)}" aria-label="${name}" title="${name}">
             <img alt="${name}" loading="lazy">
           </button>
-        </span>
+        </span>${extra}
       </div>`;
     }
     return `<div class="attachment-row attachment-row-file">
@@ -1790,7 +1795,7 @@ function renderMessageEl(msg, allowReply = false) {
           <div class="name">${name}</div>
           <div class="size">${escapeHtml(humanSize(a.size))}</div>
         </div>
-      </div>
+      </div>${extra}
     </div>`;
   }).join('');
   const replyPreview = msg.replyTo ? (msg.replyToMessage || {}) : null;
@@ -1810,7 +1815,7 @@ function renderMessageEl(msg, allowReply = false) {
         <span class="message-reply-content">${escapeHtml(replyPreview.content || 'Attachment')}</span>
       </button>` : ''}
       <div class="message-bubble-row">
-        <div class="message-text">${formatMessageText(msg.content)}${reactionsHtml ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
+        <div class="message-text">${formatMessageText(msg.content)}${reactionsHtml && !reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
         ${!attachmentsHtml && allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
           <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
           <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
@@ -1818,7 +1823,7 @@ function renderMessageEl(msg, allowReply = false) {
           ${messageMoreMenuHtml(msg, isYou, canModerate)}
         </span>` : ''}
       </div>
-      ${attachmentsHtml ? `<div class="attachments">${attachmentsHtml}${allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
+      ${attachmentsHtml ? `<div class="attachments${reactOnAttachment ? ' has-reactions' : ''}">${attachmentsHtml}${allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
           <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
           <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
           ${downloadsHtml}<button class="msg-action-btn" type="button" data-message-more="${escapeHtml(String(msg.id))}" aria-label="More actions" title="More actions" aria-haspopup="true" aria-expanded="false">${ICON_MORE}</button>

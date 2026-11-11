@@ -59,7 +59,7 @@ Desktop client (`frontend/`):
 
 - Frameless window with custom minimize, maximize/restore, and close controls; topbar acts as the
   drag region. Login window is frameless too, with its own minimize/close bar.
-- Icon rail: Home, DMs, Activity, Later, Files, Notes, More (Lists, Canvas, Wiki), Huddle with labels under each icon
+- Icon rail: Home, DMs, Activity, Later, Files, Notes, Huddle, More (Lists, Canvas, Wiki) last, with labels under each icon
 - List pane in a darker purple (#2A0D36) than the rail; channel and DM lists; active-state highlighting
 - Topbar zones aligned to the columns below: hamburger over the rail (76 px), workspace name from
   76 px, search from 308 px

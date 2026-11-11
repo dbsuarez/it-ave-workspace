@@ -42,9 +42,9 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 - **Frameless window**: the native title bar is removed. The topbar carries custom minimize,
   maximize/restore, and close buttons (46 px each, close turns red on hover). The topbar is the
   drag region; interactive controls opt out with `-webkit-app-region: no-drag`.
-- **Icon rail** (76 px): Home, DMs, Activity, Later, Files, Notes, a **More** (⋮) button, Huddle,
-  and role-gated Moderation as icon-plus-label buttons. **More** opens a small menu with Lists,
-  Canvas and Wiki, and lights up while one of those is open.
+- **Icon rail** (76 px): Home, DMs, Activity, Later, Files, Notes, Huddle, role-gated Moderation,
+  and a **More** (⋮) button last, as icon-plus-label buttons. **More** opens a small menu (upward)
+  with Lists, Canvas and Wiki, and lights up while one of those is open.
 - **List pane** (232 px): channels on Home, direct messages on DMs; collapsed for full-width
   sections. It uses a dark purple (#2A0D36), slightly darker than the rail gradient.
 - **Topbar alignment**: the hamburger sits over the rail column (76 px), the workspace name starts

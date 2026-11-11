@@ -250,6 +250,85 @@
   .server-note.error {
     color: var(--danger);
   }
+
+  /* Compact layout: the card must fit the fixed-size window with no scrollbar. */
+  .login-page {
+    justify-content: flex-start;
+    padding: 10px 20px;
+    scrollbar-width: none;
+  }
+  .login-page::-webkit-scrollbar {
+    display: none;
+  }
+  .login-card {
+    margin: auto;
+    padding: 20px 28px;
+  }
+  .login-header {
+    margin-bottom: 14px;
+  }
+  .login-logo {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 8px;
+  }
+  .login-header h1 {
+    font-size: 24px;
+    margin: 4px 0 2px;
+  }
+  .login-header p {
+    font-size: 13px;
+  }
+  .form-group {
+    margin-bottom: 11px;
+  }
+  .form-group label {
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .form-group input {
+    padding: 10px 12px;
+  }
+  .btn {
+    padding: 10px;
+    font-size: 14px;
+  }
+  .btn-primary {
+    margin-bottom: 10px;
+  }
+  .divider {
+    margin: 12px 0;
+  }
+  .error-msg {
+    margin-bottom: 8px;
+  }
+  .server-box {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+  .footer-note {
+    margin-top: 10px;
+    font-size: 12px;
+  }
+  /* While the server address is being edited, only that panel is shown. */
+  .login-card.server-mode #auth-form,
+  .login-card.server-mode .divider,
+  .login-card.server-mode #switch-btn,
+  .login-card.server-mode .footer-note,
+  .login-card.server-mode .server-row,
+  .login-card.server-mode .login-header h1,
+  .login-card.server-mode .login-header p {
+    display: none;
+  }
+  .login-card.server-mode .server-box {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+  .login-card.server-mode .server-form label {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
 </style>
 </head>
 <body>

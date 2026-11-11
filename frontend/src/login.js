@@ -144,7 +144,9 @@
     serverFixedNote.textContent = 'Set by the API_BASE environment variable on this computer.';
   }
 
+  const loginCard = document.querySelector('.login-card');
   serverChange.addEventListener('click', () => {
+    loginCard.classList.add('server-mode');
     serverForm.hidden = false;
     serverInput.value = API_BASE;
     setServerNote('');
@@ -153,6 +155,7 @@
   });
   document.getElementById('server-cancel').addEventListener('click', () => {
     serverForm.hidden = true;
+    loginCard.classList.remove('server-mode');
   });
   document.getElementById('server-reset').addEventListener('click', async () => {
     await bridge.resetServerUrl();
