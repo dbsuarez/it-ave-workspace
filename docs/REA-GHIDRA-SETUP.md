@@ -151,6 +151,8 @@ to run, download, or transmit anything.
 
 ## Related documents
 
+- [REAGHIDRA/README.md](../REAGHIDRA/README.md) - first investigation done with this setup: how Slack
+  Lists and Canvas work (result: not in the installed app; behaviour taken from Slack's public docs)
 - [RUNBOOK.md](RUNBOOK.md) - IT Avenue Workspace stack: Docker, Electron, secrets, troubleshooting
 - [frontend.md](frontend.md) - desktop client layout, including the Electron
   `ELECTRON_RUN_AS_NODE` launch requirement, which is unrelated to REA but lives in the same shell
