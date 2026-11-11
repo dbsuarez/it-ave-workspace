@@ -12,9 +12,9 @@ Project root: `D:\Development\itavenue-workspace`
 | Planning | Architecture, stack, target platform decisions | Done |
 | Phase 1 | Backend (Express + Socket.io + PostgreSQL + JWT) with Docker Compose | Done and tested |
 | Phase 2 | Electron desktop client (login, sidebar, messaging, threads, reactions, attachments) | Done and tested |
-| Phase 3 | Rich features: Files, Notes, Lists, unread counts, presence, read receipts, audio Huddle, Canvas | Done; desktop flows verified live 2026-11-11. Huddle verified between two clients with a simulated microphone; real-microphone and TURN validation pending |
+| Phase 3 | Rich features: Files, Notes, Lists, unread counts, presence, read receipts, audio Huddle, Canvas | Done; desktop flows verified live 2026-11-11. Huddle verified between two clients with a simulated microphone, including relay-only through a TURN server; real-microphone validation on two devices pending |
 | Phase 4 | Deployment to Hostinger KVM (domain + TLS + build + installers) | Not started |
-| Phase 5 | Channel roles, moderation, reports, and audit trail | Implemented; channel-moderator flows verified live 2026-11-11. Superadmin-only controls not yet exercised (no Superadmin account bootstrapped) |
+| Phase 5 | Channel roles, moderation, reports, and audit trail | Implemented; channel-moderator and Superadmin flows verified live 2026-11-11 |
 
 ## Implemented and verified
 
@@ -140,8 +140,8 @@ Verified working:
   rollback with an error toast when the server rejects a message (channel timeout)
 - Inline replies with jump-to-original, pin/unpin with the pinned panel, read receipts, and
   real-time delivery between two clients
-- Reaction picker (categories, search, add); reactions appear for other clients after a reload
-  only (see known defects)
+- Reaction picker (categories, search, add); reactions reach other clients in real time and the
+  reacting user's own reactions are highlighted
 - Notes create/edit/delete; Lists create, add item, assign a channel member, due date, complete;
   Canvas create/save with escaped Markdown preview; both shared with the second member
 - File upload, uploader delete, and moderator delete with a required reason
@@ -151,6 +151,13 @@ Verified working:
 - Global search across messages and people
 - Huddle join, two-client peer connection with audio flowing in both directions, mute, and leave,
   using Chromium's simulated microphone
+- Huddle through TURN: with `WEBRTC_ICE_SERVERS` pointing at a temporary coturn container and both
+  clients forced to relay-only, both ends selected relay candidates and audio flowed both ways
+- Superadmin controls: all channels (including private) listed, timeout policy validation and
+  save, channel role grant, private-channel access grant and removal (the removed user loses the
+  channel immediately and cannot rejoin), workspace audit log; a non-Superadmin gets 403
+- Packaged build (`npm run pack`): the unpacked app starts, signs in, connects, sends a message,
+  and includes the fixes below
 
 Fixed during this pass:
 
@@ -159,12 +166,19 @@ Fixed during this pass:
 - `window.prompt()` is not supported in Electron, so reporting a message, applying a timeout, and
   moderator attachment deletion silently did nothing. They now use an in-app text dialog
   (`askText` in `renderer.js`).
+- Reactions were not broadcast; the server now emits `message_reactions_updated` with counts and
+  user IDs.
+- The first Huddle participant's status stayed on "Waiting for others to join" after someone
+  joined.
+- The workspace name in the top bar was unreadable in the dark theme.
 
 Not verified:
 
-- Huddle with real microphones on two devices, and TURN on restrictive networks
-- Superadmin-only controls (timeout policy, role grants, private-channel access)
-- Packaged installer build after these changes
+- Huddle with real microphones on two devices. The development PC has no working physical
+  microphone (its only enabled input is a virtual noise-cancelling device, which fails with
+  `NotReadableError`), so this needs other hardware.
+- A production TURN service on a real restrictive network (only a local coturn was tested)
+- The NSIS installer (`npm run dist`); only the unpacked build was run
 
 ## Planned remaining work
 
@@ -189,8 +203,8 @@ Read receipts currently cover the latest message in each channel. They do not pr
 per-message read-state history or a dedicated receipt-change event.
 Huddle uses a peer-to-peer mesh with a six-participant cap and public STUN by default; reliable
 calls across restrictive networks require a configured TURN service. Audio has been verified
-between two clients on one machine with a simulated microphone, not yet with real microphones on
-two devices.
+between two clients on one machine with a simulated microphone, directly and relay-only through a
+local TURN server, but not yet with real microphones on two devices.
 
 ## Known defects being carried right now
 
@@ -201,11 +215,6 @@ two devices.
 - `renderer.js` parse-time vulnerabilities: renderer can die before any listener attaches. A syntax
   check rule (`node --check renderer.js`) is the guard we use; integrate into build/CI.
 - `.env` contains defaults and is referenced by the repository. Secrets must be rotated.
-- Reactions are not broadcast over Socket.IO; other clients see them only after reloading the
-  channel.
-- Dark theme: the workspace name in the top bar is dark purple on a dark background.
-- Huddle: the first participant's status keeps saying "Waiting for others to join" after someone
-  joins.
 - The backend container does not mount source; run `docker compose up -d --build backend` after
   backend changes or the app runs stale code.
 - Docker Compose exposes Postgres on `5432` on all interfaces. If this machine is not trusted
@@ -228,7 +237,9 @@ two devices.
 | Canvas API and channel authorization | Backend automated tests and live Docker/PostgreSQL create, list, read, update, and delete check |
 | Socket auth + send + receive + persisted | Node CDP probe of actual Electron window |
 | Latest-message read receipts and channel access | Docker API integration check: two members marked read; both receipts returned; non-member denied |
-| Huddle signaling and audio | Docker Socket.IO check: authorization, concurrent joins, signal relay, six-person cap, and leave; two Electron clients connected with simulated-microphone audio in both directions (CDP, 2026-11-11); real microphones and TURN remain |
+| Huddle signaling and audio | Docker Socket.IO check: authorization, concurrent joins, signal relay, six-person cap, and leave; two Electron clients connected with simulated-microphone audio in both directions, directly and relay-only via a local coturn (CDP, 2026-11-11); real microphones on two devices remain |
+| Superadmin controls | Temporary Superadmin account in the Electron app over CDP, 2026-11-11 |
+| Packaged build | `npm run pack`, then the unpacked app driven over CDP, 2026-11-11 |
 | Desktop flows (send, replies, pins, reactions, Notes, Lists, Canvas, files, moderation, settings, search) | Two Electron clients driven over CDP against the Docker backend, 2026-11-11 |
 | Channel create modal + creation | CDP (real click path) |
 | Responsive CSS | No overflow horizontal, no default scrollbars in window |
