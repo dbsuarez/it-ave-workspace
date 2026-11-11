@@ -112,8 +112,19 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
   per computer).
 - **Templates.** An empty canvas offers Meeting notes, Project plan, Action items, Incident report
   and Channel FAQ.
-- **Pictures.** `/image` or the Image button uploads to the canvas; the page fetches each picture with
-  the signed-in request and shows it from a blob URL. There is never a public URL.
+- **Pictures.** `/image` or the Image button uploads to the canvas; so does pasting a picture or
+  dropping an image file onto the page. The page fetches each picture with the signed-in request and
+  shows it from a blob URL. There is never a public URL. Click a picture to select it: a bar offers
+  size presets (25, 50, 75 percent, full), left, centre or right alignment, a description (alt text),
+  Replace and Delete, and a corner handle resizes it by dragging. Size and alignment are saved in
+  the standard Markdown image title, for example `![name](file:7 "50% center")`.
+- **Tables.** With the cursor in a table a bar offers insert row above or below, insert column left
+  or right, delete row, column or table, header row on or off, and column alignment. Hovering a table
+  shows a "+" at its right edge (add a column) and bottom edge (add a row); Tab in the last cell adds a
+  row. Drag a column border to resize it: widths are saved in the Markdown separator row (about 10px
+  per dash, three dashes or fewer means automatic), which other Markdown renderers ignore.
+- **Moving things.** Hover any block and drag its grip (six dots) to move it, whether it is a paragraph,
+  a picture, a table or a callout.
 - **Markdown source.** The **Markdown** button swaps the page for the Markdown text (with its own
   slash menu and toolbar) and **Page** swaps back, for people who prefer the source.
 - **Viewers and guests** get the same page, locked: no toolbar, no editing, links still open.

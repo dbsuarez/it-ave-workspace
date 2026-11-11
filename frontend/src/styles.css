@@ -5891,3 +5891,127 @@ h4.cv-h { font-size: 15px; }
 .cw-editor .cw-callout[data-callout="tip"] { --callout: 34, 197, 94; }
 .cw-editor .cw-callout[data-callout="warning"] { --callout: 234, 179, 8; }
 .cw-editor .cw-callout[data-callout="danger"] { --callout: 239, 68, 68; }
+
+/* Canvas page: picture and table tools */
+.cw-float {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 16px);
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.cw-float[hidden] { display: none; }
+
+.cw-float .canvas-toolbar-btn.danger:hover { color: var(--danger); }
+
+.cw-alt-form {
+  flex: 1 0 100%;
+  display: flex;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.cw-alt-form[hidden] { display: none; }
+.cw-alt-form input { flex: 1; min-width: 160px; padding: 5px 8px; }
+
+.cw-add-handle {
+  position: absolute;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cw-add-handle:hover { color: #fff; background: var(--purple); border-color: var(--purple); }
+.cw-add-handle[hidden] { display: none; }
+
+.cw-grip {
+  position: absolute;
+  left: 4px;
+  z-index: 4;
+  width: 18px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+}
+
+.cw-grip:hover { background: var(--muted-bg); color: var(--text); }
+.cw-grip:active { cursor: grabbing; }
+.cw-grip[hidden] { display: none; }
+
+.cw-editor .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: var(--purple);
+  pointer-events: none;
+}
+
+.cw-editor .ProseMirror.resize-cursor { cursor: col-resize; }
+
+.cw-editor .ProseMirror table { table-layout: fixed; }
+
+.cw-editor .cw-image { display: flex; }
+.cw-editor .cw-image[data-align="center"] { justify-content: center; }
+.cw-editor .cw-image[data-align="right"] { justify-content: flex-end; }
+
+.cw-editor .cw-image-frame {
+  position: relative;
+  max-width: 100%;
+}
+
+.cw-editor .cw-image-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--purple);
+  cursor: nwse-resize;
+  opacity: 0;
+}
+
+.cw-editor .cw-image:hover .cw-image-handle,
+.cw-editor .ProseMirror-selectednode .cw-image-handle {
+  opacity: 1;
+}
+
+.cw-editor .ProseMirror-selectednode.cw-image .cw-image-frame img,
+.cw-editor .ProseMirror-selectednode .cw-image-frame img {
+  outline: 2px solid var(--purple);
+}
+
+.cw-editor .ProseMirror .ProseMirror-dropcursor,
+.ProseMirror-dropcursor { background: var(--purple) !important; }
+
+/* a resized picture fills its frame, so the handle sits on the picture's corner */
+.cw-editor .cw-image-frame > img {
+  width: 100%;
+  height: auto;
+}

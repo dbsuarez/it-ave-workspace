@@ -126,3 +126,80 @@ test('commands used by the toolbar and slash menu produce the expected Markdown'
   assert.equal(getCanvasMarkdown(table).trim().split('\n').length, 3, 'a header, a separator and one row');
   table.destroy();
 });
+
+test('picture size and alignment survive in the standard Markdown title', () => {
+  for (const md of [
+    'Before\n\n![pic](file:3 "50% center")\n\nAfter\n',
+    '![pic](file:3 "75%")\n',
+    '![pic](file:3 "right")\n',
+    '![pic](file:3)\n',
+  ]) {
+    assert.equal(roundTrip(md), md);
+  }
+  // full width is the default and is not written out
+  const editor = open('![pic](file:3)\n');
+  editor.commands.updateAttributes('image', { width: 100, align: 'left' });
+  assert.equal(getCanvasMarkdown(editor), '![pic](file:3)\n');
+  editor.destroy();
+  const { parseImageTitle, imageTitle } = require('../editor-src/canvas-editor');
+  assert.deepEqual(parseImageTitle('50% center'), { width: 50, align: 'center' });
+  assert.deepEqual(parseImageTitle('nonsense 500% up'), { width: 100, align: 'left' });
+  assert.equal(imageTitle({ width: 25, align: 'right' }), '25% right');
+});
+
+test('the picture node exposes its size and alignment to the page', () => {
+  const editor = open('![pic](file:3 "50% center")\n');
+  const figure = editor.view.dom.querySelector('figure.cw-image');
+  assert.equal(figure.getAttribute('data-align'), 'center');
+  assert.equal(figure.querySelector('.cw-image-frame').style.width, '50%');
+  assert.ok(figure.querySelector('.cw-image-handle'), 'there is a resize handle');
+  editor.destroy();
+});
+
+test('table cell alignment and header toggles round trip', () => {
+  const editor = open('| a | b |\n| :-- | --: |\n| 1 | 2 |\n');
+  editor.commands.setTextSelection(editor.state.doc.content.size - 3);
+  editor.commands.addRowAfter();
+  editor.commands.addColumnAfter();
+  const md = getCanvasMarkdown(editor);
+  assert.equal(md.trim().split('\n').length, 4, 'a header, a separator and two rows');
+  assert.match(md.split('\n')[1], /^\| :-+ \| -+: \| -+ \|$/);
+  editor.destroy();
+});
+
+test('column widths are kept in the separator row and come back', () => {
+  const md = '| a | b | c |\n| ------------ | --- | ------ |\n| 1 | 2 | 3 |\n';
+  const editor = open(md);
+  const widths = [];
+  editor.state.doc.firstChild.firstChild.forEach((cell) => widths.push(cell.attrs.colwidth && cell.attrs.colwidth[0]));
+  assert.deepEqual(widths, [120, null, 60], '12 dashes = 120px, 3 dashes = automatic, 6 dashes = 60px');
+  const out = getCanvasMarkdown(editor);
+  assert.match(out.split('\n')[1], /^\| -{12} \| -{3} \| -{6} \|$/);
+  editor.destroy();
+  assert.equal(roundTrip(out), out, 'stable on a second pass');
+});
+
+test('a table with automatic widths keeps the plain three-dash separator', () => {
+  const out = roundTrip('| Milestone | Owner |\n| --- | --- |\n| First | (name) |\n');
+  assert.match(out.split('\n')[1], /^\| -{3} \| -{3} \|$/);
+});
+
+test('resizing a column in the page changes the saved separator', () => {
+  const editor = open('| a | b |\n| --- | --- |\n| 1 | 2 |\n');
+  const tr = editor.state.tr;
+  editor.state.doc.descendants((node, pos) => {
+    if ((node.type.name === 'tableHeader' || node.type.name === 'tableCell') && !node.attrs.colwidth) {
+      // the first column of every row becomes 200px wide
+    }
+  });
+  let column = 0;
+  editor.state.doc.firstChild.forEach((row, rowOffset) => {
+    row.forEach((cell, cellOffset, index) => {
+      if (index === 0) tr.setNodeMarkup(1 + rowOffset + 1 + cellOffset, undefined, { ...cell.attrs, colwidth: [200] });
+      column += 1;
+    });
+  });
+  editor.view.dispatch(tr);
+  assert.match(getCanvasMarkdown(editor).split('\n')[1], /^\| -{20} \| -{3} \|$/);
+  editor.destroy();
+});

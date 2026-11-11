@@ -10,6 +10,7 @@
 //   - pictures              "![name](file:<id>)" (only canvas files; remote images are never loaded)
 //   - tables, headings, lists, quotes, code, dividers: plain GitHub-style Markdown
 const { Editor, Node, mergeAttributes } = require('@tiptap/core');
+const { NodeSelection } = require('@tiptap/pm/state');
 const { StarterKit } = require('@tiptap/starter-kit');
 const { Table, TableRow, TableHeader, TableCell } = require('@tiptap/extension-table');
 const { TaskList, TaskItem } = require('@tiptap/extension-list');
@@ -91,7 +92,26 @@ const Callout = Node.create({
 
 // Pictures are canvas files ("file:<id>"). The page never gets a URL for them: the app fetches each one with
 // the signed-in request (data-cv-file), so a pasted or typed remote image is dropped instead of loaded.
+// Size and alignment are kept in the standard Markdown image title: ![name](file:7 "50% center").
 const FILE_SRC = /^file:(\d{1,10})$/;
+const IMAGE_ALIGNS = ['left', 'center', 'right'];
+
+function parseImageTitle(title) {
+  const out = { width: null, align: 'left' };
+  for (const part of String(title || '').trim().split(/\s+/)) {
+    const percent = /^(\d{1,3})%$/.exec(part);
+    if (percent) out.width = Math.min(100, Math.max(10, Number(percent[1])));
+    else if (IMAGE_ALIGNS.includes(part)) out.align = part;
+  }
+  return out;
+}
+
+function imageTitle(attrs) {
+  const parts = [];
+  if (attrs.width && attrs.width < 100) parts.push(`${attrs.width}%`);
+  if (attrs.align && attrs.align !== 'left') parts.push(attrs.align);
+  return parts.join(' ');
+}
 
 const CanvasImage = Image.extend({
   addAttributes() {
@@ -102,7 +122,16 @@ const CanvasImage = Image.extend({
         renderHTML: () => ({}),
       },
       alt: { default: '' },
-      title: { default: null },
+      width: {
+        default: null,
+        parseHTML: (el) => Number(el.getAttribute('data-width')) || null,
+        renderHTML: () => ({}),
+      },
+      align: {
+        default: 'left',
+        parseHTML: (el) => (IMAGE_ALIGNS.includes(el.getAttribute('data-align')) ? el.getAttribute('data-align') : 'left'),
+        renderHTML: () => ({}),
+      },
     };
   },
 
@@ -112,38 +141,149 @@ const CanvasImage = Image.extend({
 
   renderHTML({ node }) {
     const match = FILE_SRC.exec(node.attrs.src || '');
-    return ['img', { 'data-cv-file': match ? match[1] : '', alt: node.attrs.alt || '' }];
+    const attrs = { 'data-cv-file': match ? match[1] : '', alt: node.attrs.alt || '', 'data-align': node.attrs.align || 'left' };
+    if (node.attrs.width) attrs['data-width'] = String(node.attrs.width);
+    return ['img', attrs];
   },
 
   addNodeView() {
-    return ({ node }) => {
-      const match = FILE_SRC.exec(node.attrs.src || '');
+    return ({ node, getPos, editor }) => {
+      let current = node;
       const dom = document.createElement('figure');
       dom.className = 'cw-image';
+      const frame = document.createElement('div');
+      frame.className = 'cw-image-frame';
       const img = document.createElement('img');
-      img.setAttribute('data-cv-file', match ? match[1] : '');
-      img.alt = node.attrs.alt || '';
-      dom.appendChild(img);
+      const handle = document.createElement('span');
+      handle.className = 'cw-image-handle';
+      handle.title = 'Drag to resize';
+      frame.append(img, handle);
+      dom.appendChild(frame);
+
+      const apply = (n) => {
+        const match = FILE_SRC.exec(n.attrs.src || '');
+        img.setAttribute('data-cv-file', match ? match[1] : '');
+        img.alt = n.attrs.alt || '';
+        img.title = n.attrs.alt || '';
+        frame.style.width = n.attrs.width ? `${n.attrs.width}%` : '';
+        dom.setAttribute('data-align', n.attrs.align || 'left');
+      };
+      apply(node);
       // the app fills in the picture with the signed-in request (features/canvas-view.js)
-      if (typeof cvwLoadImages === 'function') cvwLoadImages(dom);
+      const load = () => { if (typeof cvwLoadImages === 'function') cvwLoadImages(dom); };
+      load();
+
+      // drag the corner to resize, in steps of 5% of the page width
+      handle.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const pageWidth = dom.getBoundingClientRect().width || 1;
+        const startX = event.clientX;
+        const startWidth = frame.getBoundingClientRect().width;
+        let percent = Math.round((startWidth / pageWidth) * 100);
+        const move = (e) => {
+          percent = Math.max(10, Math.min(100, Math.round(((startWidth + e.clientX - startX) / pageWidth) * 20) * 5));
+          frame.style.width = `${percent}%`;
+        };
+        const up = () => {
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+          const pos = getPos();
+          if (typeof pos === 'number') {
+            editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, width: percent >= 100 ? null : percent }));
+          }
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+
       return {
         dom,
         ignoreMutation: () => true,
-        update: (next) => next.type === node.type && next.attrs.src === node.attrs.src && ((img.alt = next.attrs.alt || ''), true),
+        stopEvent: (event) => event.target === handle,
+        update: (next) => {
+          if (next.type !== node.type) return false;
+          const sourceChanged = next.attrs.src !== current.attrs.src;
+          current = next;
+          apply(next);
+          if (sourceChanged) load();
+          return true;
+        },
       };
     };
   },
 
   parseMarkdown(token, helpers) {
     if (!FILE_SRC.test(token.href || '')) return helpers.createTextNode(token.raw || '');
-    return helpers.createNode('image', { src: token.href, alt: token.text || '' });
+    const { width, align } = parseImageTitle(token.title);
+    return helpers.createNode('image', { src: token.href, alt: token.text || '', width, align });
   },
 
   renderMarkdown(node) {
     const alt = String(node.attrs?.alt || '').replace(/[\[\]\n]/g, ' ').trim();
-    return `![${alt}](${node.attrs?.src || ''})`;
+    const title = imageTitle(node.attrs || {});
+    return `![${alt}](${node.attrs?.src || ''}${title ? ` "${title}"` : ''})`;
   },
 });
+
+// A table whose columns can be dragged wider or narrower. Markdown has no place for widths, so they are
+// kept in the separator row, which renderers ignore: "| ------------ | ---- |" means roughly 120px and 40px
+// (about 10px per dash; 3 dashes or fewer means "automatic").
+const PX_PER_DASH = 10;
+const baseTableParse = Table.config.parseMarkdown;
+const baseTableRender = Table.config.renderMarkdown;
+
+const CanvasTable = Table.extend({
+  parseMarkdown(token, helpers) {
+    const node = baseTableParse(token, helpers);
+    const separator = String(token.raw || '').split('\n')[1] || '';
+    const widths = separator.split('|').map((cell) => cell.trim()).filter(Boolean).map((cell) => {
+      const dashes = (cell.match(/-/g) || []).length;
+      return dashes > 3 ? Math.min(600, dashes * PX_PER_DASH) : null;
+    });
+    if (widths.some(Boolean)) {
+      for (const row of node.content || []) {
+        (row.content || []).forEach((cell, i) => {
+          if (widths[i]) cell.attrs = { ...(cell.attrs || {}), colwidth: [widths[i]] };
+        });
+      }
+    }
+    return node;
+  },
+
+  renderMarkdown(node, helpers) {
+    const markdown = baseTableRender(node, helpers);
+    const first = (node.content && node.content[0] && node.content[0].content) || [];
+    const widths = first.map((cell) => (cell.attrs && cell.attrs.colwidth && cell.attrs.colwidth[0]) || null);
+    const lines = markdown.split('\n');
+    const header = lines.findIndex((line) => line.trim().startsWith('|'));
+    if (header < 0 || !lines[header + 1]) return markdown;
+    const cells = lines[header + 1].split('|').map((cell) => cell.trim()).filter(Boolean);
+    lines[header + 1] = `| ${cells.map((cell, i) => {
+      const left = cell.startsWith(':');
+      const right = cell.endsWith(':');
+      const dashes = widths[i] ? Math.max(4, Math.min(60, Math.round(widths[i] / PX_PER_DASH))) : 3;
+      return `${left ? ':' : ''}${'-'.repeat(dashes)}${right ? ':' : ''}`;
+    }).join(' | ')} |`;
+    return lines.join('\n');
+  },
+});
+
+// Start dragging a whole top-level block (a picture, a table, a paragraph...) from its handle. ProseMirror
+// does the rest: it shows the drop line and moves the block where it is dropped.
+function startBlockDrag(editor, blockElement, event) {
+  const { view } = editor;
+  const inside = view.posAtDOM(blockElement, 0);
+  const $pos = view.state.doc.resolve(inside);
+  const start = $pos.depth >= 1 ? $pos.before(1) : inside;
+  const selection = NodeSelection.create(view.state.doc, start);
+  view.dispatch(view.state.tr.setSelection(selection));
+  view.dragging = { slice: selection.content(), move: true };
+  event.dataTransfer.effectAllowed = 'copyMove';
+  event.dataTransfer.setData('text/plain', blockElement.textContent || ' ');
+  event.dataTransfer.setDragImage(blockElement, 0, 0);
+  return true;
+}
 
 function buildExtensions({ placeholder } = {}) {
   return [
@@ -154,7 +294,7 @@ function buildExtensions({ placeholder } = {}) {
     }),
     TaskList,
     TaskItem.configure({ nested: true }),
-    Table.configure({ resizable: false }),
+    CanvasTable.configure({ resizable: true, cellMinWidth: 60, handleWidth: 6, lastColumnResizable: true }),
     TableRow,
     TableHeader,
     TableCell,
@@ -192,4 +332,4 @@ function getCanvasMarkdown(editor) {
   return normalizeMarkdown(editor.getMarkdown());
 }
 
-module.exports = { createCanvasEditor, buildExtensions, getCanvasMarkdown, normalizeMarkdown, CALLOUT_TYPES };
+module.exports = { createCanvasEditor, buildExtensions, getCanvasMarkdown, normalizeMarkdown, parseImageTitle, imageTitle, startBlockDrag, CALLOUT_TYPES };

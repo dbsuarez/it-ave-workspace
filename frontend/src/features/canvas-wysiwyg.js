@@ -103,7 +103,6 @@ const canvasWysiwyg = (() => {
     TOOLS.forEach((tool) => inst.toolbar.appendChild(toolButton(tool)));
     inst.contextual = make('div', 'cw-context');
     inst.contextual.hidden = true;
-    TABLE_TOOLS.forEach((tool) => inst.contextual.appendChild(toolButton(tool)));
     inst.calloutBar = make('span', 'cw-callout-types');
     CALLOUT_TOOLS.forEach((tool) => { const b = toolButton(tool); b.dataset.calloutType = tool.type; inst.calloutBar.appendChild(b); });
     inst.contextual.appendChild(inst.calloutBar);
@@ -119,12 +118,42 @@ const canvasWysiwyg = (() => {
     inst.bubble = make('button', 'cv-comment-btn cw-bubble', { type: 'button', title: 'Comment on this', 'aria-label': 'Comment on this' });
     inst.bubble.hidden = true;
     inst.bubble.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-    inst.scroll.append(inst.mount, inst.bubble);
+    inst.imageBar = make('div', 'cw-float cw-image-bar', { role: 'toolbar', 'aria-label': 'Picture' });
+    inst.imageBar.hidden = true;
+    inst.imageBar.innerHTML = [
+      ['width', '25', 'S', 'Small (25%)'], ['width', '50', 'M', 'Medium (50%)'], ['width', '75', 'L', 'Large (75%)'], ['width', '100', 'Full', 'Full width'],
+      ['sep'], ['align', 'left', '\u21E4', 'Align left'], ['align', 'center', '\u2194', 'Centre'], ['align', 'right', '\u21E5', 'Align right'],
+      ['sep'], ['action', 'alt', 'Description', 'Describe the picture'], ['action', 'replace', 'Replace', 'Replace with another picture'], ['action', 'delete', 'Delete', 'Remove the picture'],
+    ].map(([kind, value, label, title]) => (kind === 'sep'
+      ? '<span class="canvas-toolbar-sep" aria-hidden="true"></span>'
+      : `<button type="button" class="canvas-toolbar-btn" data-image-${kind}="${value}" title="${title}" aria-label="${title}">${label}</button>`)).join('')
+      + '<form class="cw-alt-form" hidden><input type="text" maxlength="200" placeholder="Describe the picture" aria-label="Picture description"><button class="btn primary" type="submit">Save</button></form>';
+    inst.tableBar = make('div', 'cw-float cw-table-bar', { role: 'toolbar', 'aria-label': 'Table' });
+    inst.tableBar.hidden = true;
+    inst.tableBar.innerHTML = [
+      ['rowBefore', '\u2191 Row', 'Insert a row above'], ['rowAfter', '\u2193 Row', 'Insert a row below'], ['rowDelete', '\u2212 Row', 'Delete this row'],
+      ['sep'], ['colBefore', '\u2190 Col', 'Insert a column to the left'], ['colAfter', '\u2192 Col', 'Insert a column to the right'], ['colDelete', '\u2212 Col', 'Delete this column'],
+      ['sep'], ['header', 'Header row', 'Turn the header row on or off'],
+      ['sep'], ['alignLeft', '\u21E4', 'Align this column left'], ['alignCenter', '\u2194', 'Centre this column'], ['alignRight', '\u21E5', 'Align this column right'],
+      ['sep'], ['tableDelete', 'Delete table', 'Delete the whole table'],
+    ].map(([id, label, title]) => (id === 'sep'
+      ? '<span class="canvas-toolbar-sep" aria-hidden="true"></span>'
+      : `<button type="button" class="canvas-toolbar-btn${id === 'tableDelete' ? ' danger' : ''}" data-table-act="${id}" title="${title}" aria-label="${title}">${label}</button>`)).join('');
+    inst.addCol = make('button', 'cw-add-handle cw-add-col', { type: 'button', title: 'Add a column', 'aria-label': 'Add a column' });
+    inst.addRow = make('button', 'cw-add-handle cw-add-row', { type: 'button', title: 'Add a row', 'aria-label': 'Add a row' });
+    inst.addCol.textContent = '+';
+    inst.addRow.textContent = '+';
+    inst.addCol.hidden = true;
+    inst.addRow.hidden = true;
+    inst.grip = make('button', 'cw-grip', { type: 'button', title: 'Drag to move', 'aria-label': 'Drag to move this block', draggable: 'true' });
+    inst.grip.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+    inst.grip.hidden = true;
+    inst.scroll.append(inst.mount, inst.bubble, inst.imageBar, inst.tableBar, inst.addCol, inst.addRow, inst.grip);
     container.append(inst.toolbar, inst.contextual, inst.linkForm, inst.strip, inst.scroll);
 
     inst.editor = ITAEditor.createCanvasEditor(inst.mount, {
       content: '',
-      editable: false,
+      editable: true, // created editable so the table column-resize plugin is active; show() locks it for viewers
       onUpdate: () => onEdited(inst),
       onTransaction: () => refreshUi(inst),
     });
@@ -141,6 +170,7 @@ const canvasWysiwyg = (() => {
 
     wireToolbar(inst);
     wireEditorDom(inst);
+    wireFloating(inst);
     canvasToolbars.push({ sync: () => refreshUi(inst) });
     return inst;
   }
@@ -158,7 +188,7 @@ const canvasWysiwyg = (() => {
 
   // The page changed: write the Markdown into the textarea and let autosave see an `input`.
   function onEdited(inst) {
-    if (inst.loading) return;
+    if (inst.loading || !canEdit(inst)) return;
     const markdown = ITAEditor.getCanvasMarkdown(inst.editor);
     if (markdown === inst.lastWritten) return;
     inst.lastWritten = markdown;
@@ -182,10 +212,8 @@ const canvasWysiwyg = (() => {
         const button = inst.toolbar.querySelector(`[data-tool="${tool.id}"]`);
         if (button && tool.active) button.classList.toggle('active', Boolean(tool.active(editor)));
       }
-      const inTable = editor.isActive('table');
       const inCallout = editor.isActive('callout');
-      inst.contextual.hidden = !(canvasToolbarEnabled() && (inTable || inCallout));
-      TABLE_TOOLS.forEach((tool) => { const b = inst.contextual.querySelector(`[data-tool="${tool.id}"]`); if (b) b.hidden = !inTable; });
+      inst.contextual.hidden = !(canvasToolbarEnabled() && inCallout);
       inst.calloutBar.hidden = !inCallout;
       if (inCallout) {
         const current = editor.getAttributes('callout').type;
@@ -193,6 +221,156 @@ const canvasWysiwyg = (() => {
       }
     }
     updateSlash(inst);
+    updateFloating(inst);
+  }
+
+  // ---- floating bars for pictures and tables -------------------------------------------------
+
+  function placeFloat(inst, bar, target) {
+    if (!target) { bar.hidden = true; return; }
+    bar.hidden = false;
+    const scrollRect = inst.scroll.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
+    const top = rect.top - scrollRect.top + inst.scroll.scrollTop - bar.offsetHeight - 8;
+    bar.style.top = `${Math.max(0, top)}px`;
+    bar.style.left = `${Math.max(0, rect.left - scrollRect.left + inst.scroll.scrollLeft)}px`;
+  }
+
+  function updateFloating(inst) {
+    const editor = inst.editor;
+    const editable = canEdit(inst);
+    const { selection } = editor.state;
+    let imageTarget = null;
+    let tableTarget = null;
+    if (editable && selection.node && selection.node.type.name === 'image') {
+      const figure = editor.view.nodeDOM(selection.from);
+      imageTarget = figure && figure.querySelector ? figure.querySelector('.cw-image-frame') : null;
+    } else if (editable && editor.isActive('table')) {
+      const at = editor.view.domAtPos(selection.from).node;
+      const table = (at.nodeType === 1 ? at : at.parentElement).closest('table');
+      tableTarget = table ? (table.closest('.tableWrapper') || table) : null;
+    }
+    placeFloat(inst, inst.imageBar, imageTarget);
+    placeFloat(inst, inst.tableBar, tableTarget);
+    if (imageTarget) {
+      const attrs = editor.getAttributes('image');
+      inst.imageBar.querySelectorAll('[data-image-width]').forEach((b) => b.classList.toggle('active', Number(b.dataset.imageWidth) === (attrs.width || 100)));
+      inst.imageBar.querySelectorAll('[data-image-align]').forEach((b) => b.classList.toggle('active', b.dataset.imageAlign === (attrs.align || 'left')));
+    } else {
+      inst.imageBar.querySelector('.cw-alt-form').hidden = true;
+    }
+  }
+
+  // Set the alignment of every cell in the column the cursor is in.
+  function setColumnAlign(inst, align) {
+    const { state, view } = inst.editor;
+    const { $from } = state.selection;
+    let depth = $from.depth;
+    while (depth > 0 && !['tableCell', 'tableHeader'].includes($from.node(depth).type.name)) depth -= 1;
+    if (depth < 2) return;
+    const column = $from.index(depth - 1);
+    const table = $from.node(depth - 2);
+    const tableStart = $from.start(depth - 2);
+    const tr = state.tr;
+    table.forEach((row, rowOffset) => {
+      row.forEach((cell, cellOffset, index) => {
+        if (index === column) tr.setNodeMarkup(tableStart + rowOffset + 1 + cellOffset, undefined, { ...cell.attrs, align });
+      });
+    });
+    view.dispatch(tr);
+  }
+
+  function wireFloating(inst) {
+    const editor = inst.editor;
+    for (const bar of [inst.imageBar, inst.tableBar]) {
+      bar.addEventListener('mousedown', (event) => { if (!event.target.closest('input')) event.preventDefault(); });
+    }
+    inst.imageBar.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      const chain = editor.chain().focus();
+      if (button.dataset.imageWidth) { chain.updateAttributes('image', { width: Number(button.dataset.imageWidth) >= 100 ? null : Number(button.dataset.imageWidth) }).run(); return; }
+      if (button.dataset.imageAlign) { chain.updateAttributes('image', { align: button.dataset.imageAlign }).run(); return; }
+      const action = button.dataset.imageAction;
+      if (action === 'delete') { chain.deleteSelection().run(); return; }
+      if (action === 'replace') {
+        pickCanvasImage(() => canvasViews[inst.which].id(), ({ fileId }) => editor.chain().focus().updateAttributes('image', { src: `file:${fileId}` }).run());
+        return;
+      }
+      if (action === 'alt') {
+        const form = inst.imageBar.querySelector('.cw-alt-form');
+        form.hidden = !form.hidden;
+        if (!form.hidden) { const input = form.querySelector('input'); input.value = editor.getAttributes('image').alt || ''; input.focus(); }
+      }
+    });
+    inst.imageBar.querySelector('.cw-alt-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const alt = event.currentTarget.querySelector('input').value.trim();
+      event.currentTarget.hidden = true;
+      editor.chain().focus().updateAttributes('image', { alt }).run();
+    });
+
+    const TABLE_ACTS = {
+      rowBefore: (c) => c.addRowBefore(), rowAfter: (c) => c.addRowAfter(), rowDelete: (c) => c.deleteRow(),
+      colBefore: (c) => c.addColumnBefore(), colAfter: (c) => c.addColumnAfter(), colDelete: (c) => c.deleteColumn(),
+      header: (c) => c.toggleHeaderRow(), tableDelete: (c) => c.deleteTable(),
+    };
+    inst.tableBar.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-table-act]');
+      if (!button) return;
+      const act = button.dataset.tableAct;
+      if (act.startsWith('align')) { setColumnAlign(inst, act.slice(5).toLowerCase()); return; }
+      const run = TABLE_ACTS[act];
+      if (run) run(editor.chain().focus()).run();
+    });
+
+    // "+" at the right and bottom edge of the table under the pointer adds a column or a row
+    const addAt = (cellSelector, command) => {
+      const table = inst.hoverTable;
+      const cell = table && table.querySelector(cellSelector);
+      if (!cell) return;
+      const pos = editor.view.posAtDOM(cell, 0);
+      command(editor.chain().focus().setTextSelection(pos)).run();
+    };
+    inst.addCol.addEventListener('mousedown', (event) => event.preventDefault());
+    inst.addRow.addEventListener('mousedown', (event) => event.preventDefault());
+    inst.addCol.addEventListener('click', () => addAt('tr:last-child > :last-child', (c) => c.addColumnAfter()));
+    inst.addRow.addEventListener('click', () => addAt('tr:last-child > :first-child', (c) => c.addRowAfter()));
+
+    // drag a block by its handle
+    inst.grip.addEventListener('dragstart', (event) => {
+      if (!inst.hoverBlock) { event.preventDefault(); return; }
+      ITAEditor.startBlockDrag(editor, inst.hoverBlock, event);
+    });
+    inst.grip.addEventListener('dragend', () => { inst.grip.hidden = true; });
+
+    // paste a picture, or drop a picture file onto the page
+    const uploadFiles = async (files, pos) => {
+      const images = files.filter((file) => /^image\//.test(file.type || ''));
+      for (const file of images) {
+        const uploaded = await uploadCanvasImage(canvasViews[inst.which].id(), file);
+        if (!uploaded) continue;
+        if (typeof pos === 'number') editor.commands.setTextSelection(Math.min(pos, editor.state.doc.content.size));
+        insertPicture(inst, uploaded.fileId, uploaded.name);
+      }
+    };
+    const dom = editor.view.dom;
+    dom.addEventListener('paste', (event) => {
+      const files = Array.from((event.clipboardData && event.clipboardData.files) || []).filter((f) => /^image\//.test(f.type || ''));
+      if (!files.length || !canEdit(inst)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      uploadFiles(files);
+    }, true);
+    dom.addEventListener('drop', (event) => {
+      const files = Array.from((event.dataTransfer && event.dataTransfer.files) || []).filter((f) => /^image\//.test(f.type || ''));
+      if (!files.length) return; // a block being moved: the editor handles it
+      event.preventDefault();
+      event.stopPropagation();
+      if (!canEdit(inst)) return;
+      const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      uploadFiles(files, at ? at.pos : undefined);
+    }, true);
   }
 
   // ---- toolbar -------------------------------------------------------------------------------
@@ -404,19 +582,44 @@ const canvasWysiwyg = (() => {
       if (item) runSlash(inst, item, inst.menu.context.from, inst.menu.context.to, '');
     });
 
-    // comment bubble beside the block under the pointer
+    // comment bubble, drag grip and table "+" handles follow the pointer
     inst.scroll.addEventListener('mousemove', (event) => {
-      if (!canEdit(inst)) { inst.bubble.hidden = true; return; }
+      if (!canEdit(inst)) { inst.bubble.hidden = true; inst.grip.hidden = true; inst.addCol.hidden = true; inst.addRow.hidden = true; return; }
+      const onTool = event.target.closest && event.target.closest('.cw-grip, .cw-bubble, .cw-add-handle, .cw-float');
+      if (onTool) return;
+      const scrollRect = inst.scroll.getBoundingClientRect();
+      const relTop = (el) => el.getBoundingClientRect().top - scrollRect.top + inst.scroll.scrollTop;
       const block = event.target.closest ? event.target.closest('.ProseMirror > *') : null;
-      if (!block || !inst.mount.contains(block)) return;
-      const text = (block.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-      if (!text) { inst.bubble.hidden = true; return; }
-      const top = block.getBoundingClientRect().top - inst.scroll.getBoundingClientRect().top + inst.scroll.scrollTop;
-      inst.bubble.style.top = `${Math.max(0, top)}px`;
-      inst.bubble.dataset.ccAnchor = text;
-      inst.bubble.hidden = false;
+      if (block && inst.mount.contains(block)) {
+        inst.hoverBlock = block;
+        inst.grip.style.top = `${Math.max(0, relTop(block))}px`;
+        inst.grip.hidden = false;
+        const text = (block.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        if (text) {
+          inst.bubble.style.top = `${Math.max(0, relTop(block))}px`;
+          inst.bubble.dataset.ccAnchor = text;
+          inst.bubble.hidden = false;
+        } else {
+          inst.bubble.hidden = true;
+        }
+      }
+      const table = event.target.closest ? event.target.closest('.ProseMirror table') : null;
+      if (table) {
+        inst.hoverTable = table;
+        const rect = (table.closest('.tableWrapper') || table).getBoundingClientRect();
+        const tableRect = table.getBoundingClientRect();
+        inst.addCol.style.top = `${relTop(table) + Math.min(tableRect.height, rect.height) / 2 - 11}px`;
+        inst.addCol.style.left = `${tableRect.right - scrollRect.left + inst.scroll.scrollLeft + 6}px`;
+        inst.addRow.style.top = `${relTop(table) + tableRect.height + 6}px`;
+        inst.addRow.style.left = `${tableRect.left - scrollRect.left + inst.scroll.scrollLeft + tableRect.width / 2 - 11}px`;
+        inst.addCol.hidden = false;
+        inst.addRow.hidden = false;
+      } else if (block) {
+        inst.addCol.hidden = true;
+        inst.addRow.hidden = true;
+      }
     });
-    inst.scroll.addEventListener('mouseleave', () => { inst.bubble.hidden = true; });
+    inst.scroll.addEventListener('mouseleave', () => { inst.bubble.hidden = true; inst.grip.hidden = true; inst.addCol.hidden = true; inst.addRow.hidden = true; });
   }
 
   function show(which) {

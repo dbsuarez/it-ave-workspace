@@ -209,6 +209,27 @@ function canvasNotice(text, type) {
   if (typeof showToast === 'function') showToast(text, type);
 }
 
+// Upload one picture file to this canvas. Resolves { fileId, name }; shows the reason and resolves null on failure.
+async function uploadCanvasImage(canvasId, file) {
+  if (!canvasId) { canvasNotice('Open a canvas first.', 'error'); return null; }
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type || '')) { canvasNotice('Only PNG, JPG, GIF or WebP pictures can be added.', 'error'); return null; }
+  if (file.size > CANVAS_IMAGE_MAX_BYTES) { canvasNotice('Images can be at most 10MB.', 'error'); return null; }
+  const form = new FormData();
+  form.append('file', file, file.name || 'image.png');
+  canvasNotice('Uploading image\u2026');
+  try {
+    const res = await fetch(`${API_BASE}/api/canvas/${canvasId}/images`, {
+      method: 'POST', headers: { Authorization: `Bearer ${state.token}` }, body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    return { fileId: data.fileId, name: data.name };
+  } catch (err) {
+    canvasNotice(err.message || 'Could not upload the image.', 'error');
+    return null;
+  }
+}
+
 // Ask for a picture and upload it to this canvas; onDone({ fileId, name }) runs after a successful upload.
 function pickCanvasImage(getCanvasId, onDone) {
   const canvasId = getCanvasId ? getCanvasId() : null;
@@ -219,20 +240,8 @@ function pickCanvasImage(getCanvasId, onDone) {
   input.addEventListener('change', async () => {
     const file = input.files && input.files[0];
     if (!file) return;
-    if (file.size > CANVAS_IMAGE_MAX_BYTES) { canvasNotice('Images can be at most 10MB.', 'error'); return; }
-    const form = new FormData();
-    form.append('file', file);
-    canvasNotice('Uploading image\u2026');
-    try {
-      const res = await fetch(`${API_BASE}/api/canvas/${canvasId}/images`, {
-        method: 'POST', headers: { Authorization: `Bearer ${state.token}` }, body: form,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      onDone({ fileId: data.fileId, name: data.name });
-    } catch (err) {
-      canvasNotice(err.message || 'Could not upload the image.', 'error');
-    }
+    const uploaded = await uploadCanvasImage(canvasId, file);
+    if (uploaded) onDone(uploaded);
   });
   input.click();
 }
