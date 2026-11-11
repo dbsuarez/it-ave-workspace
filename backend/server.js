@@ -22,6 +22,8 @@ const messageEditRoutes = require('./src/routes/messageEdits');
 const savedRoutes = require('./src/routes/saved');
 const reminderRoutes = require('./src/routes/reminders');
 const adminRoutes = require('./src/routes/admin');
+const scheduledRoutes = require('./src/routes/scheduled');
+const channelLinkRoutes = require('./src/routes/channelLinks');
 const migrations = require('./src/migrations');
 const chatSockets = require('./src/sockets/chat');
 
@@ -55,6 +57,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/channels', channelRoutes);
+app.use('/api/channels', channelLinkRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/messages', messageEditRoutes);
 app.use('/api/users', userRoutes);
@@ -70,6 +73,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/saved', savedRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/scheduled', scheduledRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -195,6 +199,7 @@ db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT N
       console.log(`IT Avenue Workspace backend running on port ${PORT}`);
     });
     reminderRoutes.startReminderScheduler(io);
+    scheduledRoutes.startScheduledMessageRunner(io);
   })
   .catch((err) => {
     console.error('Failed to apply startup database migrations:', err);

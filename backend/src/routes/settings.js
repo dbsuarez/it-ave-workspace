@@ -130,7 +130,65 @@ router.put('/', async (req, res) => {
   }
 });
 
+// ---- Personal sidebar sections ----
+const MAX_SECTIONS = 20;
+
+// Validates and normalises a sidebar layout: named sections, each holding
+// channel IDs. A channel can sit in at most one section.
+function normalizeSidebarLayout(input) {
+  const fail = (message) => Object.assign(new Error(message), { status: 400 });
+  if (!input || typeof input !== 'object' || !Array.isArray(input.sections)) {
+    throw fail('Layout must have a list of sections');
+  }
+  if (input.sections.length > MAX_SECTIONS) throw fail(`You can have at most ${MAX_SECTIONS} sections`);
+  const seenIds = new Set();
+  const seenChannels = new Set();
+  const sections = input.sections.map((section) => {
+    const id = typeof section?.id === 'string' ? section.id.trim() : '';
+    const name = typeof section?.name === 'string' ? section.name.trim() : '';
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) throw fail('Each section needs a short ID');
+    if (seenIds.has(id)) throw fail('Section IDs must be unique');
+    seenIds.add(id);
+    if (!name || name.length > 40) throw fail('Section names must be 1 to 40 characters');
+    if (!Array.isArray(section.channelIds)) throw fail('Each section needs a list of channel IDs');
+    const channelIds = [];
+    for (const raw of section.channelIds) {
+      const channelId = Number(raw);
+      if (!Number.isSafeInteger(channelId) || channelId < 1) throw fail('Channel IDs must be positive whole numbers');
+      if (seenChannels.has(channelId)) throw fail('A channel can only be in one section');
+      seenChannels.add(channelId);
+      channelIds.push(channelId);
+    }
+    return { id, name, channelIds, collapsed: Boolean(section.collapsed) };
+  });
+  return { sections };
+}
+
+router.get('/sidebar', async (req, res) => {
+  try {
+    const result = await query('SELECT sidebar_layout FROM users WHERE id = $1', [req.user.userId]);
+    const stored = result.rows[0]?.sidebar_layout;
+    res.json({ layout: stored && Array.isArray(stored.sections) ? stored : { sections: [] } });
+  } catch (err) {
+    console.error('Get sidebar layout error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/sidebar', async (req, res) => {
+  try {
+    const layout = normalizeSidebarLayout(req.body?.layout);
+    await query('UPDATE users SET sidebar_layout = $1 WHERE id = $2', [JSON.stringify(layout), req.user.userId]);
+    res.json({ layout });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Save sidebar layout error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
+module.exports.normalizeSidebarLayout = normalizeSidebarLayout;
 module.exports.mergeNotificationPrefs = mergeNotificationPrefs;
 module.exports.isSingleEmojiOrEmpty = isSingleEmojiOrEmpty;
 module.exports.NOTIFICATION_DEFAULTS = NOTIFICATION_DEFAULTS;

@@ -600,3 +600,5 @@ module.exports = (io, socket) => {
     }
   });
 };
+
+module.exports.notifyMessageActivity = notifyMessageActivity;

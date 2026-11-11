@@ -195,6 +195,7 @@ async function init() {
     loadGroups();
     loadSaved();
     loadReminders();
+    loadSidebarLayout();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
   } else {
@@ -434,6 +435,7 @@ function setupEventListeners() {
   setupGroupFeatures();
   setupLaterFeatures();
   setupAdminFeatures();
+  setupWorkspaceFeatures();
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
@@ -854,6 +856,9 @@ function connectSocket() {
   });
 
   state.socket.on('activity', handleActivityEvent);
+  state.socket.on('scheduled_message_sent', handleScheduledDelivered);
+  state.socket.on('scheduled_message_failed', handleScheduledFailed);
+  state.socket.on('channel_links_updated', handleChannelLinksUpdated);
   state.socket.on('account_updated', handleAccountUpdated);
   state.socket.on('message_updated', handleMessageUpdated);
   state.socket.on('reminder_due', handleReminderDue);
@@ -1122,16 +1127,7 @@ function renderSidebar() {
     );
   }
 
-  state.channels.forEach((ch) => {
-    const active = state.currentChannelId === ch.id && state.section === 'home';
-    const item = document.createElement('div');
-    item.className = 'nav-item' + (active ? ' active' : '');
-    const unread = ch.unreadCount || 0;
-    item.innerHTML = `<span>#</span><span>${escapeHtml(ch.name)}</span>${unread > 0 && !active ? `<span class="unread-badge">${unread}</span>` : ''}`;
-    item.title = ch.topic || '';
-    item.onclick = (e) => { e.stopPropagation(); openChannel(ch.id); };
-    els.channelList.appendChild(item);
-  });
+  renderChannelNav();
 
   // renderSidebar rebuilds the whole nav, so re-render the DM list too
   renderDmList();
@@ -1160,6 +1156,8 @@ async function openChannel(channelId) {
     els.channelTitle.textContent = '#' + ch.name;
     els.channelTopic.textContent = ch.topic || '';
   }
+
+  resetChannelTab();
 
   // Join the channel room so realtime messages appear without reloading the view
   if (state.socket) {

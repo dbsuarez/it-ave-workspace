@@ -305,7 +305,7 @@ function updateLaterBadge() {
 // Later view
 // ============================================================
 async function loadLaterView() {
-  await Promise.all([loadSaved(), loadReminders()]);
+  await Promise.all([loadSaved(), loadReminders(), loadScheduled()]);
   laterState().dueUnseen = 0;
   updateLaterBadge();
   renderLaterView();
@@ -317,7 +317,8 @@ function renderLaterView() {
   const body = document.getElementById('later-body');
   if (!tabs || !body) return;
   const pending = later.reminders.filter((item) => !item.deliveredAt).length;
-  tabs.innerHTML = [['saved', `Saved (${later.saved.length})`], ['reminders', `Reminders (${pending})`]]
+  const scheduledCount = scheduledState().items.length;
+  tabs.innerHTML = [['saved', `Saved (${later.saved.length})`], ['reminders', `Reminders (${pending})`], ['scheduled', `Scheduled (${scheduledCount})`]]
     .map(([key, label]) => `<button type="button" class="activity-tab${later.tab === key ? ' active' : ''}" role="tab" aria-selected="${later.tab === key}" data-later-tab="${key}">${label}</button>`).join('');
 
   if (later.tab === 'saved') {
@@ -341,6 +342,12 @@ function renderLaterView() {
         <button class="btn" type="button" data-remove-saved="${item.id}">Remove</button>
       </div>`)).join('')
       : emptyRecordMarkup('Nothing saved yet', 'Use Save on a message or a file to keep it here. Only you can see this list.');
+    return;
+  }
+
+  if (later.tab === 'scheduled') {
+    body.classList.toggle('has-empty-record', scheduledCount === 0);
+    body.innerHTML = scheduledListHtml();
     return;
   }
 
@@ -373,6 +380,8 @@ async function handleLaterClick(event) {
     if (item) downloadFile(item.fileId, item.name);
     return;
   }
+  const cancelScheduled = event.target.closest('[data-cancel-scheduled]');
+  if (cancelScheduled) { await cancelScheduledMessage(cancelScheduled.dataset.cancelScheduled); return; }
   const cancelReminder = event.target.closest('[data-delete-reminder]');
   if (cancelReminder) {
     try {

@@ -6,55 +6,15 @@
 // ============================================================
 // Mentions: detection and rendering
 // ============================================================
-function isMentionBoundary(char) {
-  return char === undefined || !/[A-Za-z0-9_]/.test(char);
-}
-
-// Finds "@username" ranges for the given usernames. Longer names win, so
-// "@ann marie" is one mention rather than "@ann" followed by text.
-function findMentionRanges(text, usernames) {
-  if (typeof text !== 'string' || !text.includes('@')) return [];
-  const lower = text.toLowerCase();
-  const ranges = [];
-  const names = [...new Set(usernames.filter(Boolean))].sort((a, b) => b.length - a.length);
-  for (const name of names) {
-    const needle = `@${name.toLowerCase()}`;
-    let from = 0;
-    while (from < lower.length) {
-      const start = lower.indexOf(needle, from);
-      if (start === -1) break;
-      const end = start + needle.length;
-      const overlaps = ranges.some((range) => start < range.end && end > range.start);
-      if (isMentionBoundary(lower[start - 1]) && isMentionBoundary(lower[end]) && !overlaps) {
-        ranges.push({ start, end, username: name });
-      }
-      from = end;
-    }
-  }
-  return ranges.sort((a, b) => a.start - b.start);
-}
-
 function knownUsernames() {
   const names = (state.users || []).map((user) => user.username);
   if (state.user?.username) names.push(state.user.username);
   return names;
 }
 
-// Escaped message HTML with @mentions wrapped in highlight spans.
+// Message HTML: safe rich text with @mentions highlighted (see format.js).
 function formatMessageText(content) {
-  const text = String(content ?? '');
-  const ranges = findMentionRanges(text, knownUsernames());
-  if (!ranges.length) return escapeHtml(text);
-  const me = (state.user?.username || '').toLowerCase();
-  let html = '';
-  let cursor = 0;
-  for (const range of ranges) {
-    html += escapeHtml(text.slice(cursor, range.start));
-    const isMe = range.username.toLowerCase() === me;
-    html += `<span class="mention${isMe ? ' mention-me' : ''}">${escapeHtml(text.slice(range.start, range.end))}</span>`;
-    cursor = range.end;
-  }
-  return html + escapeHtml(text.slice(cursor));
+  return formatRichText(content, { usernames: knownUsernames(), me: state.user?.username || '' });
 }
 
 // ============================================================

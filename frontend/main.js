@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 
@@ -11,6 +11,20 @@ let loginWindow;
 // Remove the native application menu entirely. All menu functions are exposed
 // through the in-app hamburger menu instead.
 Menu.setApplicationMenu(null);
+
+// Links in messages open in the system browser. The app's own windows never
+// navigate away from their local page or open child windows.
+function confineNavigation(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url === win.webContents.getURL()) return;
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -33,6 +47,7 @@ function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
 
+  confineNavigation(mainWindow);
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
   mainWindow.once('ready-to-show', () => {
@@ -69,6 +84,7 @@ function createLoginWindow() {
 
   loginWindow.setMenuBarVisibility(false);
 
+  confineNavigation(loginWindow);
   loginWindow.loadFile(path.join(__dirname, 'src', 'login.html'));
 
   loginWindow.on('closed', () => {

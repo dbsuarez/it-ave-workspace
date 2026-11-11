@@ -308,3 +308,29 @@ CREATE TABLE IF NOT EXISTS invitations (
      used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );
+
+-- Scheduled messages, personal sidebar sections, and channel links
+CREATE TABLE IF NOT EXISTS scheduled_messages (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     channel_id INTEGER REFERENCES channels(id) ON DELETE CASCADE,
+     receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+     content TEXT NOT NULL,
+     send_at TIMESTAMP WITH TIME ZONE NOT NULL,
+     sent_at TIMESTAMP WITH TIME ZONE,
+     failed_at TIMESTAMP WITH TIME ZONE,
+     error VARCHAR(300),
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     CHECK ((channel_id IS NULL) <> (receiver_id IS NULL))
+   );
+CREATE INDEX IF NOT EXISTS idx_scheduled_messages_due ON scheduled_messages(send_at) WHERE sent_at IS NULL AND failed_at IS NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sidebar_layout JSONB NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS channel_links (
+     id SERIAL PRIMARY KEY,
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     title VARCHAR(120) NOT NULL,
+     url VARCHAR(2000) NOT NULL,
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );
+CREATE INDEX IF NOT EXISTS idx_channel_links_channel ON channel_links(channel_id, created_at);

@@ -3507,3 +3507,211 @@ body.account-guest [data-create="channel"] {
 .admin-user-row small {
   color: var(--text-muted);
 }
+
+/* ============================================================
+   Rich text in messages
+   ============================================================ */
+.message-text .message-code {
+  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
+  font-size: 12.5px;
+  background: rgba(127, 127, 127, 0.16);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.message-text .message-code-block {
+  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
+  font-size: 12.5px;
+  background: rgba(127, 127, 127, 0.16);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.message-text .message-quote {
+  border-left: 3px solid var(--purple-light);
+  padding-left: 10px;
+  margin: 2px 0;
+  opacity: 0.9;
+}
+
+.message-text .message-list {
+  margin: 2px 0;
+  padding-left: 22px;
+  white-space: normal;
+}
+
+.message-text .message-link {
+  color: var(--accent);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.message.own .message-text .message-link {
+  color: #fff;
+}
+
+.message.own .message-text .message-quote {
+  border-left-color: rgba(255, 255, 255, 0.7);
+}
+
+/* ============================================================
+   Scheduled messages, sidebar sections, channel tabs
+   ============================================================ */
+.schedule-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+}
+
+.schedule-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 6px 0 14px;
+  font-size: 13.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.later-item.failed {
+  border-color: var(--danger);
+}
+
+.later-item-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.nav-label-btn-text {
+  width: auto;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+#pane-home.has-sections > .nav-label {
+  padding-bottom: 0;
+}
+
+.nav-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.nav-section-label:hover {
+  color: #fff;
+}
+
+.nav-section-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-modal-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.sidebar-section-row,
+.sidebar-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sidebar-section-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-channel-row span {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-channel-row select {
+  width: 200px;
+}
+
+.channel-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.channel-tab {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.channel-tab:hover {
+  color: var(--text);
+}
+
+.channel-tab.active {
+  color: var(--purple);
+  border-bottom-color: var(--purple);
+}
+
+body.theme-dark .channel-tab.active {
+  color: var(--purple-light);
+  border-bottom-color: var(--purple-light);
+}
+
+.channel-resources {
+  padding-top: 16px;
+}
+
+#view-channel.showing-resources > .messages,
+#view-channel.showing-resources > .input-area {
+  display: none;
+}
+
+.channel-link-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.channel-link-form input[name="title"] {
+  flex: 1 1 30%;
+  min-width: 0;
+}
+
+.channel-link-form input[name="url"] {
+  flex: 2 1 50%;
+  min-width: 0;
+}
