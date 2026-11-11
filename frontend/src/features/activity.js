@@ -72,7 +72,7 @@ function renderMentionPicker() {
   popup.innerHTML = mentionPicker.items.map((member, index) => `
     <div class="mention-option${index === mentionPicker.index ? ' active' : ''}" role="option"
       aria-selected="${index === mentionPicker.index}" data-mention-index="${index}">
-      <span class="avatar-mini" style="background:${escapeHtml(member.avatarColor || '#A855F7')};">${escapeHtml(member.username.charAt(0).toUpperCase())}</span>
+      <span class="avatar-mini" style="background:${escapeHtml(member.avatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(member.id ?? member.userId ?? ''))}">${escapeHtml(member.username.charAt(0).toUpperCase())}</span>
       <span class="mention-option-name">${escapeHtml(member.username)}</span>
       ${member.role === 'moderator' || member.isGroup ? `<span class="mention-option-role">${escapeHtml(member.role)}</span>` : ''}
     </div>`).join('');
@@ -243,7 +243,7 @@ function renderActivityFeed() {
   }
   feed.innerHTML = items.map((item, index) => `
     <button type="button" class="activity-item${item.unseen ? ' unseen' : ''}" data-activity-index="${activity.items.indexOf(item)}">
-      <span class="avatar-mini" style="background:${escapeHtml(item.actorAvatarColor || '#A855F7')};">${escapeHtml((item.actorUsername || '?').charAt(0).toUpperCase())}</span>
+      <span class="avatar-mini" style="background:${escapeHtml(item.actorAvatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(item.actorId ?? ''))}">${escapeHtml((item.actorUsername || '?').charAt(0).toUpperCase())}</span>
       <span class="activity-item-body">
         <span class="activity-item-title">${activitySentence(item)}</span>
         <span class="activity-item-preview">${escapeHtml(item.preview || 'Attachment')}</span>

@@ -55,6 +55,7 @@ router.put('/me/photo', authenticateToken, (req, res) => {
         [req.file.filename, req.user.userId]
       );
       if (previous && previous.photo_file && previous.photo_file !== req.file.filename) await removeStoredPhoto(previous.photo_file);
+      req.io?.emit('user_photo_updated', { userId: Number(req.user.userId), photoVersion: photoVersion(saved.rows[0]) });
       res.json({ photoVersion: photoVersion(saved.rows[0]) });
     } catch (uploadErr) {
       await discard();
@@ -69,6 +70,7 @@ router.delete('/me/photo', authenticateToken, async (req, res) => {
     const previous = (await query('SELECT photo_file FROM users WHERE id = $1', [req.user.userId])).rows[0];
     await query('UPDATE users SET photo_file = NULL, photo_updated_at = NULL WHERE id = $1', [req.user.userId]);
     if (previous) await removeStoredPhoto(previous.photo_file);
+    req.io?.emit('user_photo_updated', { userId: Number(req.user.userId), photoVersion: null });
     res.json({ photoVersion: null });
   } catch (err) {
     console.error('Remove profile photo error:', err);

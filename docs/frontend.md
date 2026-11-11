@@ -189,8 +189,13 @@ answer, declining, or 60 seconds stops the ringing. Guests can only call people 
 
 Profile has an **Upload photo** button. The picture is cropped to a square and shrunk to 256 px in the
 app, then uploaded (PNG or JPEG, 2 MB at most). Photos are fetched with the signed-in request and cached
-as blob URLs per person and version (`features/profile-photo.js`); they show on your avatar, in Profile and
-on mention cards, and are included in PDF and Word exports of a card.
+as blob URLs per person and version (`features/profile-photo.js`). They show everywhere an avatar is drawn:
+chat messages, read receipts, saved items, the Activity feed, the mention picker, the direct message list
+(with a presence dot), huddle participants, profile popups, People pages, mention cards, and your own avatar.
+One painter does this (`paintAvatarElement`): any element with `data-avatar-user` (or `data-user-id` on the
+older avatar classes) gets its person's photo, including avatars drawn later. When someone sets or removes
+their photo the server sends `user_photo_updated`, so every open client updates at once. Photos are also
+included in PDF and Word exports of a profile card.
 
 ## Canvas: export
 

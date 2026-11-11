@@ -942,6 +942,7 @@ function connectSocket() {
     }
   });
 
+  state.socket.on('user_photo_updated', handleUserPhotoUpdated);
   state.socket.on('huddle:joined', handleHuddleJoined);
   state.socket.on('huddle:invite', handleHuddleInvite);
   state.socket.on('huddle:invite-cancelled', handleHuddleInviteCancelled);
@@ -1555,6 +1556,7 @@ async function loadUsers() {
     if (!res.ok) throw new Error(data.error || 'Failed to load users');
 
     state.users = data.users;
+    if (typeof repaintAllAvatars === 'function') repaintAllAvatars();
     state.usersLoaded = true;
     state.dms = data.users.filter(u => u.id !== state.user.id);
     renderDmList();
@@ -1609,7 +1611,7 @@ function renderDmList() {
     const color = presenceColor(dm.status);
     const slabel = presenceLabel(dm.status);
     item.innerHTML = `
-      <div class="dot" style="background:${color};" title="${escapeHtml(slabel)}"></div>
+      <span class="nav-avatar" style="background:${escapeHtml(dm.avatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(dm.id))}">${escapeHtml((dm.username || '?').charAt(0).toUpperCase())}<span class="nav-avatar-dot" style="background:${color};" title="${escapeHtml(slabel)}"></span></span>
       <span>${escapeHtml(dm.username)}</span>${userStatusMarkup(dm)}
       <span style="margin-left:auto; font-size:11px; opacity:0.6;">${escapeHtml(slabel)}</span>
     `;
@@ -2876,6 +2878,7 @@ function renderHuddleParticipants() {
     const avatar = document.createElement('span');
     avatar.className = 'huddle-participant-avatar';
     avatar.textContent = (participant.username || 'U').charAt(0).toUpperCase();
+    if (participant.id !== undefined && participant.id !== null) avatar.dataset.avatarUser = String(participant.id);
     const name = document.createElement('span');
     name.textContent = participant.peerId === state.socket?.id
       ? `${participant.username} (you)`
@@ -3314,6 +3317,10 @@ async function showUserProfile(userId) {
     if (els.userProfileAvatar) {
       els.userProfileAvatar.textContent = (u.username || 'U').charAt(0).toUpperCase();
       els.userProfileAvatar.style.background = u.avatarColor || '#A855F7';
+      els.userProfileAvatar.style.backgroundImage = '';
+      els.userProfileAvatar.dataset.avatarUser = String(u.id);
+      delete els.userProfileAvatar.dataset.photoPainted;
+      paintAvatarElement(els.userProfileAvatar);
     }
     if (els.userProfileName) els.userProfileName.textContent = u.username || 'User';
     if (els.userProfileDot) els.userProfileDot.className = `user-profile-dot ${u.status || 'offline'}`;

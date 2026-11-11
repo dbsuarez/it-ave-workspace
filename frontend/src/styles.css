@@ -6632,3 +6632,39 @@ h4.cv-h { font-size: 15px; }
   min-height: 0;
   padding: 36px 8px;
 }
+
+/* avatars in the direct message list */
+.nav-avatar {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  background-size: cover;
+  background-position: center;
+}
+
+.nav-avatar-dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #2a0d36;
+  border-radius: 50%;
+}
+
+.avatar-mini.has-photo,
+.read-receipt-avatar.has-photo,
+.huddle-participant-avatar.has-photo,
+.nav-avatar.has-photo {
+  background-size: cover;
+  background-position: center;
+  color: transparent;
+}

@@ -43,13 +43,83 @@ async function paintAvatar(element, person, fallbackText) {
     element.style.backgroundImage = `url("${url}")`;
     element.style.backgroundSize = 'cover';
     element.style.backgroundPosition = 'center';
-    element.textContent = '';
+    // drop the initial but keep any child element (the presence dot on a list avatar)
+    Array.from(element.childNodes).forEach((node) => { if (node.nodeType === 3) node.remove(); });
     element.classList.add('has-photo');
   } else {
     element.style.backgroundImage = '';
     element.classList.remove('has-photo');
     if (fallbackText !== undefined) element.textContent = fallbackText;
   }
+}
+
+// ---- one painter for every avatar in the app ----------------------------------------------------
+// An avatar element names its person with data-avatar-user (or the older data-user-id on .avatar-mini and
+// .read-receipt-avatar). Whenever one appears, or the people list changes, the person's photo replaces the
+// colored initial. People without a photo keep the initial.
+const AVATAR_SELECTOR = '[data-avatar-user], .avatar-mini[data-user-id], .read-receipt-avatar[data-user-id]';
+
+function personForPhoto(id) {
+  if (state.user && Number(state.user.id) === Number(id)) return state.user;
+  return (state.users || []).find((user) => Number(user.id) === Number(id)) || null;
+}
+
+function paintAvatarElement(element) {
+  const id = Number(element.dataset.avatarUser || element.dataset.userId);
+  if (!Number.isSafeInteger(id) || id < 1) return;
+  const person = personForPhoto(id);
+  if (person && !person.photoVersion && element.classList.contains('has-photo')) {
+    // their photo was removed: back to the initial on their color
+    element.style.backgroundImage = '';
+    element.classList.remove('has-photo');
+    delete element.dataset.photoPainted;
+    element.prepend(document.createTextNode((person.username || '?').charAt(0).toUpperCase()));
+    return;
+  }
+  if (!person || !person.photoVersion) return;
+  if (element.dataset.photoPainted === String(person.photoVersion)) return;
+  element.dataset.photoPainted = String(person.photoVersion);
+  paintAvatar(element, person);
+}
+
+function paintAvatarsIn(root) {
+  if (root.matches && root.matches(AVATAR_SELECTOR)) paintAvatarElement(root);
+  if (root.querySelectorAll) root.querySelectorAll(AVATAR_SELECTOR).forEach(paintAvatarElement);
+}
+
+// After the people list loads or someone changes their photo: paint everything on screen again.
+function repaintAllAvatars() {
+  document.querySelectorAll(AVATAR_SELECTOR).forEach((element) => {
+    delete element.dataset.photoPainted;
+    paintAvatarElement(element);
+  });
+  paintOwnAvatar();
+}
+
+// Someone (maybe me, on another computer) changed their photo.
+function handleUserPhotoUpdated(event) {
+  if (!event) return;
+  const person = personForPhoto(event.userId);
+  if (person) person.photoVersion = event.photoVersion || null;
+  repaintAllAvatars();
+}
+
+if (typeof document !== 'undefined' && typeof MutationObserver === 'function') {
+  const pendingAvatarNodes = new Set();
+  let avatarPaintScheduled = false;
+  new MutationObserver((records) => {
+    for (const record of records) {
+      record.addedNodes.forEach((node) => { if (node.nodeType === 1) pendingAvatarNodes.add(node); });
+    }
+    if (avatarPaintScheduled || pendingAvatarNodes.size === 0) return;
+    avatarPaintScheduled = true;
+    requestAnimationFrame(() => {
+      avatarPaintScheduled = false;
+      const nodes = Array.from(pendingAvatarNodes);
+      pendingAvatarNodes.clear();
+      nodes.forEach(paintAvatarsIn);
+    });
+  }).observe(document.body, { childList: true, subtree: true });
 }
 
 function paintOwnAvatar() {
