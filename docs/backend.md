@@ -116,6 +116,39 @@ including on channel-room joins, message sends, replies, channel timeouts, and s
 | POST | `/api/users/heartbeat` | Presence keepalive (sets status online) |
 | GET | `/api/users/:id/direct-messages` | Get DMs with a user |
 
+### Added in Phase 6
+
+| Area | Endpoints |
+|------|-----------|
+| Activity | `GET /api/activity`, `POST /api/activity/seen` |
+| Channel members and links | `GET /api/channels/:id/members`, `GET|POST /api/channels/:id/links`, `DELETE /api/channels/:id/links/:linkId` |
+| Settings | `GET|PUT /api/settings` (notifications, Do Not Disturb, status), `GET|PUT /api/settings/sidebar` |
+| Group messages | `GET|POST /api/conversations`, `GET /:id/messages`, `POST /:id/read`, `PATCH /:id`, `POST /:id/members`, `DELETE /:id/members/:userId` |
+| Own messages | `PATCH /api/messages/:id`, `DELETE /api/messages/:id`, `GET /api/messages/:id/edits` |
+| Saved items | `GET|POST /api/saved`, `DELETE /api/saved/:id` |
+| Reminders | `GET|POST /api/reminders`, `DELETE /api/reminders/:id` |
+| Scheduled messages | `GET|POST /api/scheduled`, `DELETE /api/scheduled/:id` |
+| Administration (Superadmin) | `GET /api/admin/users`, `PATCH /api/admin/users/:id`, `GET|POST /api/admin/invitations`, `DELETE /api/admin/invitations/:id`, `PUT /api/admin/registration` |
+| Public sign-up helpers | `GET /api/admin/registration`, `GET /api/admin/invitations/lookup?code=` |
+| User groups | `GET /api/user-groups` (everyone); `POST`, `DELETE /:id`, `PUT|DELETE /:id/members/:userId` (Superadmin) |
+| Webhooks | `GET|POST /api/webhooks`, `DELETE /api/webhooks/:id` (channel moderators); `POST /api/hooks/:token` (public, `{"text": "..."}`, 30 per minute) |
+
+`POST /api/auth/register` accepts an optional `inviteCode`, required when sign-up is
+invitation-only.
+
+Guests (`users.account_type = 'guest'`) cannot create or join channels or start group messages,
+only see the channels they belong to and the people in them, and can only exchange direct
+messages with people who share a channel.
+
+New socket events, server to client: `activity`, `channel_activity`, `message_updated`,
+`message_reactions_updated`, `new_group_message`, `conversation_updated`, `conversation_removed`,
+`user_status_updated`, `reminder_due`, `scheduled_message_sent`, `scheduled_message_failed`,
+`channel_links_updated`, `user_groups_updated`, `account_updated`, `huddle:media-state`.
+Client to server: `send_group_message`, `huddle:media-state`.
+
+Two background runners start with the server and check every 15 seconds: reminders
+(`routes/reminders.js`) and scheduled messages (`routes/scheduled.js`).
+
 ### Socket.io Events
 
 | Event | Direction | Description |

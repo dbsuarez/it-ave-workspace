@@ -15,6 +15,7 @@ Project root: `D:\Development\itavenue-workspace`
 | Phase 3 | Rich features: Files, Notes, Lists, unread counts, presence, read receipts, audio Huddle, Canvas | Done; desktop flows verified live 2026-11-11. Huddle verified between two clients with a simulated microphone, including relay-only through a TURN server; real-microphone validation on two devices pending |
 | Phase 4 | Deployment to Hostinger KVM (domain + TLS + build + installers) | Not started |
 | Phase 5 | Channel roles, moderation, reports, and audit trail | Implemented; channel-moderator and Superadmin flows verified live 2026-11-11 |
+| Phase 6 | Slack-style collaboration features (mentions, activity, notifications, group messages, edit/delete, saved items, reminders, guests and invitations, scheduling, rich text, sidebar sections, channel tabs, user groups, webhooks, Huddle video and screen sharing) | Implemented and verified live 2026-11-11; see "Phase 6 features" |
 
 ## Implemented and verified
 
@@ -180,6 +181,44 @@ Not verified:
 - A production TURN service on a real restrictive network (only a local coturn was tested)
 - The NSIS installer (`npm run dist`); only the unpacked build was run
 
+## Phase 6 features (2026-11-11)
+
+Built from [slack-help-feature-gaps.md](./slack-help-feature-gaps.md). Each item was exercised in
+the real Electron app with two or three signed-in clients against the Docker backend; temporary
+accounts and data were removed afterwards. Backend tests: 61 pass. Desktop formatter tests: 7 pass.
+
+- **Mentions and Activity**: `@` picker in the composer, highlighted mentions, and an Activity feed
+  (All / Mentions / Replies / Reactions / Unread channels) with unseen markers and jump-to-message.
+- **Notifications**: per-account preferences, Do Not Disturb, desktop notifications when the window
+  is in the background, and live unread counts for channels that are not open.
+- **Custom status**: emoji and text, visible to everyone, with a "paused" marker during
+  Do Not Disturb.
+- **Group messages**: 3 to 9 people, with rename, add, leave, and unread counts. Text only.
+- **Own messages**: edit (with stored history and an "(edited)" marker) and delete. Channel
+  messages only.
+- **Later**: privately saved messages and files, reminders (free text or linked to a message), and
+  scheduled messages.
+- **Guests and invitations**: guest accounts limited to their channels and the people in them;
+  single-use invitation codes; open or invitation-only sign-up; member/guest and Superadmin
+  administration.
+- **Rich text**: bold, italic, strikethrough, inline code, code blocks, quotes, lists, and links
+  that open in the system browser.
+- **Sidebar sections**: personal, named, ordered, collapsible sections for channels.
+- **Channel tabs**: Messages, Pins, Files, Canvases, Lists, and shared Links.
+- **User groups**: `@handle` groups managed by Superadmins.
+- **Incoming webhooks**: a secret address per channel that posts `{"text": "..."}` as a named app.
+- **Huddle**: camera video and screen sharing (primary screen), alongside audio.
+- **Chat layout**: bubbles, with your own messages on the right; message actions are a hover
+  toolbar.
+
+Not built, by choice or for later:
+
+- Editing and deleting direct messages; attachments in group messages
+- A workflow builder or app directory (only incoming webhooks exist)
+- Switching between multiple workspaces from one client
+- Per-message read receipts
+- Choosing a window instead of the whole primary screen when screen sharing
+
 ## Planned remaining work
 
 Priority order, by user-visible value:
@@ -210,8 +249,12 @@ local TURN server, but not yet with real microphones on two devices.
 
 - The backend container does not mount source; run `docker compose up -d --build backend` after
   backend changes or the app runs stale code.
-- `renderer.js` is still one large classic script, so its top-level names are page globals. The
-  build check (below) guards the known ways that breaks.
+- `renderer.js` and the files in `frontend/src/features` are classic scripts that share one global
+  scope. The build check (below) guards the known ways that breaks, including duplicate names.
+- Rebuild the backend image from PowerShell (`docker compose up -d --build backend`). From Git
+  Bash the build can fail silently and leave the old container running.
+- With many rail sections, labels are hidden in windows shorter than 740 px so every section stays
+  reachable.
 
 ## Hardening done (2026-11-11)
 

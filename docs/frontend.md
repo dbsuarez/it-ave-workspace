@@ -21,6 +21,17 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 │   ├── index.html       # Main chat window shell (rail, pane, menus, views)
 │   ├── login.html       # Login/register screen with its own title bar
 │   ├── renderer.js      # Main UI logic + Socket.io client
+│   ├── features/        # Feature scripts loaded before renderer.js (functions only)
+│   │   ├── format.js        # Safe rich text for messages (tested in test/format.test.js)
+│   │   ├── activity.js      # @mentions and the Activity feed
+│   │   ├── notifications.js # Notification preferences, Do Not Disturb, status, unread counts
+│   │   ├── groups.js        # Group direct messages
+│   │   ├── later.js         # Edit/delete own messages, saved items, reminders, Later view
+│   │   ├── admin.js         # Guests, invitations, workspace member administration
+│   │   ├── workspace.js     # Scheduled messages, sidebar sections, channel tabs
+│   │   ├── huddleVideo.js   # Camera and screen sharing in Huddle
+│   │   └── integrations.js  # User groups and incoming webhooks
+│   ├── vendor/          # socket.io client and Lato fonts (npm run vendor refreshes them)
 │   ├── login.js         # Login/register logic + window controls
 │   ├── styles.css       # Theme, rail, pane, menus, responsive rules
 │   └── assets/          # App icon variants (icon.png, icon.ico, icon-purple, icon-white)

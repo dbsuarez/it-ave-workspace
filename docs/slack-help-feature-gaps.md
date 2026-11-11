@@ -47,6 +47,29 @@ self-hosted project.
 | Lower | **Integrations and workflow automation** | No app directory, integration framework, or workflow builder was found | Add webhook/integration support or lightweight automations if the product needs them. |
 | Lower | **Workspace discovery and multiple workspaces** | The client connects to one configured backend/workspace | Consider workspace switching/discovery only if users need to participate in multiple deployments. |
 
+## Status after Phase 6 (2026-11-11)
+
+| Gap | Status |
+|---|---|
+| Mentions | Done, including user-group mentions |
+| Activity feed | Done |
+| Notification preferences | Done, with Do Not Disturb and desktop notifications |
+| Group direct messages | Done (text only) |
+| Save messages/files for later | Done |
+| Edit or delete your own messages | Done for channel messages; not for direct messages |
+| Guest / restricted member roles | Done as one guest type with a channel allowlist |
+| Reminders | Done |
+| Schedule a message for later | Done for channels and one-to-one messages |
+| Rich message formatting | Done (typed Markdown-style syntax; no toolbar) |
+| Custom sidebar sections | Done |
+| Conversation tabs and shared resources | Done for channels with fixed tabs; not configurable and not for direct messages |
+| User groups | Done |
+| Workspace invitations and member onboarding | Done (invitation codes, invitation-only sign-up) |
+| Manual status and pause notifications | Done |
+| Video and screen sharing in calls | Done (camera, and the primary screen); six-person mesh unchanged |
+| Integrations and workflow automation | Incoming webhooks only; no app directory or workflow builder |
+| Workspace discovery and multiple workspaces | Not built |
+
 ## Existing capabilities that already overlap
 
 The app already has channels, one-to-one DMs, file sharing, search, pins,

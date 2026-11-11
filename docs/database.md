@@ -24,6 +24,23 @@ The `init.sql` file creates:
 - **channel_timeouts** - Expiring channel-scoped user timeouts
 - **message_reports** - User reports and moderator resolution state
 - **moderation_audit_log** - Append-only record of moderation actions
+- **message_mentions** - Who was mentioned in which channel message
+- **message_edits** - Earlier versions of edited messages
+- **conversations**, **conversation_members**, **conversation_messages** - Group direct messages
+- **saved_items** - Per-user saved messages and files
+- **reminders** - Per-user reminders, optionally linked to a message
+- **scheduled_messages** - Messages waiting to be sent to a channel or a person
+- **invitations** - Single-use sign-up codes (stored as hashes) with account type and channels
+- **channel_links** - Shared web links shown in a channel's Links tab
+- **user_groups**, **user_group_members** - Mentionable groups of people
+- **webhooks** - Incoming webhook addresses (stored as hashes) and their bot accounts
+
+Added columns: `users.account_type` (`member`, `guest`, or `bot`), `users.notification_prefs`,
+`users.dnd_until`, `users.status_text`, `users.status_emoji`, `users.activity_seen_at`,
+`users.sidebar_layout`, and `moderation_settings.registration_mode` (`open` or `invite`).
+
+New schema is defined once in `backend/src/migrations.js` (applied at startup, idempotent) and
+repeated at the end of `init.sql` for fresh databases.
 
 ## Seed Data
 
