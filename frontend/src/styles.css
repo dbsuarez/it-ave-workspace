@@ -4397,6 +4397,8 @@ body.theme-dark .huddle-btn.media.active {
 
 .canvas-sheet-editor {
   flex: 1;
+  max-height: none; /* the global textarea rule caps chat inputs at 110px */
+  border-radius: 0;
   background: var(--surface);
   border: none;
   padding: 16px 18px;
@@ -4535,6 +4537,8 @@ body.theme-dark .huddle-btn.media.active {
 
 .canvas2-editor {
   flex: 1;
+  max-height: none; /* the global textarea rule caps chat inputs at 110px */
+  border-radius: 0;
   resize: none;
   border: none;
   outline: none;
