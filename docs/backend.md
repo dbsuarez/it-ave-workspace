@@ -136,6 +136,12 @@ someone else, or after a minute, is a new entry. A failure to record history nev
 | GET | `/api/canvas/:id/revisions/:revision` | One version with its text (viewer access) |
 | POST | `/api/canvas/:id/revisions/:revision/restore` | Make it current as a NEW version, optional `baseRevision` (editor access). A restore always gets its own entry, so the version it replaces can be restored again |
 
+**Images.** `POST /api/canvas/:id/images` (multipart field `file`, editor access) stores a PNG, JPG,
+GIF or WebP (not SVG) of up to 10 MB, content-checked like chat uploads, at most 50 per canvas. It
+returns `{ fileId, name, size, mimeType }`; the canvas text refers to it as `![name](file:<fileId>)`.
+The picture is a `files` row with `canvas_id` set, so `GET /api/files/:id/download` serves it to anyone
+who can read the canvas and to nobody else. Deleting the canvas deletes its images (rows and files).
+
 `GET /api/canvas/:id/sections?full=true` also returns each section's text, which is what the reading
 view renders.
 

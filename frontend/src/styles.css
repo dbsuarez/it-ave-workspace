@@ -5381,3 +5381,29 @@ h4.cv-h { font-size: 15px; }
 .canvas-toolbar-toggle.active {
   border-color: var(--purple);
 }
+
+/* Canvas images */
+.cv-image {
+  margin: 4px 0 12px;
+}
+
+.cv-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted-bg);
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.cv-image figcaption {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cv-image-missing img {
+  padding: 16px;
+}

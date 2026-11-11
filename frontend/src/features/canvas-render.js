@@ -76,6 +76,28 @@ function cvCalloutHtml(match, text, ctx) {
   return `<div class="cv-callout cv-callout-${kind}" role="note"><span class="cv-callout-icon" aria-hidden="true">${CV_CALLOUT_ICON[kind]}</span><div><strong class="cv-callout-title">${cvInline(title, ctx)}</strong>${body ? `<div class="cv-callout-body">${body}</div>` : ''}</div></div>`;
 }
 
+// A line that is only ![name](file:<id>) is a picture stored with the canvas. The <img> is filled in by
+// canvas-view.js (it needs the signed-in request), so no URL is ever put in the page here.
+const CV_IMAGE = /^!\[([^\]\n]{0,200})\]\(file:(\d{1,10})\)$/;
+
+function cvParagraphHtml(text, ctx) {
+  const parts = [];
+  let run = [];
+  const flush = () => { if (run.length) { parts.push(`<p>${run.join('<br>')}</p>`); run = []; } };
+  for (const line of text.split('\n')) {
+    const image = CV_IMAGE.exec(line.trim());
+    if (image) {
+      flush();
+      const alt = cvFormat.escape(image[1]);
+      parts.push(`<figure class="cv-image"><img data-cv-file="${image[2]}" alt="${alt}"><figcaption>${alt}</figcaption></figure>`);
+    } else {
+      run.push(cvInline(line, ctx));
+    }
+  }
+  flush();
+  return parts.join('');
+}
+
 // One section -> HTML. `section` is { id, type, text } from GET /api/canvas/:id/sections?full=true.
 function renderCanvasSection(section, ctx = {}) {
   const text = String(section.text || '');
@@ -97,7 +119,7 @@ function renderCanvasSection(section, ctx = {}) {
       break;
     }
     case 'list': html = cvFormat.block(text, ctx); break;
-    default: html = `<p>${text.split('\n').map((line) => cvInline(line, ctx)).join('<br>')}</p>`;
+    default: html = cvParagraphHtml(text, ctx);
   }
   return `<div class="cv-block cv-${cvFormat.escape(section.type)}" data-section-id="${cvFormat.escape(section.id)}">${html}</div>`;
 }
@@ -108,5 +130,5 @@ function renderCanvasSections(sections, ctx = {}) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { renderCanvasSection, renderCanvasSections };
+  module.exports = { renderCanvasSection, renderCanvasSections, CV_IMAGE };
 }

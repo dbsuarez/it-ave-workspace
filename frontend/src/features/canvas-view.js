@@ -36,6 +36,27 @@ const canvasViews = {
 
 const cvwSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Pictures live behind the sign-in, so they are fetched with the token and shown from a blob URL.
+const cvwImageUrls = new Map(); // file id -> blob URL (kept while the app runs; they are small)
+
+async function cvwLoadImages(container) {
+  const images = Array.from(container.querySelectorAll('img[data-cv-file]'));
+  await Promise.all(images.map(async (img) => {
+    const fileId = img.dataset.cvFile;
+    try {
+      if (!cvwImageUrls.has(fileId)) {
+        const res = await fetch(`${API_BASE}/api/files/${fileId}/download`, { headers: { Authorization: `Bearer ${state.token}` } });
+        if (!res.ok) throw new Error('missing');
+        cvwImageUrls.set(fileId, URL.createObjectURL(await res.blob()));
+      }
+      img.src = cvwImageUrls.get(fileId);
+    } catch (err) {
+      img.closest('figure')?.classList.add('cv-image-missing');
+      img.alt = 'Image unavailable';
+    }
+  }));
+}
+
 // Called by renderer.js when a canvas has just been opened in one of the editors.
 function canvasViewOpened(which, { canEdit, hasContent }) {
   const view = canvasViews[which];
@@ -90,6 +111,7 @@ async function cvwShow(which, mode) {
     });
     editor.hidden = true;
     container.hidden = false;
+    cvwLoadImages(container);
   } catch (err) {
     console.error('Canvas read view error:', err);
     showToast(err.message || 'Could not show the canvas.', 'error');

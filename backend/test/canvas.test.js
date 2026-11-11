@@ -137,6 +137,7 @@ const API = () => (sql, params = []) => {
     return { rows: [canvas] };
   }
   if (sql.includes('canvas_revisions')) return { rows: [] };
+  if (sql.includes('FROM files WHERE canvas_id')) return { rows: [] };
   if (sql.includes('FROM canvases WHERE id = $1')) {
     const canvas = canvases.get(Number(params[0]));
     return { rows: canvas ? [canvas] : [] };

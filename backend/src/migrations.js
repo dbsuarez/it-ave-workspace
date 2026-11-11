@@ -142,6 +142,10 @@ module.exports = [
   // Guests are not part of group messages (see routes/conversations.js)
   "DELETE FROM conversation_members WHERE user_id IN (SELECT id FROM users WHERE account_type = 'guest')",
 
+  // Images inside a canvas are files that belong to the canvas (deleted with it)
+  'ALTER TABLE files ADD COLUMN IF NOT EXISTS canvas_id INTEGER REFERENCES canvases(id) ON DELETE CASCADE',
+  'CREATE INDEX IF NOT EXISTS idx_files_canvas_id ON files(canvas_id)',
+
   // Canvas revisions: every save bumps the number; clients send it back so a stale save is refused
   'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1',
 

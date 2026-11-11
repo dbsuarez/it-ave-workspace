@@ -87,6 +87,22 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | Moderation | ✅ Channel-scoped roles, timeout policy, timeouts, slow mode, reports, message and attachment removal, and audit log |
 | Auto-updater | ⏳ Planned |
 
+## Canvas: writing helpers
+
+Both canvas editors (`features/canvas-slash.js`) help with Markdown without hiding it:
+
+- **Slash menu.** Type `/` at the start of a line: headings (`/h1` to `/h3`), `/text`, `/list`,
+  `/numbered`, `/todo`, `/quote`, callouts (`/info`, `/tip`, `/warning`, `/danger`), `/table`,
+  `/image`, `/code`, `/divider`, `/date`, `/mention`. Arrow keys and Enter pick; Esc closes.
+  `/h1 My title` then Enter writes `# My title` in one go.
+- **Lists.** Enter at the end of a list item continues the list; Enter on an empty item ends it.
+- **Shortcuts.** Ctrl+B bold, Ctrl+I italic, Ctrl+K link.
+- **Toolbar.** Buttons for the same things, shown in Edit mode. The **Aa** button next to Read turns it
+  on or off; the choice is remembered on that computer.
+- **Images.** `/image` or the toolbar's Image button asks for a picture, uploads it to the canvas and
+  inserts `![name](file:<id>)` as its own block. The reading view fetches each picture with the
+  signed-in request and shows it from a blob URL; there is never a public URL.
+
 ## Canvas: Read, Edit and History
 
 Both canvas editors (the channel/DM sheet and the personal canvas manager) have a **Read / Edit**

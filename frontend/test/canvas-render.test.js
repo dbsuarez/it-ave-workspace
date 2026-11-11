@@ -73,3 +73,13 @@ test('an empty canvas explains itself, and sections keep their id and type as ho
   assert.ok(html.includes('data-section-id="0-aa"') && html.includes('cv-heading'));
   assert.ok(html.includes('data-section-id="1-bb"') && html.includes('cv-paragraph'));
 });
+
+test('a picture line becomes a figure with no URL in the page', () => {
+  const html = render('paragraph', '![A <b>cat</b>](file:12)');
+  assert.match(html, /<figure class="cv-image"><img data-cv-file="12" alt="A &lt;b&gt;cat&lt;\/b&gt;">/);
+  assert.doesNotMatch(html, /src=/, 'the image is loaded by the app with the sign-in');
+  const mixed = render('paragraph', 'before\n![x](file:3)\nafter');
+  assert.match(mixed, /<p>before<\/p><figure[^>]*>.*<\/figure><p>after<\/p>/);
+  assert.doesNotMatch(render('paragraph', '![x](https://evil.test/a.png)'), /<img/, 'only canvas files, never outside links');
+  assert.doesNotMatch(render('paragraph', '![x](file:1) trailing'), /<figure/, 'it must be a line of its own');
+});

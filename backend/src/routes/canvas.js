@@ -1,5 +1,8 @@
 const express = require('express');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
@@ -9,6 +12,31 @@ const {
 } = require('../security');
 const { ensureNotGuest } = require('../guests');
 const { describeSections, applyOperation } = require('../canvasSections');
+const config = require('../config');
+const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
+
+// Images inside a canvas: pictures only (SVG is left out: it can carry script), a cap per canvas.
+const CANVAS_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
+const MAX_IMAGES_PER_CANVAS = 50;
+const MAX_IMAGE_MB = Math.min(config.MAX_FILE_SIZE_MB, 10);
+
+const imageUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(config.UPLOAD_DIR, { recursive: true });
+      cb(null, config.UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${file.originalname}`),
+  }),
+  limits: { fileSize: MAX_IMAGE_MB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = (/\.([A-Za-z0-9]+)$/.exec(file.originalname || '') || [])[1];
+    if (!ext || !CANVAS_IMAGE_EXTENSIONS.has(ext.toLowerCase())) {
+      return cb(new Error('Only PNG, JPG, GIF or WebP images can be added to a canvas'));
+    }
+    cb(null, true);
+  },
+});
 
 const MAX_CONTENT_LENGTH = 100000;
 const MAX_TITLE_LENGTH = 160;
@@ -354,6 +382,49 @@ router.patch('/:canvasId', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/canvas/:id - delete; owner only for standalone, creator or mod/superadmin for others
+// Upload an image to put inside this canvas (editor access). The text of the canvas refers to it as
+// ![name](file:<id>); readers fetch it from /api/files/<id>/download, which follows the canvas's access.
+router.post('/:canvasId/images', authenticateToken, async (req, res) => {
+  const canvasId = parseId(req.params.canvasId);
+  if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+  try {
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'Server error' });
+  }
+  imageUpload.single('file')(req, res, async (err) => {
+    if (err) {
+      const tooBig = err.code === 'LIMIT_FILE_SIZE';
+      return res.status(400).json({ error: tooBig ? `Images can be at most ${MAX_IMAGE_MB}MB` : (err.message || 'Invalid image upload') });
+    }
+    const discard = () => (req.file ? fs.promises.unlink(req.file.path).catch(() => {}) : Promise.resolve());
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+      const contentError = await checkUploadedFile(req.file.path, req.file.originalname);
+      if (contentError) {
+        await discard();
+        return res.status(400).json({ error: contentError });
+      }
+      const count = await query('SELECT COUNT(*) AS n FROM files WHERE canvas_id = $1', [canvasId]);
+      if (Number(count.rows[0].n) >= MAX_IMAGES_PER_CANVAS) {
+        await discard();
+        return res.status(400).json({ error: `A canvas can hold at most ${MAX_IMAGES_PER_CANVAS} images` });
+      }
+      const mime = mimeForFilename(req.file.originalname);
+      const result = await query(
+        `INSERT INTO files (canvas_id, filename, original_name, size, mime_type, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [canvasId, req.file.filename, req.file.originalname, req.file.size, mime, req.user.userId]
+      );
+      res.status(201).json({ fileId: result.rows[0].id, name: req.file.originalname, size: req.file.size, mimeType: mime });
+    } catch (uploadErr) {
+      await discard();
+      console.error('Canvas image upload error:', uploadErr);
+      res.status(500).json({ error: 'Server error during upload' });
+    }
+  });
+});
+
 router.delete('/:canvasId', authenticateToken, async (req, res) => {
   try {
     const canvasId = parseId(req.params.canvasId);
@@ -381,7 +452,12 @@ router.delete('/:canvasId', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Only the owner can delete this canvas' });
       }
     }
+    // the images go with the canvas (rows cascade); remove the stored files too
+    const images = await query('SELECT filename FROM files WHERE canvas_id = $1', [canvasId]);
     await query('DELETE FROM canvases WHERE id = $1', [canvasId]);
+    for (const row of images.rows || []) {
+      fs.promises.unlink(path.join(config.UPLOAD_DIR, row.filename)).catch(() => {});
+    }
     res.json({ success: true });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });

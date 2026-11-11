@@ -21,6 +21,7 @@ const SLASH_ITEMS = [
   { id: 'warning', label: 'Warning callout', hint: 'Needs attention', keys: ['warning', 'warn', 'callout'], callout: 'warning' },
   { id: 'danger', label: 'Danger callout', hint: 'Risky or critical', keys: ['danger', 'error', 'callout'], callout: 'danger' },
   { id: 'table', label: 'Table', hint: '2 columns, ready to fill', keys: ['table', 'grid'], table: true },
+  { id: 'image', label: 'Image', hint: 'Upload a picture', keys: ['image', 'img', 'photo', 'picture', 'pic'], image: true },
   { id: 'code', label: 'Code block', hint: 'Monospaced text', keys: ['code', 'snippet', 'pre'], code: true },
   { id: 'divider', label: 'Divider', hint: 'A horizontal line', keys: ['divider', 'line', 'hr', 'rule'], divider: true },
   { id: 'date', label: 'Today’s date', hint: 'Insert the date', keys: ['date', 'today'], date: true },
@@ -81,6 +82,7 @@ function parseSlashLine(lineText) {
 // Returns { insert, selectStart, selectEnd } with the selection relative to the start of `insert`.
 function buildSlashInsert(item, text, today) {
   const t = text || '';
+  if (item.image) return { insert: '', selectStart: 0, selectEnd: 0 };
   if (item.table) {
     const header = '| Column 1 | Column 2 |';
     const insert = `${header}\n| --- | --- |\n|  |  |`;
@@ -177,7 +179,46 @@ function wrapSelection(value, start, end, kind) {
 // DOM layer
 // ---------------------------------------------------------------------------------------------
 
-function attachCanvasSlash(textarea) {
+const CANVAS_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+function canvasNotice(text, type) {
+  if (typeof showToast === 'function') showToast(text, type);
+}
+
+// Ask for a picture, upload it to this canvas, and put it into the text where the cursor was.
+function chooseCanvasImage(textarea, getCanvasId) {
+  const canvasId = getCanvasId ? getCanvasId() : null;
+  if (!canvasId) { canvasNotice('Open a canvas first.', 'error'); return; }
+  const cursor = textarea.selectionStart;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > CANVAS_IMAGE_MAX_BYTES) { canvasNotice('Images can be at most 10MB.', 'error'); return; }
+    const form = new FormData();
+    form.append('file', file);
+    canvasNotice('Uploading image\u2026');
+    try {
+      const res = await fetch(`${API_BASE}/api/canvas/${canvasId}/images`, {
+        method: 'POST', headers: { Authorization: `Bearer ${state.token}` }, body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const result = insertImageBlock(textarea.value, Math.min(cursor, textarea.value.length), data.fileId, data.name);
+      textarea.value = result.value;
+      textarea.focus();
+      textarea.setSelectionRange(result.selectStart, result.selectEnd);
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (err) {
+      canvasNotice(err.message || 'Could not upload the image.', 'error');
+    }
+  });
+  input.click();
+}
+
+function attachCanvasSlash(textarea, getCanvasId) {
   if (!textarea || textarea.dataset.slashAttached) return;
   textarea.dataset.slashAttached = '1';
 
@@ -266,6 +307,7 @@ function attachCanvasSlash(textarea) {
     const cursor = textarea.selectionStart;
     closeMenu();
     commit(applySlashItem(textarea.value, cursor, item));
+    if (item.image) chooseCanvasImage(textarea, getCanvasId);
   };
 
   textarea.addEventListener('input', refresh);
@@ -318,6 +360,28 @@ function attachCanvasSlash(textarea) {
   });
 }
 
+// Put an uploaded picture into the text as its own block: it replaces an empty line, otherwise it goes
+// after the current line with a blank line between. Returns { value, selectStart, selectEnd }.
+function insertImageBlock(value, cursor, fileId, name) {
+  const alt = String(name || 'image').replace(/\.[A-Za-z0-9]+$/, '').replace(/[\[\]()\n]/g, ' ').trim().slice(0, 80) || 'image';
+  const markdown = `![${alt}](file:${fileId})`;
+  const line = lineAt(value, cursor);
+  const emptyLine = line.text.trim() === '';
+  const at = emptyLine ? line.start : line.end;
+  const before = value.slice(0, at);
+  const rest = value.slice(line.end);
+  // keep a blank line between the picture and its neighbours so each stays its own block
+  let lead = '\n\n';
+  if (before === '' || before.endsWith('\n\n')) lead = '';
+  else if (before.endsWith('\n')) lead = '\n';
+  let tail = '\n';
+  if (rest.startsWith('\n\n')) tail = '';
+  else if (rest === '') tail = '\n';
+  const next = before + lead + markdown + tail + rest;
+  const pos = at + lead.length + markdown.length + 1;
+  return { value: next, selectStart: pos, selectEnd: pos };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Formatting toolbar (buttons for the same things). Pure part first.
 // ---------------------------------------------------------------------------------------------
@@ -336,6 +400,7 @@ const TOOLBAR_BUTTONS = [
   { id: 'todo', label: '☑ Todo', title: 'Checklist' },
   { id: 'quote', label: 'Quote', title: 'Quote' },
   { sep: true },
+  { id: 'image', label: 'Image', title: 'Insert an image' },
   { id: 'table', label: 'Table', title: 'Insert a table' },
   { id: 'code', label: 'Code', title: 'Insert a code block' },
   { id: 'tip', label: 'Callout', title: 'Insert a callout' },
@@ -347,6 +412,7 @@ const LINE_MARKER = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+\. |> )/;
 // What a toolbar button does to the text. Returns { value, selectStart, selectEnd }.
 function toolbarAction(value, start, end, id) {
   if (id === 'bold' || id === 'italic' || id === 'link') return wrapSelection(value, start, end, id);
+  if (id === 'image') return { value, selectStart: start, selectEnd: end }; // handled by the picker
   const item = slashItemById(id);
   if (!item) return { value, selectStart: start, selectEnd: end };
   const line = lineAt(value, start);
@@ -398,7 +464,7 @@ function setCanvasToolbarEnabled(on) {
   canvasToolbars.forEach((bar) => bar.sync());
 }
 
-function attachCanvasToolbar(textarea, modeButton) {
+function attachCanvasToolbar(textarea, modeButton, getCanvasId) {
   if (!textarea || textarea.dataset.toolbarAttached) return;
   textarea.dataset.toolbarAttached = '1';
 
@@ -416,6 +482,7 @@ function attachCanvasToolbar(textarea, modeButton) {
   bar.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-fmt]');
     if (!button) return;
+    if (button.dataset.fmt === 'image') { chooseCanvasImage(textarea, getCanvasId); return; }
     const result = toolbarAction(textarea.value, textarea.selectionStart, textarea.selectionEnd, button.dataset.fmt);
     textarea.value = result.value;
     textarea.focus();
@@ -448,15 +515,18 @@ if (typeof document !== 'undefined') {
   // Scripts load at the end of <body>, so both editors already exist.
   const sheet = document.getElementById('canvas-sheet-editor');
   const standalone = document.getElementById('canvas2-editor');
-  attachCanvasSlash(sheet);
-  attachCanvasSlash(standalone);
-  attachCanvasToolbar(sheet, document.getElementById('btn-canvas-sheet-mode'));
-  attachCanvasToolbar(standalone, document.getElementById('btn-canvas2-mode'));
+  // canvas2State / canvas2StandaloneState come from renderer.js and are only read when a picture is added
+  const sheetId = () => canvas2State.activeId;
+  const standaloneId = () => canvas2StandaloneState.activeId;
+  attachCanvasSlash(sheet, sheetId);
+  attachCanvasSlash(standalone, standaloneId);
+  attachCanvasToolbar(sheet, document.getElementById('btn-canvas-sheet-mode'), sheetId);
+  attachCanvasToolbar(standalone, document.getElementById('btn-canvas2-mode'), standaloneId);
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SLASH_ITEMS, filterSlashItems, slashTrigger, parseSlashLine, applySlashItem, continueList, wrapSelection, lineAt,
-    toolbarAction, TOOLBAR_BUTTONS,
+    toolbarAction, TOOLBAR_BUTTONS, insertImageBlock,
   };
 }

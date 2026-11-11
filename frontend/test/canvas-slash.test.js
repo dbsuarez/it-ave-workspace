@@ -106,3 +106,21 @@ test('toolbar: block buttons add a block after the current line', () => {
   assert.equal(toolbarAction('say hi', 4, 6, 'bold').value, 'say **hi**');
   assert.ok(TOOLBAR_BUTTONS.filter((b) => !b.sep).every((b) => b.id && b.title));
 });
+
+const { insertImageBlock } = require('../src/features/canvas-slash');
+
+test('image: /image is in the menu and empties its line', () => {
+  assert.equal(filterSlashItems('image')[0].id, 'image');
+  assert.equal(filterSlashItems('photo')[0].id, 'image');
+  assert.equal(apply('/image', 6, 'image').value, '');
+  assert.equal(toolbarAction('text', 4, 4, 'image').value, 'text', 'the toolbar button opens the picker instead');
+});
+
+test('image: the uploaded picture becomes its own block', () => {
+  assert.equal(insertImageBlock('', 0, 7, 'My Photo.png').value, '![My Photo](file:7)\n');
+  assert.equal(insertImageBlock('intro', 5, 7, 'a.png').value, 'intro\n\n![a](file:7)\n');
+  assert.equal(insertImageBlock('one\n\ntwo', 4, 3, 'x.jpg').value, 'one\n\n![x](file:3)\n\ntwo', 'an empty line is replaced, neighbours stay separate blocks');
+  const r = insertImageBlock('', 0, 7, 'a.png');
+  assert.equal(r.selectStart, r.value.length, 'cursor lands after the picture');
+  assert.equal(insertImageBlock('', 0, 1, 'we](ird)[.png').value, '![we  ird](file:1)\n', 'brackets in a name cannot break the syntax');
+});

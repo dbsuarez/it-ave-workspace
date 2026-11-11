@@ -502,6 +502,10 @@ BEGIN
 END
 $$;
 
+-- Images inside a canvas; mirrors backend/src/migrations.js.
+ALTER TABLE files ADD COLUMN IF NOT EXISTS canvas_id INTEGER REFERENCES canvases(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_files_canvas_id ON files(canvas_id);
+
 -- Canvas history; mirrors backend/src/migrations.js.
 CREATE TABLE IF NOT EXISTS canvas_revisions (
      id SERIAL PRIMARY KEY,

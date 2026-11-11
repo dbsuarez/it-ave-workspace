@@ -299,7 +299,7 @@ async function ensureCanvasAccess(query, userId, canvasId, neededRole = 'viewer'
 
 async function ensureFileAccess(query, userId, fileId) {
   const fileResult = await query(
-    `SELECT id, message_id, dm_message_id, uploaded_by
+    `SELECT id, message_id, dm_message_id, canvas_id, uploaded_by
      FROM files WHERE id = $1`,
     [fileId]
   );
@@ -311,6 +311,12 @@ async function ensureFileAccess(query, userId, fileId) {
   }
 
   const file = fileResult.rows[0];
+
+  // An image inside a canvas can be read by anyone who can read that canvas.
+  if (file.canvas_id) {
+    await ensureCanvasAccess(query, userId, file.canvas_id, 'viewer');
+    return;
+  }
 
   if (file.message_id) {
     const messageResult = await query(
