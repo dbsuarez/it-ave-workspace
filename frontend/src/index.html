@@ -130,6 +130,11 @@
           <span>Activity</span>
           <span class="rail-badge" id="activity-badge" hidden></span>
         </button>
+        <button class="rail-item" data-rail="later">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          <span>Later</span>
+          <span class="rail-badge" id="later-badge" hidden></span>
+        </button>
         <button class="rail-item" data-rail="files">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           <span>Files</span>
@@ -424,6 +429,21 @@
           <div class="grid" id="activity-grid" hidden></div>
         </div>
 
+        <!-- Later: saved items and reminders -->
+        <div class="view" id="view-later">
+          <div class="channel-header">
+            <div class="channel-info">
+              <h1>Later</h1>
+              <p>Messages and files you saved, and your reminders. Only you can see these.</p>
+            </div>
+            <div class="channel-actions">
+              <button class="btn primary" id="btn-new-reminder" type="button">New reminder</button>
+            </div>
+          </div>
+          <div class="activity-tabs" id="later-tabs" role="tablist" aria-label="Later sections"></div>
+          <div class="activity-feed" id="later-body" aria-live="polite"></div>
+        </div>
+
         <div class="view" id="view-moderation">
           <div class="channel-header">
             <div class="channel-info">
@@ -550,6 +570,45 @@
       </form>
     </div>
 
+    <div class="modal" id="modal-reminder">
+      <div class="modal-header">
+        <h3>Remind me</h3>
+        <button class="modal-close" id="btn-close-reminder" type="button" aria-label="Close">&times;</button>
+      </div>
+      <form id="reminder-form">
+        <div class="modal-body">
+          <p class="form-note" id="reminder-message-preview" hidden></p>
+          <div class="form-group">
+            <label for="reminder-text">What should I remind you about?</label>
+            <input id="reminder-text" type="text" maxlength="500" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="reminder-when">When</label>
+            <select id="reminder-when"></select>
+          </div>
+          <div class="form-group" id="reminder-custom-row" hidden>
+            <label for="reminder-custom">Date and time</label>
+            <input id="reminder-custom" type="datetime-local">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" type="button" id="btn-cancel-reminder">Cancel</button>
+          <button class="btn primary" type="submit">Set reminder</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="modal" id="modal-info">
+      <div class="modal-header">
+        <h3 id="info-modal-title"></h3>
+        <button class="modal-close" id="btn-close-info" type="button" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="info-modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn primary" type="button" id="btn-ok-info">Close</button>
+      </div>
+    </div>
+
     <div class="modal" id="modal-status">
       <div class="modal-header">
         <h3>Set status</h3>
@@ -635,6 +694,7 @@
   <script src="features/activity.js"></script>
   <script src="features/notifications.js"></script>
   <script src="features/groups.js"></script>
+  <script src="features/later.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

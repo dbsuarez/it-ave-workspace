@@ -42,4 +42,33 @@ module.exports = [
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    )`,
   'CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation ON conversation_messages(conversation_id, created_at)',
+
+  // Message edit history, saved items, and reminders
+  `CREATE TABLE IF NOT EXISTS message_edits (
+     id SERIAL PRIMARY KEY,
+     message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+     previous_content TEXT NOT NULL,
+     edited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     edited_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_message_edits_message ON message_edits(message_id, edited_at DESC)',
+  `CREATE TABLE IF NOT EXISTS saved_items (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+     file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     CHECK ((message_id IS NULL) <> (file_id IS NULL))
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_saved_items_user ON saved_items(user_id, created_at DESC)',
+  `CREATE TABLE IF NOT EXISTS reminders (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     text VARCHAR(500) NOT NULL DEFAULT '',
+     message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+     remind_at TIMESTAMP WITH TIME ZONE NOT NULL,
+     delivered_at TIMESTAMP WITH TIME ZONE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(remind_at) WHERE delivered_at IS NULL',
 ];

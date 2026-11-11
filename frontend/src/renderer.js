@@ -193,6 +193,8 @@ async function init() {
     loadActivity();
     loadUserSettings();
     loadGroups();
+    loadSaved();
+    loadReminders();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
   } else {
@@ -430,6 +432,7 @@ function setupEventListeners() {
   setupActivityFeatures();
   setupNotificationFeatures();
   setupGroupFeatures();
+  setupLaterFeatures();
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
@@ -850,6 +853,8 @@ function connectSocket() {
   });
 
   state.socket.on('activity', handleActivityEvent);
+  state.socket.on('message_updated', handleMessageUpdated);
+  state.socket.on('reminder_due', handleReminderDue);
   state.socket.on('channel_activity', handleChannelActivity);
   state.socket.on('user_status_updated', handleUserStatusUpdated);
   state.socket.on('new_group_message', handleNewGroupMessage);
@@ -1558,7 +1563,7 @@ function renderMessageEl(msg, allowReply = false) {
     || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(msg.channelId || state.currentChannelId));
 
   const el = document.createElement('div');
-  el.className = `message${msg.pending ? ' pending' : ''}`;
+  el.className = `message${msg.pending ? ' pending' : ''}${isYou ? ' own' : ''}`;
   el.id = `message-${msg.id}`;
 
   const reactionsHtml = (msg.reactions || []).map((r) => {
@@ -1588,6 +1593,7 @@ function renderMessageEl(msg, allowReply = false) {
         <span class="name">${escapeHtml(username)}</span>
         ${isYou ? '<span class="you">You</span>' : ''}
         <span class="time">${shortTime(msg.createdAt)}</span>
+        ${allowReply ? messageEditedHtml(msg) : ''}
         ${allowReply && isPinned ? '<span class="message-pinned-badge">Pinned</span>' : ''}
       </div>
       ${msg.replyTo ? `<button class="message-reply-preview" type="button" data-target-id="${escapeHtml(String(msg.replyTo))}" title="Go to original message">
@@ -1600,8 +1606,9 @@ function renderMessageEl(msg, allowReply = false) {
         ${allowReply ? `<button class="message-reaction-action" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="Add reaction" title="Add reaction">Add reaction</button>` : ''}
         ${allowReply ? '<a class="message-reply-action" href="#">Reply</a>' : ''}
         ${allowReply ? `<button class="message-pin-action" type="button" data-message-pin="${escapeHtml(String(msg.id))}" data-pinned="${isPinned}" aria-label="${isPinned ? 'Unpin' : 'Pin'} message">${isPinned ? 'Unpin' : 'Pin'}</button>` : ''}
-        ${allowReply ? `<button class="message-report-action" type="button" data-report-message="${escapeHtml(String(msg.id))}">Report</button>` : ''}
-        ${allowReply && canModerate ? `<button class="message-delete-action" type="button" data-moderate-delete="${escapeHtml(String(msg.id))}">Remove</button>` : ''}
+        ${allowReply && !isYou ? `<button class="message-report-action" type="button" data-report-message="${escapeHtml(String(msg.id))}">Report</button>` : ''}
+        ${allowReply ? messageExtraActionsHtml(msg, isYou) : ''}
+        ${allowReply && canModerate && !isYou ? `<button class="message-delete-action" type="button" data-moderate-delete="${escapeHtml(String(msg.id))}">Remove</button>` : ''}
       </div>
       <div class="reactions">${reactionsHtml}</div>
     </div>`;
@@ -2008,6 +2015,7 @@ const SECTIONS = {
   canvases: { pane: null,       view: 'canvases' },
   huddle:   { pane: null,       view: 'huddle' },
   moderation: { pane: null,     view: 'moderation' },
+  later:    { pane: null,       view: 'later' },
 };
 
 function updateRail(section) {
@@ -2081,6 +2089,8 @@ async function setSection(section) {
   } else if (section === 'activity') {
     renderActivity();
     await loadActivity({ markSeen: true });
+  } else if (section === 'later') {
+    await loadLaterView();
   } else if (section === 'huddle') {
     renderHuddleView();
   } else if (section === 'moderation') {
@@ -2924,6 +2934,7 @@ function renderFiles(files) {
         Number(f.uploadedBy) !== Number(state.user.id) && Boolean(f.channelId && canModerateChannel(f.channelId)),
       );
     });
+    decorateFileCard(card, f);
     grid.appendChild(card);
   });
 }
