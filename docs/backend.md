@@ -63,14 +63,15 @@ Node.js + Express + Socket.io API server with PostgreSQL.
 |--------|----------|-------------|
 | GET | `/api/lists?channelId=:id` | Lists with to-do `items` (older shape) and channel members |
 | POST | `/api/lists` | Create a list. Default is a to-do list; `{ todoMode: false, primaryName?, columns?: [{ name, type, options }] }` makes a table list |
-| GET | `/api/lists/:listId` | One list: `{ list, columns, rows, members }` |
+| GET | `/api/lists/:listId?limit=&cursor=&archived=` | One list: `{ list, columns, rows, nextCursor, members }`. Rows are paged (default 500, max 5000); pass `nextCursor` back as `cursor`; `archived=true` lists archived rows |
+| POST | `/api/lists/:listId/copy` | Copy a list `{ title?, includeRows? (default true), channelId? }`; into another channel you belong to people are not copied |
 | PATCH | `/api/lists/:listId` | Rename and/or change the description |
 | DELETE | `/api/lists/:listId` | Delete a list with its columns, rows and cells |
 | POST | `/api/lists/:listId/columns` | Add a column `{ name, type, options }` (max 50 per list) |
 | PATCH | `/api/lists/:listId/columns/:columnId` | Rename, or replace `options` (the type is fixed). Removing a select choice clears it from cells |
 | DELETE | `/api/lists/:listId/columns/:columnId` | Delete a column (not the primary one) |
-| POST | `/api/lists/:listId/rows` | Add a row `{ cells: { <column id or key>: value } }`; the primary cell is required |
-| PATCH | `/api/lists/:listId/rows/:rowId` | Change up to 100 cells in one transaction (`null` clears a cell); all apply or none |
+| POST | `/api/lists/:listId/rows` | Add a row `{ cells: { <column id or key>: value } }`; the primary cell is required. `parentId` makes it a subtask (one level deep); `duplicateOf` starts from another row's cells |
+| PATCH | `/api/lists/:listId/rows/:rowId` | Change up to 100 cells in one transaction (`null` clears a cell); all apply or none. `archived: true/false` archives or restores the row together with its subtasks |
 | DELETE | `/api/lists/:listId/rows/:rowId` | Delete a row |
 | POST / PATCH / DELETE | `/api/lists/:listId/items[/:itemId]` | The original to-do endpoints (title, completed, assigneeId, dueDate), now backed by rows and cells |
 

@@ -286,3 +286,120 @@ test('to-do items and table rows are the same thing underneath', async (t) => {
   const legacy = (await call(ids.alice, 'GET', `?channelId=${ids.team}`)).json.lists.find((l) => l.id === list.id);
   assert.equal(legacy.items.find((i) => i.id === item.id).completed, true, 'a typed edit shows in the old shape');
 });
+
+// ---- subtasks, archive, duplicate, copy, pagination -----------------------------------------------
+
+test('subtasks hang off a row, one level deep', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list } = await createTable([]);
+  const parent = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Parent' } })).json.row;
+  const child = await call(ids.alice, 'POST', `/${list.id}/rows`, { parentId: parent.id, cells: { title: 'Child' } });
+  assert.equal(child.status, 201);
+  assert.equal(child.json.row.parentId, parent.id);
+  const grandchild = await call(ids.alice, 'POST', `/${list.id}/rows`, { parentId: child.json.row.id, cells: { title: 'Nope' } });
+  assert.equal(grandchild.status, 400);
+  assert.match(grandchild.json.error, /cannot have subtasks/);
+  assert.equal((await call(ids.alice, 'POST', `/${list.id}/rows`, { parentId: 999999, cells: { title: 'x' } })).status, 404);
+  // deleting the parent removes its subtasks
+  await call(ids.alice, 'DELETE', `/${list.id}/rows/${parent.id}`);
+  const rows = (await call(ids.alice, 'GET', `/${list.id}`)).json.rows;
+  assert.equal(rows.length, 0);
+});
+
+test('archiving hides a row and its subtasks, and restoring brings them back', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list } = await createTable([]);
+  const parent = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Parent' } })).json.row;
+  await call(ids.alice, 'POST', `/${list.id}/rows`, { parentId: parent.id, cells: { title: 'Child' } });
+  await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Stays' } });
+  assert.equal((await call(ids.alice, 'PATCH', `/${list.id}/rows/${parent.id}`, { archived: 'yes' })).status, 400);
+  assert.equal((await call(ids.alice, 'PATCH', `/${list.id}/rows/${parent.id}`, { archived: true })).status, 200);
+  const active = (await call(ids.alice, 'GET', `/${list.id}`)).json.rows;
+  assert.deepEqual(active.map((r) => Object.values(r.cells)[0]), ['Stays']);
+  const archived = (await call(ids.alice, 'GET', `/${list.id}?archived=true`)).json.rows;
+  assert.equal(archived.length, 2, 'the parent and its subtask');
+  await call(ids.alice, 'PATCH', `/${list.id}/rows/${parent.id}`, { archived: false });
+  assert.equal((await call(ids.alice, 'GET', `/${list.id}`)).json.rows.length, 3);
+  // the old to-do listing leaves archived rows out too
+  await call(ids.alice, 'PATCH', `/${list.id}/rows/${parent.id}`, { archived: true });
+  const legacy = (await call(ids.alice, 'GET', `?channelId=${ids.team}`)).json.lists.find((l) => l.id === list.id);
+  assert.deepEqual(legacy.items.map((i) => i.title), ['Stays']);
+});
+
+test('duplicating a row copies its cells, and cells in the request override', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list, columns } = await createTable([{ name: 'Notes', type: 'text' }, { name: 'Done', type: 'checkbox' }]);
+  const parent = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Parent' } })).json.row;
+  const original = (await call(ids.alice, 'POST', `/${list.id}/rows`, { parentId: parent.id, cells: { title: 'Task', notes: 'keep me', done: true } })).json.row;
+  const copy = await call(ids.alice, 'POST', `/${list.id}/rows`, { duplicateOf: original.id, cells: { title: 'Task (copy)' } });
+  assert.equal(copy.status, 201);
+  assert.notEqual(copy.json.row.id, original.id);
+  assert.equal(copy.json.row.parentId, parent.id, 'a duplicated subtask stays under its parent');
+  assert.equal(copy.json.row.cells[colByName(columns, 'Name').id], 'Task (copy)');
+  assert.equal(copy.json.row.cells[colByName(columns, 'Notes').id], 'keep me');
+  assert.equal(copy.json.row.cells[colByName(columns, 'Done').id], true);
+  assert.equal((await call(ids.alice, 'POST', `/${list.id}/rows`, { duplicateOf: 424242 })).status, 404);
+});
+
+test('copying a list keeps columns, choices and optionally the rows', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list, columns } = await createTable([
+    { name: 'Status', type: 'select', options: { choices: [{ label: 'Open' }, { label: 'Done' }] } },
+    { name: 'Owner', type: 'user' },
+  ]);
+  const open = colByName(columns, 'Status').options.choices[0].id;
+  const parent = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'One', status: open, owner: ids.bob } })).json.row;
+  await call(ids.alice, 'POST', `/${list.id}/rows`, { parentId: parent.id, cells: { title: 'Sub' } });
+  const archivedRow = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Archived' } })).json.row;
+  await call(ids.alice, 'PATCH', `/${list.id}/rows/${archivedRow.id}`, { archived: true });
+
+  const withRows = await call(ids.bob, 'POST', `/${list.id}/copy`, { title: 'Tracker 2' });
+  assert.equal(withRows.status, 201);
+  assert.equal(withRows.json.list.title, 'Tracker 2');
+  const copied = (await call(ids.bob, 'GET', `/${withRows.json.list.id}`)).json;
+  assert.deepEqual(copied.columns.map((c) => [c.key, c.type, c.isPrimary]), columns.map((c) => [c.key, c.type, c.isPrimary]));
+  assert.notEqual(copied.columns[0].id, columns[0].id, 'new columns, not shared ones');
+  assert.deepEqual(copied.columns.find((c) => c.key === 'status').options.choices.map((c) => c.id), colByName(columns, 'Status').options.choices.map((c) => c.id), 'choice ids are kept');
+  assert.equal(copied.rows.length, 2, 'rows and subtasks come along, archived ones do not');
+  const copiedParent = copied.rows.find((r) => r.parentId === null);
+  const copiedChild = copied.rows.find((r) => r.parentId !== null);
+  assert.equal(copiedChild.parentId, copiedParent.id);
+  assert.deepEqual(copiedParent.cells[copied.columns.find((c) => c.key === 'owner').id], [ids.bob]);
+
+  const empty = await call(ids.bob, 'POST', `/${list.id}/copy`, { includeRows: false });
+  assert.match(empty.json.list.title, /^Copy of Tracker/);
+  assert.equal((await call(ids.bob, 'GET', `/${empty.json.list.id}`)).json.rows.length, 0);
+
+  // into another channel the copy starts without people (they may not be members there)
+  await admin.query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ids.other, ids.alice]);
+  const across = await call(ids.alice, 'POST', `/${list.id}/copy`, { channelId: ids.other });
+  assert.equal(across.status, 201);
+  const acrossRows = (await call(ids.alice, 'GET', `/${across.json.list.id}`)).json;
+  const ownerColumn = acrossRows.columns.find((c) => c.key === 'owner');
+  assert.ok(acrossRows.rows.every((r) => r.cells[ownerColumn.id] === undefined));
+  assert.equal((await call(ids.bob, 'POST', `/${list.id}/copy`, { channelId: ids.other })).status, 403, 'you must belong to the target channel');
+  assert.equal((await call(ids.carol, 'POST', `/${list.id}/copy`, {})).status, 403, 'guests cannot copy');
+  assert.equal((await call(ids.dave, 'POST', `/${list.id}/copy`, {})).status, 403);
+});
+
+test('rows are paged with a cursor and nothing is skipped or repeated', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list } = await createTable([]);
+  for (let i = 1; i <= 7; i += 1) await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: `Row ${i}` } });
+  const seen = [];
+  let cursor = null;
+  let pages = 0;
+  do {
+    const res = await call(ids.alice, 'GET', `/${list.id}?limit=3${cursor ? `&cursor=${cursor}` : ''}`);
+    assert.equal(res.status, 200);
+    seen.push(...res.json.rows.map((r) => Object.values(r.cells)[0]));
+    cursor = res.json.nextCursor;
+    pages += 1;
+  } while (cursor);
+  assert.equal(pages, 3);
+  assert.deepEqual(seen, ['Row 1', 'Row 2', 'Row 3', 'Row 4', 'Row 5', 'Row 6', 'Row 7']);
+  assert.equal((await call(ids.alice, 'GET', `/${list.id}?limit=0`)).status, 400);
+  assert.equal((await call(ids.alice, 'GET', `/${list.id}?limit=3&cursor=garbage`)).status, 400);
+  const exact = await call(ids.alice, 'GET', `/${list.id}?limit=7`);
+  assert.equal(exact.json.nextCursor, null, 'no next page when the last one is full');
+});

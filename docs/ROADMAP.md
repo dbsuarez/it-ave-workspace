@@ -300,7 +300,7 @@ granted; Lists stay channel-scoped until they have access levels.
 | 2. Section lookup/edit operations, checklist toggle | **Done** (API): `GET /sections`, `PATCH` with an `operation`, 11 parser tests plus route tests, verified on the real database (3 concurrent edits: 1 wins). The checklist toggle is reachable from the UI once the rendered view exists (step 7) |
 | 3. Canvas owner level and channel grants | **Done**: transferable owner, channel grants, guest read-only default (also for channel/DM canvases), share dialog sections for channels and ownership, viewers get a read-only editor. Verified on the real database and in the client |
 | 4. Lists typed schema with to-do migration | **Done** (backend): typed columns/rows/cells, 7 column types, to-do items migrated once with ids preserved, old endpoints kept as wrappers. First real-PostgreSQL tests (`test/helpers/scratchDb.js` builds a throwaway database): migration, 13 route tests, 10 validator tests. Verified on the live data (output identical before and after) and through the existing Lists screen. The client still shows the to-do view; the table view is step 6 |
-| 5. Select options, subtasks, archive, copy, duplicate, pagination | Not started |
+| 5. Select options, subtasks, archive, copy, duplicate, pagination | **Done** (backend; select options came with step 4): subtasks one level deep, archive/restore with subtasks, duplicate row, copy list (with or without rows, across channels), cursor paging. 18 real-database route tests |
 | 6. Lists access levels, table view | Not started |
 | 7. Richer Canvas blocks and history UI | Not started |
 

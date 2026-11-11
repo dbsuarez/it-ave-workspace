@@ -250,7 +250,13 @@ router.get('/:listId', authenticateToken, async (req, res) => {
     if (listId === null) return res.status(400).json({ error: 'A valid list ID is required' });
     const list = await loadList(req.user.userId, listId);
     const columns = await store.getColumns(poolDb, listId);
-    const rows = (await store.getRowsForLists(poolDb, [listId])).get(listId);
+    const limit = req.query.limit === undefined ? 500 : Number(req.query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5000) throw fail(400, 'limit must be a whole number from 1 to 5000');
+    const page = await store.getRowsPage(poolDb, listId, {
+      archived: req.query.archived === 'true',
+      limit,
+      cursor: typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : null,
+    });
     const members = await query(
       `SELECT u.id, u.username FROM channel_members cm JOIN users u ON u.id = cm.user_id
        WHERE cm.channel_id = $1 ORDER BY u.username`,
@@ -259,7 +265,8 @@ router.get('/:listId', authenticateToken, async (req, res) => {
     res.json({
       list: mapList(list),
       columns: columns.map(mapColumn),
-      rows: rows.map(mapRow),
+      rows: page.rows.map(mapRow),
+      nextCursor: page.nextCursor,
       members: members.rows.map((m) => ({ id: m.id, username: m.username })),
     });
   } catch (err) {
@@ -304,6 +311,31 @@ router.delete('/:listId', authenticateToken, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     handleError(res, err, 'Delete list error');
+  }
+});
+
+// Copy a list: same columns, and its rows too unless includeRows is false. Optionally into another
+// channel you belong to.
+router.post('/:listId/copy', authenticateToken, async (req, res) => {
+  try {
+    const listId = parseId(req.params.listId);
+    if (listId === null) return res.status(400).json({ error: 'A valid list ID is required' });
+    const source = await loadList(req.user.userId, listId);
+    await ensureNotGuest(query, req.user.userId, 'Guests have view-only access to lists');
+    const body = bodyOf(req);
+    const title = body.title === undefined ? parseTitle(`Copy of ${source.title}`.slice(0, 120), 120) : parseTitle(body.title, 120);
+    if (!title) return res.status(400).json({ error: 'List title must be between 1 and 120 characters' });
+    const channelId = body.channelId === undefined ? source.channel_id : parseId(body.channelId);
+    if (channelId === null) return res.status(400).json({ error: 'A valid channel ID is required' });
+    if (channelId !== source.channel_id) await ensureChannelMembership(query, req.user.userId, channelId);
+    const newId = await withTransaction((client) => store.copyList(client, source, {
+      title, channelId, includeRows: body.includeRows !== false, userId: req.user.userId,
+    }));
+    const list = await store.getList(poolDb, newId);
+    const columns = await store.getColumns(poolDb, newId);
+    res.status(201).json({ list: { ...mapList(list), items: [] }, columns: columns.map(mapColumn) });
+  } catch (err) {
+    handleError(res, err, 'Copy list error');
   }
 });
 
@@ -390,13 +422,32 @@ router.post('/:listId/rows', authenticateToken, async (req, res) => {
     if (listId === null) return res.status(400).json({ error: 'A valid list ID is required' });
     const list = await loadList(req.user.userId, listId, { write: true });
     const columns = await store.getColumns(poolDb, listId);
-    const cells = await normalizeCellInput(columns, bodyOf(req).cells ?? {}, list.channel_id);
+    const body = bodyOf(req);
+    let cells = await normalizeCellInput(columns, body.cells ?? {}, list.channel_id);
+
+    // duplicateOf: start from another row's cells (and keep its parent); anything in `cells` overrides
+    let parentId = null;
+    if (body.duplicateOf !== undefined) {
+      const sourceId = parseId(body.duplicateOf);
+      const source = sourceId === null ? null : await store.getRow(poolDb, listId, sourceId);
+      if (!source) throw fail(404, 'The row to duplicate was not found in this list');
+      parentId = source.parent_row_id;
+      cells = { ...source.cells, ...cells };
+    }
+    // parentId: make this a subtask. Subtasks are one level deep.
+    if (body.parentId !== undefined && body.parentId !== null) {
+      const wanted = parseId(body.parentId);
+      const parent = wanted === null ? null : await store.getRow(poolDb, listId, wanted);
+      if (!parent || parent.archived_at) throw fail(404, 'The parent row was not found in this list');
+      if (parent.parent_row_id !== null) throw fail(400, 'Subtasks cannot have subtasks');
+      parentId = parent.id;
+    }
     const primary = columns.find((c) => c.is_primary);
     if (!primary || cells[primary.id] === undefined || cells[primary.id] === null) {
       throw fail(400, `"${primary ? primary.name : 'The primary column'}" is required`);
     }
     const rowId = await withTransaction(async (client) => {
-      const row = await store.insertRow(client, listId, req.user.userId);
+      const row = await store.insertRow(client, listId, req.user.userId, parentId);
       await store.writeCells(client, row.id, cells);
       return row.id;
     });
@@ -416,13 +467,16 @@ router.patch('/:listId/rows/:rowId', authenticateToken, async (req, res) => {
     const list = await loadList(req.user.userId, listId, { write: true });
     if (!(await store.getRow(poolDb, listId, rowId))) throw fail(404, 'Row not found');
     const columns = await store.getColumns(poolDb, listId);
-    const input = bodyOf(req).cells;
-    if (input === undefined) throw fail(400, 'No cell changes provided');
-    const cells = await normalizeCellInput(columns, input, list.channel_id);
-    if (Object.keys(cells).length === 0) throw fail(400, 'No cell changes provided');
+    const body = bodyOf(req);
+    if (body.archived !== undefined && typeof body.archived !== 'boolean') throw fail(400, 'archived must be true or false');
+    const input = body.cells;
+    if (input === undefined && body.archived === undefined) throw fail(400, 'No cell changes provided');
+    const cells = input === undefined ? {} : await normalizeCellInput(columns, input, list.channel_id);
+    if (input !== undefined && Object.keys(cells).length === 0 && body.archived === undefined) throw fail(400, 'No cell changes provided');
     await withTransaction(async (client) => {
-      await store.writeCells(client, rowId, cells);
+      if (Object.keys(cells).length > 0) await store.writeCells(client, rowId, cells);
       await store.touchRow(client, rowId, req.user.userId);
+      if (body.archived !== undefined) await store.setArchived(client, listId, rowId, body.archived, req.user.userId);
     });
     res.json({ row: mapRow(await store.getRow(poolDb, listId, rowId)) });
   } catch (err) {
