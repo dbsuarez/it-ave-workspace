@@ -7,7 +7,7 @@ const dom = new JSDOM('<!doctype html><body></body>', { pretendToBeVisual: true 
 for (const key of ['window', 'document', 'navigator', 'Node', 'HTMLElement', 'Element', 'Text', 'DocumentFragment', 'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'Range', 'Selection', 'DOMParser', 'XMLSerializer', 'KeyboardEvent', 'Event']) {
   Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true, writable: true });
 }
-const { createCanvasEditor, getCanvasMarkdown, normalizeMarkdown } = require('../editor-src/canvas-editor');
+const { createCanvasEditor, getCanvasMarkdown, normalizeMarkdown, loadMarkdown } = require('../editor-src/canvas-editor');
 
 function open(markdown) {
   const el = document.createElement('div');
@@ -258,4 +258,46 @@ test('a mention alone on its line becomes a profile card, with details from the 
   } finally {
     delete globalThis.canvasMentionLookup;
   }
+});
+
+test('a picture inside a table cell is a real, selectable picture, and deleting it can be undone', () => {
+  const md = '| a | b |\n| --- | --- |\n| ![shot](file:5 "50%") | text |\n';
+  const editor = open(md);
+  const pictures = () => { let n = 0; editor.state.doc.descendants((node) => { if (node.type.name === 'image') n += 1; }); return n; };
+  assert.equal(pictures(), 1);
+  assert.equal(editor.view.dom.querySelectorAll('td img[data-cv-file], th img[data-cv-file]').length, 1);
+  let at = -1;
+  editor.state.doc.descendants((node, pos) => { if (node.type.name === 'image') at = pos; });
+  editor.commands.setNodeSelection(at);
+  assert.equal(editor.state.selection.node.type.name, 'image', 'clicking it selects it, so its bar and delete work');
+  editor.commands.deleteSelection();
+  assert.equal(pictures(), 0);
+  assert.ok(!getCanvasMarkdown(editor).includes('file:5'));
+  editor.commands.undo();
+  assert.equal(pictures(), 1, 'undo brings it back');
+  assert.match(getCanvasMarkdown(editor), /!\[shot\]\(file:5 "50%"\)/);
+  editor.destroy();
+});
+
+test('a picture on its own line behaves the same way and still saves the same Markdown', () => {
+  const md = 'Before\n\n![pic](file:3 "50% center")\n\nAfter\n';
+  const editor = open(md);
+  assert.equal(getCanvasMarkdown(editor), md);
+  editor.destroy();
+});
+
+test('loading a page is not an undo step', () => {
+  const editor = open('# First\n\nOne\n');
+  loadMarkdown(editor, '# Second\n\nTwo\n');
+  assert.match(getCanvasMarkdown(editor), /Second/);
+  editor.commands.undo();
+  assert.match(getCanvasMarkdown(editor), /Second/, 'undo does not bring back the previous page');
+  // a real edit after loading is undoable, back to the loaded page
+  editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  editor.commands.insertContent(' typed');
+  assert.match(getCanvasMarkdown(editor), /typed/);
+  editor.commands.undo();
+  assert.ok(!/typed/.test(getCanvasMarkdown(editor)));
+  assert.match(getCanvasMarkdown(editor), /Second/);
+  editor.destroy();
 });

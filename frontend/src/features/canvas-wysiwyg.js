@@ -224,7 +224,7 @@ const canvasWysiwyg = (() => {
   function load(inst, markdown) {
     inst.loading = true;
     try {
-      inst.editor.commands.setContent(markdown || '', { contentType: 'markdown', emitUpdate: false });
+      ITAEditor.loadMarkdown(inst.editor, markdown);
     } finally {
       inst.loading = false;
     }

@@ -474,7 +474,7 @@ function buildExtensions({ placeholder } = {}) {
     TableHeader,
     TableCell,
     Callout,
-    CanvasImage,
+    CanvasImage.configure({ inline: true }),
     Mention,
     Placeholder.configure({ placeholder: placeholder || "Write something, or press / for commands" }),
     Markdown,
@@ -494,6 +494,12 @@ function createCanvasEditor(element, options = {}) {
     if (typeof options[name] === 'function') config[name] = options[name];
   }
   return new Editor(config);
+}
+
+// Replace the whole page with this Markdown without making it an undo step: Ctrl+Z must undo what the
+// person did, never the loading of the page (which would blank it or bring back the previous canvas).
+function loadMarkdown(editor, markdown) {
+  editor.chain().setMeta('addToHistory', false).setContent(markdown || '', { contentType: 'markdown', emitUpdate: false }).run();
 }
 
 // Markdown as saved: no leading or doubled blank lines (outside code fences) and one final newline.
@@ -523,4 +529,4 @@ function fitColumnWidths(natural, available, min = 60) {
   return widths.map((w, i) => Math.max(min, Math.floor(w - room[i] * cut)));
 }
 
-module.exports = { createCanvasEditor, buildExtensions, getCanvasMarkdown, normalizeMarkdown, parseImageTitle, imageTitle, startBlockDrag, fitColumnWidths, CALLOUT_TYPES };
+module.exports = { createCanvasEditor, buildExtensions, loadMarkdown, getCanvasMarkdown, normalizeMarkdown, parseImageTitle, imageTitle, startBlockDrag, fitColumnWidths, CALLOUT_TYPES };

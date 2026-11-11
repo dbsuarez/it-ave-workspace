@@ -6344,3 +6344,10 @@ h4.cv-h { font-size: 15px; }
 .huddle-invite strong { display: block; font-size: 14px; }
 .huddle-invite span { font-size: 12px; color: var(--text-muted); }
 .huddle-invite-actions { margin-left: auto; display: flex; gap: 6px; }
+
+/* a picture is inline content (a paragraph, or a table cell, holds it); its frame still lays out as a block */
+.cw-editor .ProseMirror p > .cw-image,
+.cw-editor .ProseMirror td > p > .cw-image,
+.cw-editor .ProseMirror th > p > .cw-image {
+  margin: 2px 0;
+}
