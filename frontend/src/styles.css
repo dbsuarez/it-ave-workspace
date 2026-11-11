@@ -1790,38 +1790,38 @@ textarea:focus {
   padding: 0 24px 24px;
 }
 
-.view-notes #notes-grid,
-.view-activity #activity-grid {
+#view-notes #notes-grid,
+#view-activity #activity-grid {
   flex: 1 1 auto;
   min-height: 0;
   align-content: start;
   overflow: auto;
 }
 
-.view-notes #notes-grid.has-empty-record,
-.view-activity #activity-grid.has-empty-record,
-.view-files #files-grid.files-empty-grid {
+#view-notes #notes-grid.has-empty-record,
+#view-activity #activity-grid.has-empty-record,
+#view-files #files-grid.files-empty-grid {
   display: flex;
   align-items: stretch;
 }
 
-.view-notes #notes-grid.has-empty-record > .empty-record-state,
-.view-activity #activity-grid.has-empty-record > .empty-record-state,
-.view-files #files-grid.files-empty-grid > .empty-record-state {
+#view-notes #notes-grid.has-empty-record > .empty-record-state,
+#view-activity #activity-grid.has-empty-record > .empty-record-state,
+#view-files #files-grid.files-empty-grid > .empty-record-state {
   flex: 1;
   min-height: 0;
   height: auto;
 }
 
-.view-files #files-grid {
+#view-files #files-grid {
   flex: 1 1 auto;
   min-height: 0;
   align-content: start;
   overflow: auto;
 }
 
-.view-files #files-grid.files-empty-grid,
-.view-files #files-grid.files-state-grid {
+#view-files #files-grid.files-empty-grid,
+#view-files #files-grid.files-state-grid {
   align-content: stretch;
 }
 

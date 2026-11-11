@@ -2203,9 +2203,10 @@ async function handleModerationClick(event) {
       if (!confirm('Remove this user from the channel?')) return;
       await checkedApi(`/api/moderation/channels/${channelId}/members/${userId}`, 'DELETE');
     } else if (action === 'timeout') {
-      const duration = prompt('Timeout duration in minutes (blank uses the workspace default):');
+      const duration = await askText('Timeout duration in minutes (blank uses the workspace default):', { maxLength: 6 });
       if (duration === null) return;
-      const reason = prompt('Reason (optional):') || '';
+      const reason = await askText('Reason (optional):');
+      if (reason === null) return;
       await checkedApi(`/api/moderation/channels/${channelId}/timeouts/${userId}`, 'POST', {
         ...(duration.trim() ? { durationMinutes: Number(duration) } : {}), reason,
       });
@@ -2264,7 +2265,7 @@ async function handleModerationMessageClick(event) {
   const reportButton = event.target.closest('[data-report-message]');
   const deleteButton = event.target.closest('[data-moderate-delete]');
   if (reportButton) {
-    const reason = prompt('Why are you reporting this message?');
+    const reason = await askText('Why are you reporting this message?');
     if (reason === null) return;
     try {
       await checkedApi(`/api/moderation/channels/${state.currentChannelId}/reports`, 'POST', {
@@ -2283,6 +2284,53 @@ async function handleModerationMessageClick(event) {
       showToast(err.message || 'Could not remove this message.', 'error');
     }
   }
+}
+
+// Electron does not implement window.prompt(), so text input uses an in-app dialog.
+// Resolves with the entered text, or null when the dialog is cancelled.
+function askText(message, { placeholder = '', maxLength = 500, required = false } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    const modal = document.createElement('form');
+    modal.className = 'modal open';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.innerHTML = `
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="ask-text-input">${escapeHtml(message)}</label>
+          <input id="ask-text-input" type="text" autocomplete="off" maxlength="${Number(maxLength)}" placeholder="${escapeHtml(placeholder)}"${required ? ' required' : ''}>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" data-ask-cancel>Cancel</button>
+        <button class="btn primary" type="submit">OK</button>
+      </div>`;
+    const input = modal.querySelector('input');
+    const finish = (value) => {
+      document.removeEventListener('keydown', onKeydown, true);
+      overlay.remove();
+      modal.remove();
+      resolve(value);
+    };
+    const onKeydown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      finish(null);
+    };
+    modal.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (required && !input.value.trim()) return;
+      finish(input.value);
+    });
+    modal.querySelector('[data-ask-cancel]').addEventListener('click', () => finish(null));
+    overlay.addEventListener('click', () => finish(null));
+    document.addEventListener('keydown', onKeydown, true);
+    document.body.append(overlay, modal);
+    input.focus();
+  });
 }
 
 async function checkedApi(url, method, body) {
@@ -2852,7 +2900,7 @@ function canModerateChannel(channelId) {
 
 async function deleteFileAttachment(fileId, name, requireReason = false) {
   const reason = requireReason
-    ? prompt(`Why are you removing "${name}"? (Required, up to 500 characters)`)
+    ? await askText(`Why are you removing "${name}"? (Required, up to 500 characters)`, { required: true })
     : '';
   if (requireReason && !reason?.trim()) return;
   if (reason && reason.trim().length > 500) {
