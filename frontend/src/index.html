@@ -262,6 +262,9 @@
               <div id="channel-read-receipts" class="read-receipts" aria-live="polite"></div>
             </div>
             <div class="channel-actions">
+              <button class="icon-btn" id="btn-channel-canvas" type="button" title="Canvas" aria-label="Open channel canvas">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+              </button>
               <button class="icon-btn channel-pins-toggle" id="btn-channel-pins" type="button" title="Pinned messages" aria-label="Pinned messages" aria-expanded="false">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 5 5-4 1-5 5-1 5-2-2-2 2 1-5 5-5z"/><path d="m9 15-6 6"/></svg>
                 <span id="channel-pin-count" hidden></span>
@@ -310,6 +313,9 @@
               <p id="dm-topic"></p>
             </div>
             <div class="channel-actions">
+              <button class="icon-btn" id="btn-dm-canvas" type="button" title="Canvas" aria-label="Open direct message canvas">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+              </button>
               <button class="btn" id="btn-group-add" type="button" hidden>Add people</button>
               <button class="btn" id="btn-group-rename" type="button" hidden>Rename</button>
               <button class="btn" id="btn-group-leave" type="button" hidden>Leave</button>
@@ -490,6 +496,22 @@
           </div>
           <div class="moderation-content" id="moderation-content"></div>
         </div>
+
+        <aside class="canvas-sheet" id="canvas-sheet" aria-hidden="true" aria-label="Canvas">
+          <header class="canvas-sheet-header">
+            <div class="canvas-sheet-title-wrap">
+              <span class="canvas-sheet-kind" id="canvas-sheet-kind">Channel</span>
+              <input class="canvas-sheet-title" id="canvas-sheet-title" type="text" maxlength="160" aria-label="Canvas title" placeholder="Untitled canvas">
+            </div>
+            <div class="canvas-sheet-actions">
+              <span class="canvas-sheet-status" id="canvas-sheet-status" aria-live="polite">Saved</span>
+              <button class="icon-btn" id="btn-close-canvas" type="button" title="Close canvas" aria-label="Close canvas">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+              </button>
+            </div>
+          </header>
+          <textarea class="canvas-sheet-editor" id="canvas-sheet-editor" aria-label="Canvas content" placeholder="Write something…"></textarea>
+        </aside>
 
       </main>
     </div>

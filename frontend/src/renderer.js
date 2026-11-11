@@ -233,6 +233,11 @@ const els = {
   canvasTitleInput: document.getElementById('canvas-title-input'),
   canvasContentInput: document.getElementById('canvas-content-input'),
   canvasPreview: document.getElementById('canvas-preview'),
+  canvasSheet: document.getElementById('canvas-sheet'),
+  canvasSheetKind: document.getElementById('canvas-sheet-kind'),
+  canvasSheetTitle: document.getElementById('canvas-sheet-title'),
+  canvasSheetEditor: document.getElementById('canvas-sheet-editor'),
+  canvasSheetStatus: document.getElementById('canvas-sheet-status'),
   canvasEmptyState: document.getElementById('canvas-empty-state'),
   emojiPicker: document.getElementById('emoji-picker'),
   emojiSearch: document.getElementById('emoji-search'),
@@ -327,6 +332,7 @@ function setupEventListeners() {
       return;
     }
     if (e.key === 'Escape') {
+      if (els.canvasSheet?.getAttribute('aria-hidden') === 'false') { closeCanvas2(); return; }
       if (document.getElementById('image-viewer-modal')?.classList.contains('open')) { closeImageViewer(); return; }
       if (closeAllMenus()) return;
       if (els.emojiPicker && !els.emojiPicker.hidden) { closeEmojiPicker(); return; }
@@ -4407,6 +4413,136 @@ async function saveCreateChannel() {
 window.app = {
   addReaction,
 };
+
+// ============================================================
+// Canvas 2.0
+// ============================================================
+const canvas2State = {
+  activeId: null,
+  kind: null,
+  otherUserId: null,
+  channelId: null,
+  saveTimer: null,
+  saving: false,
+};
+
+async function openCanvas2(kind, extra = {}) {
+  const sheet = els.canvasSheet;
+  if (!sheet || !els.canvasSheetEditor || !els.canvasSheetTitle || !els.canvasSheetKind) return;
+  sheet.setAttribute('aria-hidden', 'true');
+  try {
+    let path;
+    if (kind === 'channel') {
+      canvas2State.channelId = Number(extra.channelId || state.currentChannelId);
+      if (!canvas2State.channelId) return;
+      path = `/api/canvas/channel/${canvas2State.channelId}`;
+      els.canvasSheetKind.textContent = 'Channel canvas';
+      canvas2State.otherUserId = null;
+    } else if (kind === 'dm') {
+      const userId = Number(extra.userId || state.currentDMId);
+      if (!userId) return;
+      canvas2State.channelId = null;
+      canvas2State.otherUserId = userId;
+      path = `/api/canvas/dm/${userId}`;
+      els.canvasSheetKind.textContent = 'Direct message canvas';
+    } else {
+      return;
+    }
+    const res = await api(path);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not open the canvas');
+    canvas2State.activeId = data.canvas.id;
+    canvas2State.kind = data.canvas.kind;
+    els.canvasSheetTitle.value = data.canvas.title || '';
+    els.canvasSheetEditor.value = data.canvas.content || '';
+    if (els.canvasSheetStatus) {
+      els.canvasSheetStatus.textContent = 'Saved';
+      els.canvasSheetStatus.dataset.state = 'saved';
+    }
+    sheet.setAttribute('aria-hidden', 'false');
+    els.canvasSheetEditor.focus({ preventScroll: true });
+  } catch (err) {
+    console.error('Open canvas error:', err);
+    showToast(err.message || 'Could not open the canvas.', 'error');
+  }
+}
+
+async function saveCanvas2() {
+  const canvasId = canvas2State.activeId;
+  if (!canvasId || canvas2State.saving) return;
+  canvas2State.saving = true;
+  if (els.canvasSheetStatus) {
+    els.canvasSheetStatus.textContent = 'Saving…';
+    els.canvasSheetStatus.dataset.state = 'saving';
+  }
+  try {
+    const res = await api(`/api/canvas/${canvasId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: els.canvasSheetTitle.value, content: els.canvasSheetEditor.value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not save the canvas');
+    if (els.canvasSheetStatus) {
+      els.canvasSheetStatus.textContent = 'Saved';
+      els.canvasSheetStatus.dataset.state = 'saved';
+    }
+  } catch (err) {
+    console.error('Canvas save error:', err);
+    showToast(err.message || 'Could not save the canvas.', 'error');
+    if (els.canvasSheetStatus) {
+      els.canvasSheetStatus.textContent = 'Error';
+      els.canvasSheetStatus.dataset.state = 'error';
+    }
+  } finally {
+    canvas2State.saving = false;
+  }
+}
+
+function debounceCanvas2Save() {
+  clearTimeout(canvas2State.saveTimer);
+  canvas2State.saveTimer = setTimeout(saveCanvas2, 800);
+}
+
+function closeCanvas2() {
+  clearTimeout(canvas2State.saveTimer);
+  const sheet = els.canvasSheet;
+  if (!sheet) return;
+  sheet.setAttribute('aria-hidden', 'true');
+  saveCanvas2();
+  canvas2State.activeId = null;
+}
+
+document.addEventListener('click', (event) => {
+  const channelBtn = event.target.closest('#btn-channel-canvas');
+  if (channelBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    openCanvas2('channel');
+    return;
+  }
+  const dmBtn = event.target.closest('#btn-dm-canvas');
+  if (dmBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    openCanvas2('dm');
+    return;
+  }
+  const closeBtn = event.target.closest('#btn-close-canvas');
+  if (closeBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeCanvas2();
+    return;
+  }
+});
+
+document.addEventListener('input', (event) => {
+  if (event.target === els.canvasSheetEditor || event.target === els.canvasSheetTitle) {
+    debounceCanvas2Save();
+  }
+});
+
+// Esc is handled by the shared handler above; do not double-bind.
 
 // Start
 init();
