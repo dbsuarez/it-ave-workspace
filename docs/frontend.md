@@ -87,6 +87,18 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | Moderation | ✅ Channel-scoped roles, timeout policy, timeouts, slow mode, reports, message and attachment removal, and audit log |
 | Auto-updater | ⏳ Planned |
 
+## Lists: checklist and table
+
+The Lists screen (More → Lists) shows checklists (the original card: tick, assignee, due date) and
+table lists. **Table lists** (`src/features/lists-table.js`) have typed columns: text, number, date,
+checkbox, select (coloured choices, one or several), person, link. Cells edit in place and save on
+change; a rejected value shows the server's message and is not stored. Click a column header to sort
+(ascending, descending, off), use the filter box to search every cell, add a subtask or duplicate a
+row from the row's hover buttons, archive and restore rows from the **Archived** view, and add,
+rename or delete columns (the primary column is permanent). **Copy list** makes a new list with the
+same columns and, optionally, the rows. Sorting and filtering run on the rows already loaded (500
+per page, **Load more rows** for the rest).
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |

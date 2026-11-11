@@ -3955,10 +3955,13 @@ async function createList(event) {
   const channelId = Number(els.listsChannelSelect.value);
   const titleInput = document.getElementById('new-list-title');
   const title = titleInput.value.trim();
+  const isTable = document.getElementById('new-list-type')?.value === 'table';
   try {
     const res = await api('/api/lists', {
       method: 'POST',
-      body: JSON.stringify({ channelId, title }),
+      body: JSON.stringify(isTable
+        ? { channelId, title, todoMode: false, columns: LIST_STARTER_COLUMNS }
+        : { channelId, title }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not create list');
@@ -3993,6 +3996,10 @@ function renderLists() {
 
   container.classList.remove('has-empty-record');
   container.innerHTML = state.lists.map((list) => {
+    // Table lists are drawn by features/lists-table.js once their columns and rows arrive
+    if (list.todoMode === false) {
+      return `<article class="card shared-list-card list-table-card" data-table-list="${list.id}"><p class="shared-list-empty">Loading…</p></article>`;
+    }
     const completed = list.items.filter((item) => item.completed).length;
     const items = list.items.map((item) => `
       <div class="shared-list-item${item.completed ? ' completed' : ''}">
@@ -4025,6 +4032,7 @@ function renderLists() {
         </form>
       </article>`;
   }).join('');
+  state.lists.filter((list) => list.todoMode === false).forEach((list) => loadListTable(list.id));
 }
 
 async function handleListContainerSubmit(event) {

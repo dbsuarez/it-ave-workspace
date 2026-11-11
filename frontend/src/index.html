@@ -374,7 +374,7 @@
           <div class="channel-header lists-header">
             <div class="channel-info">
               <h1>Lists</h1>
-              <p>Shared checklists for your channels.</p>
+              <p>Shared checklists and trackers for your channels.</p>
             </div>
             <div class="channel-actions">
               <select id="lists-channel-select" aria-label="Lists channel"></select>
@@ -384,6 +384,10 @@
           <form id="lists-create-form" class="list-create-form" hidden>
             <label for="new-list-title">List name</label>
             <input id="new-list-title" type="text" maxlength="120" required placeholder="e.g. Launch checklist">
+            <select id="new-list-type" aria-label="List type">
+              <option value="todo">Checklist</option>
+              <option value="table">Table (status, owner, due date, and more)</option>
+            </select>
             <button class="btn primary" type="submit">Create list</button>
             <button class="btn" type="button" id="btn-cancel-new-list">Cancel</button>
           </form>
@@ -960,6 +964,7 @@
   <script src="features/workspace.js"></script>
   <script src="features/huddleVideo.js"></script>
   <script src="features/integrations.js"></script>
+  <script src="features/lists-table.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
