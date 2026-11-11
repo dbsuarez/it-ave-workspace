@@ -241,6 +241,15 @@ Priority order, by user-visible value:
    - Reuse the same business logic / API client
    - Android will refuse plain HTTP; requires domain + TLS
 
+### Requested, not started (2026-11-12)
+
+- **Org chart** - a maker and a viewer, so employees can see who reports to whom. Needs a reporting-line
+  field on profiles (manager), a chart view, and an editor for whoever may change it.
+- **Employee page** - a dedicated page for each employee, which they can customize for other employees to
+  view (the profile card is the starting point: job title, photo, status, email).
+- Direct (one-to-one) huddles, so the profile card can offer a **Huddle** button as well as **Message**.
+- Notifications while the app is closed (today they work while it is open or in the background).
+
 Read receipts currently cover the latest message in each channel. They do not provide a
 per-message read-state history or a dedicated receipt-change event.
 Huddle uses a peer-to-peer mesh with a six-participant cap and public STUN by default; reliable

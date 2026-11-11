@@ -42,6 +42,15 @@ div[data-callout="warning"] { background: #fef6dd; border-color: #eab308; }
 div[data-callout="danger"] { background: #fde8e8; border-color: #ef4444; }
 div[data-callout] > * + * { margin-top: 4pt; }
 span[data-mention] { font-weight: 700; color: #6d28d9; }
+.pcard { display: flex; gap: 14pt; align-items: stretch; width: 78%; margin: 0 0 10pt; padding: 10pt 12pt; border: 1pt solid #d1d5db; border-radius: 9pt; break-inside: avoid; }
+.pcard-avatar { flex: 0 0 auto; width: 62pt; height: 62pt; border-radius: 9pt; color: #fff; font-size: 28pt; font-weight: 800; display: flex; align-items: center; justify-content: center; background-size: cover; background-position: center; }
+.pcard-body { display: flex; flex-direction: column; justify-content: center; gap: 1pt; min-width: 0; }
+.pcard-name { font-size: 13pt; font-weight: 800; }
+.pcard-dot { display: inline-block; width: 6pt; height: 6pt; margin-left: 5pt; border-radius: 50%; background: #9ca3af; vertical-align: middle; }
+.pcard-dot.online { background: #22c55e; }
+.pcard-title { font-size: 10.5pt; }
+.pcard-status { font-size: 9pt; color: #6b7280; }
+.pcard-email { font-size: 9pt; color: #6d28d9; }
 `;
 
 function escapeHtml(text) {

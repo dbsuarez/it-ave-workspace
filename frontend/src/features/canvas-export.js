@@ -18,6 +18,18 @@ const canvasExport = (() => {
     return btoa(binary);
   };
 
+  // A picture blob as a PNG no wider than maxWidth: { base64, width, height }.
+  async function blobToPng(blob, maxWidth) {
+    const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, maxWidth / bitmap.width);
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = new OffscreenCanvas(width, height);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+    const png = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
+    return { base64: bytesToBase64(png), width, height };
+  }
+
   // Every canvas picture used by the document, as PNG: { id: { base64, width, height } }.
   async function fetchPictures(ids) {
     const pictures = {};
@@ -25,19 +37,31 @@ const canvasExport = (() => {
       try {
         const res = await fetch(`${API_BASE}/api/files/${id}/download`, { headers: { Authorization: `Bearer ${state.token}` } });
         if (!res.ok) continue;
-        const bitmap = await createImageBitmap(await res.blob());
-        const scale = Math.min(1, MAX_PICTURE_WIDTH / bitmap.width);
-        const width = Math.max(1, Math.round(bitmap.width * scale));
-        const height = Math.max(1, Math.round(bitmap.height * scale));
-        const canvas = new OffscreenCanvas(width, height);
-        canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
-        const png = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
-        pictures[id] = { base64: bytesToBase64(png), width, height };
+        pictures[id] = await blobToPng(await res.blob(), MAX_PICTURE_WIDTH);
       } catch (err) {
         console.error('Export: picture skipped', id, err);
       }
     }
     return pictures;
+  }
+
+  const lookupPerson = (name) => (typeof canvasMentionLookup === 'function' ? canvasMentionLookup(name) : null);
+
+  // Profile photos for the cards in this document: { lowercase username: { base64, width, height } }.
+  async function fetchCardPhotos(json) {
+    const photos = {};
+    if (typeof userPhotoBlob !== 'function') return photos;
+    for (const name of soloMentionNames(json)) {
+      const person = lookupPerson(name);
+      if (!person || !person.photoVersion) continue;
+      try {
+        const blob = await userPhotoBlob(person);
+        if (blob) photos[name] = await blobToPng(blob, 256);
+      } catch (err) {
+        console.error('Export: profile photo skipped', name, err);
+      }
+    }
+    return photos;
   }
 
   function pictureIds(node, found = new Set()) {
@@ -84,11 +108,16 @@ const canvasExport = (() => {
         request = { format, title, markdown: view.editor().value };
       } else {
         showToast('Preparing the export…', 'info');
-        const { json, html } = canvasWysiwyg.exportData(which);
-        const pictures = await fetchPictures(Array.from(pictureIds(json)));
-        request = format === 'docx'
-          ? { format, title, doc: json, images: pictures }
-          : { format, title, html: inlinePictures(html, pictures) };
+        const data = canvasWysiwyg.exportData(which);
+        const pictures = await fetchPictures(Array.from(pictureIds(data.json)));
+        const photos = await fetchCardPhotos(data.json);
+        if (format === 'docx') {
+          request = { format, title, doc: exportCardsInDoc(data.json, lookupPerson, photos), images: pictures };
+        } else {
+          const photoUrls = {};
+          for (const [name, photo] of Object.entries(photos)) photoUrls[name] = `data:image/png;base64,${photo.base64}`;
+          request = { format, title, html: inlinePictures(exportCardsInHtml(data.html, lookupPerson, photoUrls), pictures) };
+        }
       }
       const result = await window.electronAPI.exportCanvas(request);
       if (result && result.path) showToast(`Saved to ${result.path}`, 'success');

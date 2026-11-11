@@ -24,6 +24,15 @@ const ALIGN = { left: AlignmentType.LEFT, center: AlignmentType.CENTER, right: A
 const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
 const GRID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
 
+// The build context, set for the duration of one (synchronous) build so inline code can reach the pictures.
+let activeCtx = null;
+
+function withContext(ctx, build) {
+  const previous = activeCtx;
+  activeCtx = ctx;
+  try { return build(); } finally { activeCtx = previous; }
+}
+
 function plainText(node) {
   if (!node) return '';
   if (node.type === 'text') return node.text || '';
@@ -57,6 +66,10 @@ function inlineRuns(nodes = [], extra = {}) {
       } else {
         out.push(runFor(node, extra));
       }
+    } else if (node.type === 'image') {
+      // a picture inside a paragraph (as it is in table cells)
+      const run = imageRun(node, activeCtx || {});
+      out.push(run || new TextRun({ text: `[${node.attrs?.alt || 'picture'}]`, italics: true, color: '6B7280' }));
     } else if (node.type === 'hardBreak') {
       out.push(new TextRun({ break: 1 }));
     } else if (node.type === 'mention') {
@@ -83,21 +96,60 @@ function paragraph(node, options = {}) {
   });
 }
 
-function imageParagraph(node, ctx) {
+// A picture at its saved size, limited to the room it has (the page, or the table cell it is in).
+function imageRun(node, ctx) {
   const match = /^file:(\d+)$/.exec(node.attrs?.src || '');
   const picture = match && ctx.images && ctx.images[match[1]];
   const alt = node.attrs?.alt || 'picture';
-  if (!picture || !picture.data || !picture.width || !picture.height) {
-    return new Paragraph({ children: [new TextRun({ text: `[${alt}]`, italics: true, color: '6B7280' })], spacing: { after: 120 } });
-  }
+  if (!picture || !picture.data || !picture.width || !picture.height) return null;
+  const room = ctx.maxImageWidth || PAGE_WIDTH_PX;
   const percent = node.attrs?.width ? Math.min(100, Math.max(10, Number(node.attrs.width))) : null;
-  const maxWidth = Math.round(PAGE_WIDTH_PX * ((percent || 100) / 100));
+  const maxWidth = Math.max(16, Math.round(room * ((percent || 100) / 100)));
   const width = percent ? maxWidth : Math.min(picture.width, maxWidth);
   const height = Math.max(1, Math.round((picture.height / picture.width) * width));
-  return new Paragraph({
-    children: [new ImageRun({ type: 'png', data: picture.data, transformation: { width, height }, altText: { title: alt, description: alt, name: alt } })],
-    alignment: ALIGN[node.attrs?.align] || AlignmentType.LEFT,
-    spacing: { after: 160 },
+  return new ImageRun({ type: 'png', data: picture.data, transformation: { width, height }, altText: { title: alt, description: alt, name: alt } });
+}
+
+function imageParagraph(node, ctx) {
+  const run = imageRun(node, ctx);
+  if (!run) {
+    return new Paragraph({ children: [new TextRun({ text: `[${node.attrs?.alt || 'picture'}]`, italics: true, color: '6B7280' })], spacing: { after: 120 } });
+  }
+  return new Paragraph({ children: [run], alignment: ALIGN[node.attrs?.align] || AlignmentType.LEFT, spacing: { after: 160 } });
+}
+
+// A profile card (a mention alone on its line): picture or initial on the left, details on the right.
+function profileCardBlock(attrs, ctx) {
+  const name = attrs.username || '';
+  const dot = new TextRun({ text: '  \u25CF', color: attrs.status === 'online' ? '22C55E' : '9CA3AF', size: 18 });
+  const lines = [new Paragraph({ children: [new TextRun({ text: name, bold: true, size: 28 }), dot], spacing: { after: 40 } })];
+  const addLine = (text, options = {}) => {
+    if (text) lines.push(new Paragraph({ children: [new TextRun({ text, size: options.size || 22, color: options.color })], spacing: { after: 20 } }));
+  };
+  addLine([attrs.jobTitle, attrs.role].filter(Boolean).join(' \u00B7 '));
+  addLine(attrs.statusText, { size: 19, color: '6B7280' });
+  addLine(attrs.email, { size: 19, color: '6D28D9' });
+  const picture = attrs.photo && attrs.photo.data && attrs.photo.width && attrs.photo.height ? attrs.photo : null;
+  const left = picture
+    ? [new Paragraph({ children: [new ImageRun({ type: 'png', data: picture.data, transformation: { width: 84, height: 84 }, altText: { title: name, description: name, name } })] })]
+    : [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 200, after: 200 }, children: [new TextRun({ text: (name[0] || '?').toUpperCase(), bold: true, size: 56, color: 'FFFFFF' })] })];
+  const frame = { style: BorderStyle.SINGLE, size: 6, color: 'D1D5DB' };
+  return new Table({
+    width: { size: 6000, type: WidthType.DXA },
+    columnWidths: [1700, 4300],
+    borders: { top: frame, bottom: frame, left: frame, right: frame, insideHorizontal: NO_BORDER, insideVertical: NO_BORDER },
+    rows: [new TableRow({
+      children: [
+        new TableCell({
+          width: { size: 1700, type: WidthType.DXA },
+          verticalAlign: 'center',
+          shading: picture ? undefined : { type: ShadingType.CLEAR, fill: String(attrs.color || '#6B21A8').replace('#', '').toUpperCase() },
+          margins: { top: 100, bottom: 100, left: 120, right: 120 },
+          children: left,
+        }),
+        new TableCell({ width: { size: 4300, type: WidthType.DXA }, verticalAlign: 'center', margins: { top: 100, bottom: 100, left: 180, right: 120 }, children: lines }),
+      ],
+    })],
   });
 }
 
@@ -191,9 +243,16 @@ function tableBlock(node, ctx) {
       children: (row.content || []).map((cell, index) => {
         const isHeader = cell.type === 'tableHeader';
         const align = ALIGN[cell.attrs?.align];
-        const children = (cell.content || []).map((child) => (child.type === 'paragraph'
-          ? paragraph(child, { alignment: align, after: 40, run: isHeader ? { bold: true } : undefined })
-          : null)).filter(Boolean);
+        const width = columnWidths ? columnWidths[index] || columnWidths[columnWidths.length - 1] : null;
+        const cellCtx = { ...ctx, maxImageWidth: Math.max(40, Math.floor((width || MAX_TABLE_TWIPS / Math.max(1, first.length)) / TWIPS_PER_PX) - 16) };
+        const children = withContext(cellCtx, () => {
+          const out = [];
+          for (const child of cell.content || []) {
+            if (child.type === 'paragraph') out.push(paragraph(child, { alignment: align, after: 40, run: isHeader ? { bold: true } : undefined }));
+            else out.push(...blocks([child], cellCtx));
+          }
+          return out;
+        });
         return new TableCell({
           children: children.length ? children : [new Paragraph({ children: [] })],
           width: columnWidths ? { size: columnWidths[index] || columnWidths[columnWidths.length - 1], type: WidthType.DXA } : undefined,
@@ -277,6 +336,9 @@ function blocks(nodes = [], ctx) {
       case 'image':
         out.push(imageParagraph(node, ctx));
         break;
+      case 'profileCard':
+        out.push(profileCardBlock(node.attrs || {}, ctx), new Paragraph({ children: [], spacing: { after: 120 } }));
+        break;
       default:
         if (node.content) out.push(paragraph({ content: [{ type: 'text', text: plainText(node) }] }));
     }
@@ -285,7 +347,18 @@ function blocks(nodes = [], ctx) {
 }
 
 // `doc` is editor.getJSON(); `images` maps a file id to { data: Buffer, width, height } (a PNG).
-async function buildDocx({ title, doc, images = {} }) {
+// Photos on profile cards arrive as base64 inside the document; turn them into bytes.
+function withCardPhotos(node) {
+  if (!node || typeof node !== 'object') return node;
+  if (node.type === 'profileCard' && node.attrs && node.attrs.photo && node.attrs.photo.base64) {
+    const { base64, width, height } = node.attrs.photo;
+    return { ...node, attrs: { ...node.attrs, photo: { data: Buffer.from(base64, 'base64'), width, height } } };
+  }
+  return node.content ? { ...node, content: node.content.map(withCardPhotos) } : node;
+}
+
+async function buildDocx({ title, doc: rawDoc, images = {} }) {
+  const doc = withCardPhotos(rawDoc);
   const ctx = {
     images,
     numbering: [{
@@ -307,7 +380,7 @@ async function buildDocx({ title, doc, images = {} }) {
   if (title && !startsWithTitle) {
     children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: title })], spacing: { after: 240 } }));
   }
-  children.push(...blocks(content, ctx));
+  children.push(...withContext(ctx, () => blocks(content, ctx)));
   if (!children.length) children.push(new Paragraph({ children: [] }));
 
   const heading = (id, name, size, before, after) => ({
