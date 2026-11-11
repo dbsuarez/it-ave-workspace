@@ -118,11 +118,16 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
   size presets (25, 50, 75 percent, full), left, center or right alignment, a description (alt text),
   Replace and Delete, and a corner handle resizes it by dragging. Size and alignment are saved in
   the standard Markdown image title, for example `![name](file:7 "50% center")`.
-- **Tables.** With the cursor in a table a bar offers insert row above or below, insert column left
-  or right, delete row, column or table, header row on or off, and column alignment. Hovering a table
-  shows a "+" at its right edge (add a column) and bottom edge (add a row); Tab in the last cell adds a
-  row. Drag a column border to resize it: widths are saved in the Markdown separator row (about 10px
-  per dash, three dashes or fewer means automatic), which other Markdown renderers ignore.
+- **Tables.** Tables fill the page, with equal columns, until columns are given widths. With the cursor
+  in a table a bar floats above it, with related actions grouped into dropdown menus: **Row** (insert
+  above or below, delete), **Column** (insert left or right, delete), **Widths** (equalize all columns,
+  auto-fit to contents) and **Align** (left, center, right), plus **Header row** and **Delete table**.
+  Hovering a table shows a "+" at its right edge (add a column) and bottom edge (add a row); Tab in
+  the last cell adds a row. Drag a column border to resize it: the drag stops at the edge of the page,
+  so a table never becomes wider than the page. Widths are saved in the Markdown separator row (about
+  10px per dash, three dashes or fewer means automatic), which other Markdown renderers ignore.
+- **Picture bar.** Selecting a picture floats a bar with **Size** (25, 50, 75 percent, full width) and
+  **Align** menus, plus Description, Replace and Delete.
 - **Moving things.** Hover any block and drag its grip (six dots) to move it, whether it is a paragraph,
   a picture, a table or a callout.
 - **Markdown source.** The **Markdown** button swaps the page for the Markdown text (with its own

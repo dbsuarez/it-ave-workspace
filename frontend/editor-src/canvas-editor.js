@@ -332,4 +332,19 @@ function getCanvasMarkdown(editor) {
   return normalizeMarkdown(editor.getMarkdown());
 }
 
-module.exports = { createCanvasEditor, buildExtensions, getCanvasMarkdown, normalizeMarkdown, parseImageTitle, imageTitle, startBlockDrag, CALLOUT_TYPES };
+// Column widths (px) that fit the page: natural widths if they already fit, otherwise scaled down
+// together, never below `min`. Used by "Auto-fit to contents".
+function fitColumnWidths(natural, available, min = 60) {
+  const widths = natural.map((w) => Math.max(min, Math.ceil(w)));
+  const total = widths.reduce((sum, w) => sum + w, 0);
+  if (total <= available || available <= 0) return widths;
+  // shrink the columns that have room above the minimum, in proportion to that room
+  const room = widths.map((w) => w - min);
+  const roomTotal = room.reduce((sum, r) => sum + r, 0);
+  const excess = total - available;
+  if (roomTotal <= 0) return widths;
+  const cut = Math.min(1, excess / roomTotal);
+  return widths.map((w, i) => Math.max(min, Math.floor(w - room[i] * cut)));
+}
+
+module.exports = { createCanvasEditor, buildExtensions, getCanvasMarkdown, normalizeMarkdown, parseImageTitle, imageTitle, startBlockDrag, fitColumnWidths, CALLOUT_TYPES };

@@ -203,3 +203,16 @@ test('resizing a column in the page changes the saved separator', () => {
   assert.match(getCanvasMarkdown(editor).split('\n')[1], /^\| -{20} \| -{3} \|$/);
   editor.destroy();
 });
+
+test('auto-fit widths: natural when they fit, shrunk together when they do not, never below the minimum', () => {
+  const { fitColumnWidths } = require('../editor-src/canvas-editor');
+  assert.deepEqual(fitColumnWidths([100, 150], 600), [100, 150]);
+  assert.deepEqual(fitColumnWidths([10, 20], 600), [60, 60], 'tiny columns get the minimum');
+  const shrunk = fitColumnWidths([400, 400, 400], 600);
+  assert.ok(shrunk.reduce((a, b) => a + b, 0) <= 600);
+  assert.ok(shrunk.every((w) => w >= 60 && w === shrunk[0]), 'equal columns stay equal');
+  const mixed = fitColumnWidths([60, 500, 300], 500);
+  assert.equal(mixed[0], 60, 'a column already at the minimum is left alone');
+  assert.ok(mixed.reduce((a, b) => a + b, 0) <= 500);
+  assert.ok(mixed[1] > mixed[2], 'the wider column stays wider');
+});

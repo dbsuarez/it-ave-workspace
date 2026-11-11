@@ -6015,3 +6015,99 @@ h4.cv-h { font-size: 15px; }
   width: 100%;
   height: auto;
 }
+
+/* Floating bars: dropdown menus, page-wide tables, quiet scrollbars */
+.cw-menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.cw-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 6;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.cw-menu[hidden] { display: none; }
+
+.cw-menu-item {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cw-menu-item:hover { background: var(--muted-bg); }
+.cw-menu-item.active { box-shadow: inset 3px 0 0 var(--purple); font-weight: 700; }
+
+.cw-menu-toggle[aria-expanded="true"] { background: var(--muted-bg); }
+
+/* tables fill the page unless columns have been given widths */
+.cw-editor .ProseMirror table { width: 100%; }
+
+.cw-measure {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  width: max-content;
+}
+
+.cw-measure table {
+  table-layout: auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+
+.cw-measure th,
+.cw-measure td { white-space: nowrap; }
+
+/* no horizontal scrolling for the page itself, and no layout jump when a vertical scrollbar appears */
+.cw-scroll {
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.cw-scroll::-webkit-scrollbar,
+.cw-editor .ProseMirror .tableWrapper::-webkit-scrollbar,
+.cw-editor .ProseMirror pre::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.cw-scroll::-webkit-scrollbar-track,
+.cw-editor .ProseMirror .tableWrapper::-webkit-scrollbar-track,
+.cw-editor .ProseMirror pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cw-scroll::-webkit-scrollbar-thumb,
+.cw-editor .ProseMirror .tableWrapper::-webkit-scrollbar-thumb,
+.cw-editor .ProseMirror pre::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--border);
+  background-clip: content-box;
+}
+
+.cw-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); background-clip: content-box; }
+
+/* the table wrapper only ever scrolls sideways; a 1px rounding overflow must not add a vertical scrollbar */
+.cw-editor .ProseMirror .tableWrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+}

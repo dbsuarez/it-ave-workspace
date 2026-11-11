@@ -75,6 +75,35 @@ const canvasWysiwyg = (() => {
   // commands where text typed after "/cmd " belongs inside the new block
   const TEXT_ITEMS = new Set(['h1', 'h2', 'h3', 'text', 'list', 'numbered', 'todo', 'quote', 'info', 'tip', 'warning', 'danger', 'code']);
 
+  // The floating bars keep related actions together in dropdown menus.
+  const IMAGE_BAR = [
+    { menu: 'Size', items: [['width:25', 'Small (25%)'], ['width:50', 'Medium (50%)'], ['width:75', 'Large (75%)'], ['width:100', 'Full width']] },
+    { menu: 'Align', items: [['align:left', 'Align left'], ['align:center', 'Center'], ['align:right', 'Align right']] },
+    { act: 'alt', label: 'Description', title: 'Describe the picture' },
+    { act: 'replace', label: 'Replace', title: 'Replace with another picture' },
+    { act: 'delete', label: 'Delete', title: 'Remove the picture', danger: true },
+  ];
+  const TABLE_BAR = [
+    { menu: 'Row', items: [['rowBefore', 'Insert row above'], ['rowAfter', 'Insert row below'], ['rowDelete', 'Delete row']] },
+    { menu: 'Column', items: [['colBefore', 'Insert column left'], ['colAfter', 'Insert column right'], ['colDelete', 'Delete column']] },
+    { menu: 'Widths', items: [['equalize', 'Equalize all columns'], ['autofit', 'Auto-fit to contents']] },
+    { menu: 'Align', items: [['alignLeft', 'Align column left'], ['alignCenter', 'Center column'], ['alignRight', 'Align column right']] },
+    { act: 'header', label: 'Header row', title: 'Turn the header row on or off' },
+    { act: 'tableDelete', label: 'Delete table', title: 'Delete the whole table', danger: true },
+  ];
+
+  function barHtml(spec) {
+    return spec.map((entry) => (entry.menu
+      ? `<span class="cw-menu-wrap"><button type="button" class="canvas-toolbar-btn cw-menu-toggle" data-menu-toggle aria-haspopup="true" aria-expanded="false">${entry.menu} <span aria-hidden="true">\u25BE</span></button>`
+        + `<div class="cw-menu" role="menu" hidden>${entry.items.map(([act, label]) => `<button type="button" role="menuitem" class="cw-menu-item" data-act="${act}">${label}</button>`).join('')}</div></span>`
+      : `<button type="button" class="canvas-toolbar-btn${entry.danger ? ' danger' : ''}" data-act="${entry.act}" title="${entry.title || entry.label}">${entry.label}</button>`)).join('');
+  }
+
+  function closeMenus(bar) {
+    bar.querySelectorAll('.cw-menu').forEach((menu) => { menu.hidden = true; });
+    bar.querySelectorAll('[data-menu-toggle]').forEach((toggle) => toggle.setAttribute('aria-expanded', 'false'));
+  }
+
   const make = (tag, className, attrs = {}) => {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -120,25 +149,11 @@ const canvasWysiwyg = (() => {
     inst.bubble.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
     inst.imageBar = make('div', 'cw-float cw-image-bar', { role: 'toolbar', 'aria-label': 'Picture' });
     inst.imageBar.hidden = true;
-    inst.imageBar.innerHTML = [
-      ['width', '25', 'S', 'Small (25%)'], ['width', '50', 'M', 'Medium (50%)'], ['width', '75', 'L', 'Large (75%)'], ['width', '100', 'Full', 'Full width'],
-      ['sep'], ['align', 'left', '\u21E4', 'Align left'], ['align', 'center', '\u2194', 'Center'], ['align', 'right', '\u21E5', 'Align right'],
-      ['sep'], ['action', 'alt', 'Description', 'Describe the picture'], ['action', 'replace', 'Replace', 'Replace with another picture'], ['action', 'delete', 'Delete', 'Remove the picture'],
-    ].map(([kind, value, label, title]) => (kind === 'sep'
-      ? '<span class="canvas-toolbar-sep" aria-hidden="true"></span>'
-      : `<button type="button" class="canvas-toolbar-btn" data-image-${kind}="${value}" title="${title}" aria-label="${title}">${label}</button>`)).join('')
+    inst.imageBar.innerHTML = barHtml(IMAGE_BAR)
       + '<form class="cw-alt-form" hidden><input type="text" maxlength="200" placeholder="Describe the picture" aria-label="Picture description"><button class="btn primary" type="submit">Save</button></form>';
     inst.tableBar = make('div', 'cw-float cw-table-bar', { role: 'toolbar', 'aria-label': 'Table' });
     inst.tableBar.hidden = true;
-    inst.tableBar.innerHTML = [
-      ['rowBefore', '\u2191 Row', 'Insert a row above'], ['rowAfter', '\u2193 Row', 'Insert a row below'], ['rowDelete', '\u2212 Row', 'Delete this row'],
-      ['sep'], ['colBefore', '\u2190 Col', 'Insert a column to the left'], ['colAfter', '\u2192 Col', 'Insert a column to the right'], ['colDelete', '\u2212 Col', 'Delete this column'],
-      ['sep'], ['header', 'Header row', 'Turn the header row on or off'],
-      ['sep'], ['alignLeft', '\u21E4', 'Align this column left'], ['alignCenter', '\u2194', 'Center this column'], ['alignRight', '\u21E5', 'Align this column right'],
-      ['sep'], ['tableDelete', 'Delete table', 'Delete the whole table'],
-    ].map(([id, label, title]) => (id === 'sep'
-      ? '<span class="canvas-toolbar-sep" aria-hidden="true"></span>'
-      : `<button type="button" class="canvas-toolbar-btn${id === 'tableDelete' ? ' danger' : ''}" data-table-act="${id}" title="${title}" aria-label="${title}">${label}</button>`)).join('');
+    inst.tableBar.innerHTML = barHtml(TABLE_BAR);
     inst.addCol = make('button', 'cw-add-handle cw-add-col', { type: 'button', title: 'Add a column', 'aria-label': 'Add a column' });
     inst.addRow = make('button', 'cw-add-handle cw-add-row', { type: 'button', title: 'Add a row', 'aria-label': 'Add a row' });
     inst.addCol.textContent = '+';
@@ -252,13 +267,56 @@ const canvasWysiwyg = (() => {
     }
     placeFloat(inst, inst.imageBar, imageTarget);
     placeFloat(inst, inst.tableBar, tableTarget);
+    if (!imageTarget) { inst.imageBar.querySelector('.cw-alt-form').hidden = true; closeMenus(inst.imageBar); }
+    if (!tableTarget) closeMenus(inst.tableBar);
     if (imageTarget) {
       const attrs = editor.getAttributes('image');
-      inst.imageBar.querySelectorAll('[data-image-width]').forEach((b) => b.classList.toggle('active', Number(b.dataset.imageWidth) === (attrs.width || 100)));
-      inst.imageBar.querySelectorAll('[data-image-align]').forEach((b) => b.classList.toggle('active', b.dataset.imageAlign === (attrs.align || 'left')));
-    } else {
-      inst.imageBar.querySelector('.cw-alt-form').hidden = true;
+      inst.imageBar.querySelectorAll('[data-act^="width:"]').forEach((b) => b.classList.toggle('active', Number(b.dataset.act.slice(6)) === (attrs.width || 100)));
+      inst.imageBar.querySelectorAll('[data-act^="align:"]').forEach((b) => b.classList.toggle('active', b.dataset.act.slice(6) === (attrs.align || 'left')));
     }
+  }
+
+  // The table the cursor is in: { node, start (inside it), before (its position) }.
+  function tableInfo(inst) {
+    const { $from } = inst.editor.state.selection;
+    let depth = $from.depth;
+    while (depth > 0 && $from.node(depth).type.name !== 'table') depth -= 1;
+    return depth > 0 ? { node: $from.node(depth), start: $from.start(depth), before: $from.before(depth) } : null;
+  }
+
+  // Give every column a width in px (an array), or clear them all (null) so the columns share the page equally.
+  function setColumnWidths(inst, widths) {
+    const info = tableInfo(inst);
+    if (!info) return;
+    const { state, view } = inst.editor;
+    const tr = state.tr;
+    info.node.forEach((row, rowOffset) => {
+      row.forEach((cell, cellOffset, index) => {
+        const width = widths && widths[index] ? [Math.round(widths[index])] : null;
+        tr.setNodeMarkup(info.start + rowOffset + 1 + cellOffset, undefined, { ...cell.attrs, colwidth: width });
+      });
+    });
+    view.dispatch(tr);
+  }
+
+  // Measure how wide each column wants to be (its longest line, no wrapping), then fit that to the page.
+  function autoFitColumns(inst) {
+    const info = tableInfo(inst);
+    if (!info) return;
+    const dom = inst.editor.view.nodeDOM(info.before);
+    const table = dom && (dom.matches && dom.matches('table') ? dom : dom.querySelector('table'));
+    if (!table) return;
+    const probe = make('div', 'cw-editor cw-measure');
+    const holder = make('div', 'ProseMirror');
+    const copy = table.cloneNode(true);
+    copy.querySelectorAll('colgroup').forEach((el) => el.remove());
+    copy.removeAttribute('style');
+    holder.appendChild(copy);
+    probe.appendChild(holder);
+    inst.scroll.appendChild(probe);
+    const natural = Array.from(copy.querySelector('tr').children).map((cell) => cell.getBoundingClientRect().width);
+    probe.remove();
+    setColumnWidths(inst, ITAEditor.fitColumnWidths(natural, inst.editor.view.dom.clientWidth));
   }
 
   // Set the alignment of every cell in the column the cursor is in.
@@ -285,19 +343,38 @@ const canvasWysiwyg = (() => {
     for (const bar of [inst.imageBar, inst.tableBar]) {
       bar.addEventListener('mousedown', (event) => { if (!event.target.closest('input')) event.preventDefault(); });
     }
+    // open and close the dropdown menus of both bars
+    for (const bar of [inst.imageBar, inst.tableBar]) {
+      bar.addEventListener('click', (event) => {
+        const toggle = event.target.closest('[data-menu-toggle]');
+        if (!toggle) return;
+        const menu = toggle.nextElementSibling;
+        const open = menu.hidden;
+        closeMenus(bar);
+        menu.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    }
+    document.addEventListener('mousedown', (event) => {
+      if (event.target.closest && event.target.closest('.cw-menu-wrap')) return;
+      closeMenus(inst.imageBar);
+      closeMenus(inst.tableBar);
+    });
+
     inst.imageBar.addEventListener('click', (event) => {
-      const button = event.target.closest('button');
-      if (!button) return;
+      const item = event.target.closest('[data-act]');
+      if (!item) return;
+      closeMenus(inst.imageBar);
       const chain = editor.chain().focus();
-      if (button.dataset.imageWidth) { chain.updateAttributes('image', { width: Number(button.dataset.imageWidth) >= 100 ? null : Number(button.dataset.imageWidth) }).run(); return; }
-      if (button.dataset.imageAlign) { chain.updateAttributes('image', { align: button.dataset.imageAlign }).run(); return; }
-      const action = button.dataset.imageAction;
-      if (action === 'delete') { chain.deleteSelection().run(); return; }
-      if (action === 'replace') {
+      const act = item.dataset.act;
+      if (act.startsWith('width:')) { const width = Number(act.slice(6)); chain.updateAttributes('image', { width: width >= 100 ? null : width }).run(); return; }
+      if (act.startsWith('align:')) { chain.updateAttributes('image', { align: act.slice(6) }).run(); return; }
+      if (act === 'delete') { chain.deleteSelection().run(); return; }
+      if (act === 'replace') {
         pickCanvasImage(() => canvasViews[inst.which].id(), ({ fileId }) => editor.chain().focus().updateAttributes('image', { src: `file:${fileId}` }).run());
         return;
       }
-      if (action === 'alt') {
+      if (act === 'alt') {
         const form = inst.imageBar.querySelector('.cw-alt-form');
         form.hidden = !form.hidden;
         if (!form.hidden) { const input = form.querySelector('input'); input.value = editor.getAttributes('image').alt || ''; input.focus(); }
@@ -316,13 +393,38 @@ const canvasWysiwyg = (() => {
       header: (c) => c.toggleHeaderRow(), tableDelete: (c) => c.deleteTable(),
     };
     inst.tableBar.addEventListener('click', (event) => {
-      const button = event.target.closest('button[data-table-act]');
-      if (!button) return;
-      const act = button.dataset.tableAct;
+      const item = event.target.closest('[data-act]');
+      if (!item) return;
+      closeMenus(inst.tableBar);
+      const act = item.dataset.act;
       if (act.startsWith('align')) { setColumnAlign(inst, act.slice(5).toLowerCase()); return; }
+      if (act === 'equalize') { setColumnWidths(inst, null); return; }
+      if (act === 'autofit') { autoFitColumns(inst); return; }
       const run = TABLE_ACTS[act];
       if (run) run(editor.chain().focus()).run();
     });
+
+    // Dragging a column border may not make the table wider than the page: past that point the drag is
+    // held at the page edge (the editor's own handler sees a mouse that stops there).
+    let limit = null;
+    window.addEventListener('mousedown', (event) => {
+      limit = null;
+      if (!inst.showing || !editor.view.dom.classList.contains('resize-cursor') || !editor.view.dom.contains(event.target)) return;
+      const table = event.target.closest('table');
+      if (!table) return;
+      limit = event.clientX + Math.max(0, editor.view.dom.clientWidth - table.getBoundingClientRect().width);
+    }, true);
+    for (const type of ['mousemove', 'mouseup']) {
+      window.addEventListener(type, (event) => {
+        if (limit === null || event.cwReplay) return;
+        if (type === 'mouseup') setTimeout(() => { limit = null; }, 0);
+        if (event.clientX <= limit) return;
+        event.stopImmediatePropagation();
+        const held = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: limit, clientY: event.clientY, buttons: event.buttons, view: window });
+        held.cwReplay = true;
+        (event.target || window).dispatchEvent(held);
+      }, true);
+    }
 
     // "+" at the right and bottom edge of the table under the pointer adds a column or a row
     const addAt = (cellSelector, command) => {
