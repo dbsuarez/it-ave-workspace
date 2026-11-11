@@ -8,6 +8,7 @@
     "check": "node scripts/check.js",
     "test": "node --test \"test/*.test.js\"",
     "vendor": "node scripts/vendor.js",
+    "editor": "node scripts/build-editor.js",
     "prestart": "npm run check",
     "start": "electron .",
     "dev": "electron .",
@@ -21,8 +22,18 @@
   },
   "devDependencies": {
     "@fontsource/lato": "^5.3.0",
+    "@tiptap/core": "^3.33.1",
+    "@tiptap/extension-image": "^3.33.1",
+    "@tiptap/extension-list": "^3.33.1",
+    "@tiptap/extension-table": "^3.33.1",
+    "@tiptap/extensions": "^3.33.1",
+    "@tiptap/markdown": "^3.33.1",
+    "@tiptap/pm": "^3.33.1",
+    "@tiptap/starter-kit": "^3.33.1",
     "electron": "^28.0.0",
     "electron-builder": "^24.0.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^31.0.0",
     "socket.io-client": "^4.7.2"
   },
   "dependencies": {

@@ -450,7 +450,7 @@
               <input id="canvas2-editor-title" type="text" maxlength="160" placeholder="Untitled canvas" aria-label="Canvas title">
               <div class="canvas2-editor-actions">
                 <span class="canvas2-status" id="canvas2-status" aria-live="polite">Saved</span>
-                <button class="btn canvas-mode-btn" id="btn-canvas2-mode" type="button" title="Show the finished canvas">Read</button>
+                <button class="btn canvas-mode-btn" id="btn-canvas2-mode" type="button" title="Edit the Markdown source">Markdown</button>
                 <button class="btn canvas-mode-btn" id="btn-canvas2-comments" type="button" title="Comments">Comments</button>
                 <button class="btn canvas-mode-btn" id="btn-canvas2-history" type="button" title="Earlier versions">History</button>
                 <button class="icon-btn" id="btn-canvas2-share" type="button" title="Collaborators and share link" aria-label="Collaborators and share link">
@@ -551,7 +551,7 @@
             </div>
             <div class="canvas-sheet-actions">
               <span class="canvas-sheet-status" id="canvas-sheet-status" aria-live="polite">Saved</span>
-              <button class="btn canvas-mode-btn" id="btn-canvas-sheet-mode" type="button" title="Show the finished canvas">Read</button>
+              <button class="btn canvas-mode-btn" id="btn-canvas-sheet-mode" type="button" title="Edit the Markdown source">Markdown</button>
               <button class="btn canvas-mode-btn" id="btn-canvas-sheet-comments" type="button" title="Comments">Comments</button>
               <button class="btn canvas-mode-btn" id="btn-canvas-sheet-history" type="button" title="Earlier versions">History</button>
               <button class="icon-btn" id="btn-close-canvas" type="button" title="Close canvas" aria-label="Close canvas">
@@ -1019,6 +1019,8 @@
   <script src="features/canvas-slash.js"></script>
   <script src="features/canvas-view.js"></script>
   <script src="features/canvas-comments.js"></script>
+  <script src="vendor/canvas-editor.js"></script>
+  <script src="features/canvas-wysiwyg.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

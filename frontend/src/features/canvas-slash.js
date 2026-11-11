@@ -209,11 +209,10 @@ function canvasNotice(text, type) {
   if (typeof showToast === 'function') showToast(text, type);
 }
 
-// Ask for a picture, upload it to this canvas, and put it into the text where the cursor was.
-function chooseCanvasImage(textarea, getCanvasId) {
+// Ask for a picture and upload it to this canvas; onDone({ fileId, name }) runs after a successful upload.
+function pickCanvasImage(getCanvasId, onDone) {
   const canvasId = getCanvasId ? getCanvasId() : null;
   if (!canvasId) { canvasNotice('Open a canvas first.', 'error'); return; }
-  const cursor = textarea.selectionStart;
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/png,image/jpeg,image/gif,image/webp';
@@ -230,16 +229,24 @@ function chooseCanvasImage(textarea, getCanvasId) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      const result = insertImageBlock(textarea.value, Math.min(cursor, textarea.value.length), data.fileId, data.name);
-      textarea.value = result.value;
-      textarea.focus();
-      textarea.setSelectionRange(result.selectStart, result.selectEnd);
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      onDone({ fileId: data.fileId, name: data.name });
     } catch (err) {
       canvasNotice(err.message || 'Could not upload the image.', 'error');
     }
   });
   input.click();
+}
+
+// Markdown source editor: put the picture into the text where the cursor was.
+function chooseCanvasImage(textarea, getCanvasId) {
+  const cursor = textarea.selectionStart;
+  pickCanvasImage(getCanvasId, ({ fileId, name }) => {
+    const result = insertImageBlock(textarea.value, Math.min(cursor, textarea.value.length), fileId, name);
+    textarea.value = result.value;
+    textarea.focus();
+    textarea.setSelectionRange(result.selectStart, result.selectEnd);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function attachCanvasSlash(textarea, getCanvasId) {
@@ -523,14 +530,15 @@ function attachCanvasToolbar(textarea, modeButton, getCanvasId) {
 
   const sync = () => {
     const editing = !textarea.hidden && !textarea.readOnly;
+    const rich = textarea.dataset.richActive === '1'; // the rich-text page is showing and editable
     const on = canvasToolbarEnabled();
     bar.hidden = !(editing && on);
-    toggle.hidden = !editing;
+    toggle.hidden = !(editing || rich);
     toggle.classList.toggle('active', on);
     toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
     toggle.title = on ? 'Hide the formatting toolbar' : 'Show the formatting toolbar';
   };
-  new MutationObserver(sync).observe(textarea, { attributes: true, attributeFilter: ['hidden', 'readonly'] });
+  new MutationObserver(sync).observe(textarea, { attributes: true, attributeFilter: ['hidden', 'readonly', 'data-rich-active'] });
   canvasToolbars.push({ sync });
   sync();
 }

@@ -87,44 +87,53 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | Moderation | ✅ Channel-scoped roles, timeout policy, timeouts, slow mode, reports, message and attachment removal, and audit log |
 | Auto-updater | ⏳ Planned |
 
-## Canvas: writing helpers
+## Canvas: the editable page
 
-Both canvas editors (`features/canvas-slash.js`) help with Markdown without hiding it:
+A canvas opens as a formatted page that people edit directly: click a heading and type, tick a
+checklist, press `/` for a table. Nobody has to know Markdown. It is built on TipTap (ProseMirror)
+and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect),
+`src/vendor/canvas-editor.js` (the bundle the app loads) and `src/features/canvas-wysiwyg.js`
+(toolbar, slash menu, templates, comment bubble, link box).
 
-- **Slash menu.** Type `/` at the start of a line: headings (`/h1` to `/h3`), `/text`, `/list`,
-  `/numbered`, `/todo`, `/quote`, callouts (`/info`, `/tip`, `/warning`, `/danger`), `/table`,
-  `/image`, `/code`, `/divider`, `/date`, `/mention`. Arrow keys and Enter pick; Esc closes.
-  `/h1 My title` then Enter writes `# My title` in one go.
-- **Lists.** Enter at the end of a list item continues the list; Enter on an empty item ends it.
-- **Shortcuts.** Ctrl+B bold, Ctrl+I italic, Ctrl+K link.
-- **Toolbar.** Buttons for the same things, shown in Edit mode. The **Aa** button next to Read turns it
-  on or off; the choice is remembered on that computer.
-- **Images.** `/image` or the toolbar's Image button asks for a picture, uploads it to the canvas and
-  inserts `![name](file:<id>)` as its own block. The reading view fetches each picture with the
-  signed-in request and shows it from a blob URL; there is never a public URL.
-
-- **Templates.** An empty canvas in Edit mode offers Meeting notes, Project plan, Action items,
-  Incident report and Channel FAQ; picking one fills the canvas with editable Markdown.
+- **Still Markdown underneath.** The canvas is saved as Markdown, so history, comments, section
+  operations, the API and old clients keep working. Each canvas view keeps a hidden textarea that
+  holds the Markdown and drives autosave; the page writes to it on every edit and reloads from it
+  whenever the app sets it (opening a canvas, a remote change, a restore).
+- **The dialect.** Checklists `- [ ]`, callouts `> [!info] Title` (info, note, tip, warning, danger;
+  a title becomes a bold first line), pictures `![name](file:<id>)`, GitHub-style tables, headings,
+  lists, quotes, code and dividers. `test/canvas-editor.test.js` checks that each survives a round
+  trip, that the saved form is stable, and that remote images and scripts never get through.
+- **Slash menu.** Type `/` at the start of an empty line: headings, text, lists, checklist, quote,
+  callouts, table, image, code, divider, date, mention. `/h1 My title` then Enter writes the heading
+  in one go.
+- **Toolbar.** Bold, italic, strikethrough, link (Ctrl+K), headings, lists, checklist, quote, table,
+  image, code, callout, divider, undo and redo. Inside a table it adds row and column buttons; inside
+  a callout it adds the four callout types. The **Aa** button next to **Markdown** hides it (remembered
+  per computer).
+- **Templates.** An empty canvas offers Meeting notes, Project plan, Action items, Incident report
+  and Channel FAQ.
+- **Pictures.** `/image` or the Image button uploads to the canvas; the page fetches each picture with
+  the signed-in request and shows it from a blob URL. There is never a public URL.
+- **Markdown source.** The **Markdown** button swaps the page for the Markdown text (with its own
+  slash menu and toolbar) and **Page** swaps back, for people who prefer the source.
+- **Viewers and guests** get the same page, locked: no toolbar, no editing, links still open.
+- **Rebuilding the bundle.** After changing `editor-src/` or upgrading `@tiptap/*`, run
+  `npm run editor` in `frontend/` and commit `src/vendor/canvas-editor.js`.
 
 ## Canvas: comments
 
 The **Comments** button in the canvas header (showing the number of open threads) opens a panel
-(`features/canvas-comments.js`). In the reading view each block shows a comment bubble on hover;
+(`features/canvas-comments.js`). Each block of the page shows a comment bubble on hover;
 pressing it starts a thread that quotes that block. Editors can reply, resolve and reopen threads,
 filter Open / Resolved / All, and delete their own comments; viewers read. Other people's comments
 appear live.
 
-## Canvas: Read, Edit and History
+## Canvas: History
 
-Both canvas editors (the channel/DM sheet and the personal canvas manager) have a **Read / Edit**
-toggle and a **History** button. A canvas with content opens in **Read**: headings, paragraphs,
-lists, **checklists you can tick** (each tick is one section operation checked against the canvas
-revision), tables with alignment, callouts (`> [!info]`, `[!note]`, `[!tip]`, `[!warning]`,
-`[!danger]` with an optional title), code blocks, quotes and dividers. All text is escaped before
-rendering (`features/canvas-render.js`, covered by tests). **Edit** is the Markdown textarea with
-autosave. Opening, reading or closing a canvas without typing does not save anything. **History**
-lists earlier versions; pick one to preview its text and **Restore this version** (kept as a new
-version, so it can be undone). Viewers get Read only.
+The **History** button lists earlier versions; pick one to preview its text and **Restore this
+version** (kept as a new version, so it can be undone). Opening or closing a canvas without typing
+does not save anything. The old read-only renderer (`features/canvas-render.js`) is no longer used
+by the editors.
 
 ## Lists: checklist and table
 

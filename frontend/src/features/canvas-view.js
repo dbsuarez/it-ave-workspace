@@ -58,25 +58,21 @@ async function cvwLoadImages(container) {
 }
 
 // Called by renderer.js when a canvas has just been opened in one of the editors.
-function canvasViewOpened(which, { canEdit, hasContent }) {
+// The canvas opens as the editable page (features/canvas-wysiwyg.js); the button switches to the Markdown source.
+function canvasViewOpened(which, { canEdit }) {
   const view = canvasViews[which];
   view.canEdit = canEdit;
   const button = view.modeButton();
   if (button) button.hidden = !canEdit;
-  cvwShow(which, canEdit && !hasContent ? 'edit' : 'read');
+  cvwShow(which, 'read');
   if (typeof ccRefreshCount === 'function') ccRefreshCount(which);
 }
 
-// Called by renderer.js when another person's save arrives while this canvas is open.
-function canvasViewRefresh(canvasId, revision) {
-  for (const which of Object.keys(canvasViews)) {
-    const view = canvasViews[which];
-    if (view.mode !== 'read' || Number(view.id()) !== Number(canvasId)) continue;
-    if (revision !== undefined && view.revision !== null && Number(revision) <= view.revision) continue;
-    cvwShow(which, 'read');
-  }
-}
+// Called by renderer.js when another person's save arrives while this canvas is open. The page follows the
+// text on its own (it watches the value renderer.js sets), so there is nothing to redraw here.
+function canvasViewRefresh() {}
 
+// 'read' = the formatted, editable page; 'edit' = the Markdown source (the textarea).
 async function cvwShow(which, mode) {
   const view = canvasViews[which];
   const editor = view.editor();
@@ -85,43 +81,21 @@ async function cvwShow(which, mode) {
   if (!editor || !container) return;
   if (mode === 'edit') {
     view.mode = 'edit';
-    container.hidden = true;
+    if (typeof canvasWysiwyg !== 'undefined') canvasWysiwyg.hide(which);
     editor.hidden = false;
-    if (button) { button.textContent = 'Read'; button.title = 'Show the finished canvas'; }
+    if (button) { button.textContent = 'Page'; button.title = 'Back to the formatted page'; }
     if (typeof canvasEditorSync === 'function') canvasEditorSync();
     editor.focus({ preventScroll: true });
     return;
   }
-  // Read: save what was typed first, so the rendering matches what the server has.
   view.mode = 'read';
-  if (button) { button.textContent = 'Edit'; button.title = 'Edit the Markdown'; }
+  if (button) { button.textContent = 'Markdown'; button.title = 'Edit the Markdown source'; }
+  // whatever was typed in the source is saved first, so the page and the server agree
   view.flush();
   await view.save();
   for (let waited = 0; view.saving() && waited < 3000; waited += 50) await cvwSleep(50);
-  const canvasId = view.id();
-  if (!canvasId || view.mode !== 'read') return;
-  try {
-    const res = await api(`/api/canvas/${canvasId}/sections?full=true`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not show the canvas');
-    if (Number(view.id()) !== Number(canvasId) || view.mode !== 'read') return;
-    view.revision = data.revision;
-    container.innerHTML = renderCanvasSections(data.sections, {
-      usernames: typeof knownUsernames === 'function' ? knownUsernames() : [],
-      me: state.user?.username || '',
-      canEdit: view.canEdit,
-    });
-    editor.hidden = true;
-    container.hidden = false;
-    cvwLoadImages(container);
-    if (typeof ccDecorate === 'function') ccDecorate(which, container);
-  } catch (err) {
-    console.error('Canvas read view error:', err);
-    showToast(err.message || 'Could not show the canvas.', 'error');
-    view.mode = 'edit';
-    editor.hidden = false;
-    container.hidden = true;
-  }
+  if (view.mode !== 'read') return;
+  canvasWysiwyg.show(which);
 }
 
 async function cvwToggleChecklist(which, token, checkbox) {
