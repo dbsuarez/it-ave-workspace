@@ -144,4 +144,17 @@ module.exports = [
 
   // Canvas revisions: every save bumps the number; clients send it back so a stale save is refused
   'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1',
+
+  // Canvas owner as an explicit, transferable level, and sharing a standalone canvas with a channel
+  'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL',
+  "UPDATE canvases SET owner_id = created_by WHERE kind = 'standalone' AND owner_id IS NULL AND created_by IS NOT NULL",
+  `CREATE TABLE IF NOT EXISTS canvas_channel_grants (
+     canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     role VARCHAR(16) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'editor')),
+     granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     PRIMARY KEY (canvas_id, channel_id)
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_canvas_channel_grants_channel ON canvas_channel_grants(channel_id)',
 ];

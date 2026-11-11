@@ -4735,3 +4735,20 @@ body.theme-dark .huddle-btn.media.active {
 .attachments.has-reactions {
   margin-bottom: 14px;
 }
+
+/* The generic ".modal form" rule stacks fields in a column; the share rows want one line. */
+.modal .canvas2-share-add {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.modal .canvas2-share-add input,
+.modal .canvas2-share-add select {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.modal .canvas2-share-add .btn {
+  flex: 0 0 auto;
+}

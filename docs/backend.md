@@ -109,6 +109,20 @@ edit splices only the block it touches (line endings, including CRLF, are preser
 | GET | `/api/canvas/:id/sections?type=&contains=` | Blocks as `{ id, index, type, preview, items? }` plus the `revision` they belong to (viewer access) |
 | PATCH | `/api/canvas/:id` with `{ operation, baseRevision }` | Apply ONE operation (editor access) |
 
+**Ownership and channel grants (standalone canvases).** The owner is explicit (`owner_id`, falling
+back to the creator for older rows) and transferable. Access comes from three places, and the
+highest role wins: ownership, a personal grant (`canvas_collaborators`), or a grant to a channel
+the user belongs to (`canvas_channel_grants`). **Guests are read-only unless granted by name**: a
+guest in a channel that was granted "can edit" is capped at viewer, and guests can read but not
+edit channel and DM canvases. Guests cannot be made owner.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/canvas/:id/channels` | Channels the canvas is shared with |
+| PUT | `/api/canvas/:id/channels/:channelId` `{ role }` | Share with every member (owner only; you must be in that channel; `viewer` or `editor`) |
+| DELETE | `/api/canvas/:id/channels/:channelId` | Stop sharing with a channel (owner only) |
+| POST | `/api/canvas/:id/owner` `{ username }` | Transfer ownership (owner only); the previous owner becomes an editor |
+
 Operations: `insert_after` / `insert_before` (`sectionId`, `markdown`), `insert_at_start` /
 `insert_at_end` (`markdown`), `replace` (`markdown`; with `sectionId` one block, without it the
 whole document), `delete` (`sectionId`), `toggle` (`sectionId` of a checklist, `item` 0-based,

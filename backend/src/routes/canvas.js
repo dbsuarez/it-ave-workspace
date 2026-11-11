@@ -3,7 +3,10 @@ const crypto = require('crypto');
 const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { ensureChannelMembership, ensureDirectMessageAccess, ensureCanvasAccess, getCanvasById } = require('../security');
+const {
+  ensureChannelMembership, ensureDirectMessageAccess, ensureCanvasAccess, getCanvasById,
+  canvasOwnerId, getStandaloneCanvasRole,
+} = require('../security');
 const { ensureNotGuest } = require('../guests');
 const { describeSections, applyOperation } = require('../canvasSections');
 
@@ -53,12 +56,12 @@ async function saveCanvasChanges(canvasId, title, content, baseRevision) {
          revision = revision + 1,
          updated_at = NOW()
      WHERE id = $3 AND ($4::int IS NULL OR revision = $4)
-     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
+     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id`,
     [title, content, canvasId, baseRevision]
   );
   if (result.rows[0]) return { canvas: result.rows[0] };
   const current = await query(
-    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id
      FROM canvases WHERE id = $1`,
     [canvasId]
   );
@@ -76,7 +79,7 @@ function conflictResponse(res, current, extras = {}) {
 
 async function getChannelCanvas(channelId) {
   const result = await query(
-    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id
      FROM canvases
      WHERE kind = 'channel' AND channel_id = $1`,
     [channelId]
@@ -87,7 +90,7 @@ async function getDmCanvas(a, b) {
   const low = Math.min(a, b);
   const high = Math.max(a, b);
   const result = await query(
-    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id
      FROM canvases
      WHERE kind = 'dm' AND dm_user_low = $1 AND dm_user_high = $2`,
     [low, high]
@@ -101,7 +104,7 @@ async function getOrCreateChannelCanvas(channelId, userId) {
     `INSERT INTO canvases (kind, channel_id, title, content, created_by)
      VALUES ('channel', $1, $2, '', $3)
      ON CONFLICT (channel_id) WHERE kind = 'channel' DO NOTHING
-     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
+     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id`,
     [channelId, '#' + channelId, userId]
   );
   if (result.rows[0]) return result.rows[0];
@@ -117,7 +120,7 @@ async function getOrCreateDmCanvas(a, b) {
     `INSERT INTO canvases (kind, dm_user_low, dm_user_high, title, content, created_by)
      VALUES ('dm', $1, $2, $3, '', $4)
      ON CONFLICT (dm_user_low, dm_user_high) WHERE kind = 'dm' DO NOTHING
-     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
+     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id`,
     [low, high, 'DM', low]
   );
   if (result.rows[0]) return result.rows[0];
@@ -138,6 +141,7 @@ function mapCanvas(c, extras = {}) {
     createdAt: c.created_at,
     updatedAt: c.updated_at,
     revision: c.revision === undefined ? undefined : Number(c.revision),
+    ownerId: c.kind === 'standalone' ? canvasOwnerId(c) : undefined,
     ...extras,
   };
 }
@@ -175,20 +179,26 @@ router.get('/dm/:userId', authenticateToken, async (req, res) => {
 // GET /api/canvas/standalone - canvases the current user owns or collaborates on
 router.get('/standalone', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const result = await query(
       `SELECT c.id, c.kind, c.channel_id, c.dm_user_low, c.dm_user_high, c.title, c.content, c.created_by,
-              c.created_at, c.updated_at, c.revision,
-              (SELECT role FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1) AS my_role
+              c.created_at, c.updated_at, c.revision, c.owner_id
        FROM canvases c
        WHERE c.kind = 'standalone'
-         AND (c.created_by = $1
-              OR EXISTS (SELECT 1 FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1))
+         AND (COALESCE(c.owner_id, c.created_by) = $1
+              OR EXISTS (SELECT 1 FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1)
+              OR EXISTS (SELECT 1 FROM canvas_channel_grants g
+                         JOIN channel_members cm ON cm.channel_id = g.channel_id
+                         WHERE g.canvas_id = c.id AND cm.user_id = $1))
        ORDER BY c.updated_at DESC, c.id DESC`,
-      [req.user.userId]
+      [userId]
     );
-    res.json({
-      canvases: result.rows.map((c) => mapCanvas(c, { myRole: c.my_role })),
-    });
+    const canvases = [];
+    for (const row of result.rows) {
+      const myRole = await getStandaloneCanvasRole(query, userId, row);
+      if (myRole) canvases.push(mapCanvas(row, { myRole }));
+    }
+    res.json({ canvases });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Standalone canvases list error:', err);
@@ -204,9 +214,9 @@ router.post('/', authenticateToken, async (req, res) => {
     if (!title) return res.status(400).json({ error: 'Canvas title must be between 1 and 160 characters' });
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create canvases');
     const result = await query(
-      `INSERT INTO canvases (kind, title, content, created_by)
-       VALUES ('standalone', $1, $2, $3)
-       RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
+      `INSERT INTO canvases (kind, title, content, created_by, owner_id)
+       VALUES ('standalone', $1, $2, $3, $3)
+       RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id`,
       [title, content, req.user.userId]
     );
     res.status(201).json({ canvas: mapCanvas(result.rows[0], { myRole: 'owner' }) });
@@ -223,14 +233,9 @@ router.get('/:canvasId', authenticateToken, async (req, res) => {
     const canvasId = parseId(req.params.canvasId);
     if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
     const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
-    let myRole = 'owner';
-    if (canvas.kind === 'standalone' && Number(canvas.created_by) !== Number(req.user.userId)) {
-      const collab = await query(
-        'SELECT role FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2',
-        [canvasId, req.user.userId]
-      );
-      myRole = collab.rows[0]?.role || 'viewer';
-    }
+    const myRole = canvas.kind === 'standalone'
+      ? await getStandaloneCanvasRole(query, req.user.userId, canvas)
+      : 'editor';
     res.json({ canvas: mapCanvas(canvas, { myRole }) });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -334,7 +339,7 @@ router.delete('/:canvasId', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Only the creator can delete this canvas' });
       }
     } else {
-      if (Number(canvas.created_by) !== Number(req.user.userId)) {
+      if (canvasOwnerId(canvas) !== Number(req.user.userId)) {
         return res.status(403).json({ error: 'Only the owner can delete this canvas' });
       }
     }
@@ -357,7 +362,7 @@ router.post('/:canvasId/collaborators', authenticateToken, async (req, res) => {
     const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
     const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
     if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases can have collaborators' });
-    if (Number(canvas.created_by) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can add collaborators' });
+    if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can add collaborators' });
     const user = await query('SELECT id, username FROM users WHERE LOWER(username) = $1', [username]);
     if (!user.rows[0]) return res.status(404).json({ error: 'User not found' });
     if (Number(user.rows[0].id) === Number(req.user.userId)) return res.status(400).json({ error: 'You already own this canvas' });
@@ -383,7 +388,7 @@ router.delete('/:canvasId/collaborators/:userId', authenticateToken, async (req,
     if (canvasId === null || userId === null) return res.status(400).json({ error: 'Canvas and user IDs must be valid numbers' });
     const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
     if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases can have collaborators' });
-    if (Number(canvas.created_by) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can remove collaborators' });
+    if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can remove collaborators' });
     await query(
       'DELETE FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2',
       [canvasId, userId]
@@ -422,6 +427,108 @@ router.get('/:canvasId/collaborators', authenticateToken, async (req, res) => {
   }
 });
 
+// ---- Channel grants and ownership (standalone canvases) ----------------------------------------
+
+// GET /api/canvas/:id/channels - channels this canvas is shared with
+router.get('/:canvasId/channels', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
+    if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases are shared with channels' });
+    const result = await query(
+      `SELECT g.channel_id, c.name, g.role, g.created_at
+       FROM canvas_channel_grants g JOIN channels c ON c.id = g.channel_id
+       WHERE g.canvas_id = $1 ORDER BY c.name`,
+      [canvasId]
+    );
+    res.json({
+      channels: result.rows.map((r) => ({ channelId: r.channel_id, name: r.name, role: r.role, createdAt: r.created_at })),
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('List canvas channel grants error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/canvas/:id/channels/:channelId { role } - share with every member of a channel
+router.put('/:canvasId/channels/:channelId', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    const channelId = parseId(req.params.channelId);
+    if (canvasId === null || channelId === null) return res.status(400).json({ error: 'Canvas and channel IDs must be valid numbers' });
+    const role = req.body?.role === 'editor' ? 'editor' : req.body?.role === 'viewer' ? 'viewer' : null;
+    if (!role) return res.status(400).json({ error: 'role must be viewer or editor' });
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases are shared with channels' });
+    if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can share this canvas with a channel' });
+    // You can only share with a channel you belong to.
+    await ensureChannelMembership(query, req.user.userId, channelId);
+    await query(
+      `INSERT INTO canvas_channel_grants (canvas_id, channel_id, role, granted_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (canvas_id, channel_id) DO UPDATE SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by`,
+      [canvasId, channelId, role, req.user.userId]
+    );
+    res.json({ grant: { channelId, role } });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Grant canvas to channel error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/canvas/:id/channels/:channelId - stop sharing with a channel
+router.delete('/:canvasId/channels/:channelId', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    const channelId = parseId(req.params.channelId);
+    if (canvasId === null || channelId === null) return res.status(400).json({ error: 'Canvas and channel IDs must be valid numbers' });
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases are shared with channels' });
+    if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can change channel sharing' });
+    await query('DELETE FROM canvas_channel_grants WHERE canvas_id = $1 AND channel_id = $2', [canvasId, channelId]);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Revoke canvas channel grant error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/canvas/:id/owner { username } - hand ownership to someone else (the previous owner stays
+// on as an editor). Guests cannot own canvases.
+router.post('/:canvasId/owner', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim().toLowerCase() : '';
+    if (!username) return res.status(400).json({ error: 'Username is required' });
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases have a transferable owner' });
+    if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can transfer ownership' });
+    const target = await query('SELECT id, username, account_type FROM users WHERE LOWER(username) = $1', [username]);
+    const user = target.rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (Number(user.id) === Number(req.user.userId)) return res.status(400).json({ error: 'You already own this canvas' });
+    if (user.account_type === 'guest') return res.status(400).json({ error: 'Guests cannot own canvases' });
+    await query('UPDATE canvases SET owner_id = $1 WHERE id = $2', [user.id, canvasId]);
+    await query('DELETE FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2', [canvasId, user.id]);
+    await query(
+      `INSERT INTO canvas_collaborators (canvas_id, user_id, role, granted_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (canvas_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+      [canvasId, req.user.userId, 'editor', req.user.userId]
+    );
+    res.json({ ownerId: Number(user.id), ownerUsername: user.username });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Transfer canvas ownership error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/canvas/:id/shares - generate a share token
 router.post('/:canvasId/shares', authenticateToken, async (req, res) => {
   try {
@@ -430,7 +537,7 @@ router.post('/:canvasId/shares', authenticateToken, async (req, res) => {
     const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
     const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
     if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases can be shared by link' });
-    if (Number(canvas.created_by) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can create share links' });
+    if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can create share links' });
     const token = crypto.randomBytes(18).toString('base64url');
     const result = await query(
       `INSERT INTO canvas_shares (canvas_id, token, role, created_by)
@@ -460,7 +567,7 @@ router.delete('/:canvasId/shares/:shareId', authenticateToken, async (req, res) 
     const shareId = parseId(req.params.shareId);
     if (canvasId === null || shareId === null) return res.status(400).json({ error: 'Canvas and share IDs must be valid numbers' });
     const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
-    if (Number(canvas.created_by) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can revoke share links' });
+    if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can revoke share links' });
     await query(
       'DELETE FROM canvas_shares WHERE id = $1 AND canvas_id = $2',
       [shareId, canvasId]

@@ -19,6 +19,9 @@ const moderators = new Set(); // "channelId:userId"
 const collab = new Map();     // "canvasId:userId" -> role
 const shares = new Map();     // token -> { canvasId, role }
 const superadmins = new Set([99]);
+const guests = new Set();       // user ids with account_type 'guest'
+const grants = [];              // { canvasId, channelId, role }
+const usersByName = new Map();  // username -> { id, username, account_type }
 let nextCanvasId = 1;
 const emitted = [];
 
@@ -33,7 +36,35 @@ const API = () => (sql, params = []) => {
     return { rows: [{ id }] };
   }
   if (sql.includes('SELECT account_type FROM users WHERE id = $1')) {
-    return { rows: [{ account_type: 'member' }] };
+    return { rows: [{ account_type: guests.has(Number(params[0])) ? 'guest' : 'member' }] };
+  }
+  if (sql.includes('SELECT id, username, account_type FROM users WHERE LOWER(username) = $1')) {
+    const known = usersByName.get(params[0]);
+    return { rows: known ? [known] : [] };
+  }
+  if (sql.includes('UPDATE canvases SET owner_id = $1 WHERE id = $2')) {
+    canvases.get(Number(params[1])).owner_id = Number(params[0]);
+    return { rows: [] };
+  }
+  if (sql.includes('SELECT g.role FROM canvas_channel_grants g')) {
+    const rows = grants
+      .filter((g) => g.canvasId === Number(params[0]) && members.has(`${g.channelId}:${params[1]}`))
+      .map((g) => ({ role: g.role }));
+    return { rows };
+  }
+  if (sql.includes('FROM canvas_channel_grants g JOIN channels c')) {
+    return { rows: grants.filter((g) => g.canvasId === Number(params[0])).map((g) => ({ channel_id: g.channelId, name: `chan${g.channelId}`, role: g.role, created_at: new Date() })) };
+  }
+  if (sql.includes('INSERT INTO canvas_channel_grants')) {
+    const existing = grants.find((g) => g.canvasId === Number(params[0]) && g.channelId === Number(params[1]));
+    if (existing) existing.role = params[2];
+    else grants.push({ canvasId: Number(params[0]), channelId: Number(params[1]), role: params[2] });
+    return { rows: [] };
+  }
+  if (sql.includes('DELETE FROM canvas_channel_grants')) {
+    const i = grants.findIndex((g) => g.canvasId === Number(params[0]) && g.channelId === Number(params[1]));
+    if (i !== -1) grants.splice(i, 1);
+    return { rows: [] };
   }
   if (sql.includes('CROSS JOIN users u')) {
     const id = Number(params[1]);
@@ -80,11 +111,12 @@ const API = () => (sql, params = []) => {
   if (sql.includes('FROM canvases c') && sql.includes('canvas_collaborators') && sql.includes('kind = \'standalone\'')) {
     const userId = Number(params[0]);
     const mine = [...canvases.values()].filter((c) => c.kind === 'standalone')
-      .filter((c) => Number(c.created_by) === userId || collab.has(`${c.id}:${userId}`));
-    return { rows: mine.map((c) => ({ ...c, my_role: Number(c.created_by) === userId ? 'owner' : collab.get(`${c.id}:${userId}`) })) };
+      .filter((c) => Number(c.owner_id ?? c.created_by) === userId || collab.has(`${c.id}:${userId}`)
+        || grants.some((g) => g.canvasId === c.id && members.has(`${g.channelId}:${userId}`)));
+    return { rows: mine };
   }
-  if (sql.includes('INSERT INTO canvases (kind, title, content, created_by)')) {
-    const canvas = { id: nextCanvasId++, kind: 'standalone', channel_id: null, dm_user_low: null, dm_user_high: null, title: params[0], content: params[1] || '', created_by: params[2], created_at: new Date(), updated_at: new Date(), revision: 1 };
+  if (sql.includes('INSERT INTO canvases (kind, title, content, created_by, owner_id)')) {
+    const canvas = { id: nextCanvasId++, kind: 'standalone', channel_id: null, dm_user_low: null, dm_user_high: null, title: params[0], content: params[1] || '', created_by: params[2], owner_id: params[2], created_at: new Date(), updated_at: new Date(), revision: 1 };
     canvases.set(canvas.id, canvas);
     return { rows: [canvas] };
   }
@@ -181,6 +213,7 @@ test.before(async () => {
 test.after(async () => {
   if (server) await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
   canvases.clear(); members.clear(); moderators.clear(); collab.clear(); shares.clear(); emitted.length = 0;
+  guests.clear(); grants.length = 0; usersByName.clear();
   if (previousDbModule) require.cache[dbPath] = previousDbModule;
   else delete require.cache[dbPath];
   if (previousJwtSecret === undefined) delete process.env.JWT_SECRET;
@@ -425,4 +458,81 @@ test('operations respect roles and report a missing section', async () => {
   assert.equal(missing.status, 404);
   const unknown = await sectionPatch(canvas.id, { operation: { op: 'explode' }, baseRevision: 1 });
   assert.equal(unknown.status, 400);
+});
+
+const jsonHeaders = (user) => ({ ...authHeader(user), 'Content-Type': 'application/json' });
+
+test('the owner is explicit, listed as owner, and ownership can be transferred', async () => {
+  const canvas = await createStandalone('mine');
+  assert.equal(canvas.ownerId, 3);
+  usersByName.set('u4', { id: 4, username: 'u4', account_type: 'member' });
+  usersByName.set('gast', { id: 8, username: 'gast', account_type: 'guest' });
+  // only the owner can transfer; guests cannot become owner; self-transfer is refused
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}/owner`, { method: 'POST', headers: jsonHeaders(4), body: JSON.stringify({ username: 'u4' }) })).status, 404, 'a stranger cannot even see it');
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}/owner`, { method: 'POST', headers: jsonHeaders(3), body: JSON.stringify({ username: 'gast' }) })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}/owner`, { method: 'POST', headers: jsonHeaders(3), body: JSON.stringify({ username: 'u3' }) })).status, 404, 'unknown user');
+  const ok = await fetch(`${baseUrl}/api/canvas/${canvas.id}/owner`, { method: 'POST', headers: jsonHeaders(3), body: JSON.stringify({ username: 'u4' }) });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).ownerId, 4);
+  // the new owner owns it; the old owner is now an editor and can no longer delete or re-share
+  const asNew = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { headers: authHeader(4) })).json();
+  assert.equal(asNew.canvas.myRole, 'owner');
+  const asOld = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { headers: authHeader(3) })).json();
+  assert.equal(asOld.canvas.myRole, 'editor');
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { method: 'DELETE', headers: authHeader(3) })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}/shares`, { method: 'POST', headers: jsonHeaders(3), body: JSON.stringify({ role: 'viewer' }) })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { method: 'DELETE', headers: authHeader(4) })).status, 200);
+});
+
+test('a canvas can be shared with a whole channel, as viewer or editor', async () => {
+  const canvas = await createStandalone('for the team');
+  // 7 is a member of channel 42 but has no personal grant
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { headers: authHeader(7) })).status, 404);
+  const grant = await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels/42`, { method: 'PUT', headers: jsonHeaders(3), body: JSON.stringify({ role: 'viewer' }) });
+  assert.equal(grant.status, 200);
+  const asViewer = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { headers: authHeader(7) })).json();
+  assert.equal(asViewer.canvas.myRole, 'viewer');
+  assert.equal((await sectionPatch(canvas.id, { content: 'nope', baseRevision: 1 }, 7)).status, 403);
+  const listed = await (await fetch(`${baseUrl}/api/canvas/standalone`, { headers: authHeader(7) })).json();
+  assert.ok(listed.canvases.some((c) => c.id === canvas.id && c.myRole === 'viewer'), 'it shows in the channel members list');
+  // upgrade to editor: members can edit
+  await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels/42`, { method: 'PUT', headers: jsonHeaders(3), body: JSON.stringify({ role: 'editor' }) });
+  assert.equal((await sectionPatch(canvas.id, { content: 'team edit', baseRevision: 1 }, 7)).status, 200);
+  // a non-member of the channel gets nothing from the grant
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { headers: authHeader(55) })).status, 404);
+  const channels = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels`, { headers: authHeader(3) })).json();
+  assert.deepEqual(channels.channels.map((c) => [c.channelId, c.role]), [[42, 'editor']]);
+  // revoke
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels/42`, { method: 'DELETE', headers: authHeader(3) })).status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { headers: authHeader(7) })).status, 404);
+});
+
+test('only the owner can grant, and only to a channel they belong to', async () => {
+  const canvas = await createStandalone('x');
+  await fetch(`${baseUrl}/api/canvas/${canvas.id}/collaborators`, { method: 'POST', headers: jsonHeaders(3), body: JSON.stringify({ username: 'u4', role: 'editor' }) });
+  const byEditor = await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels/42`, { method: 'PUT', headers: jsonHeaders(4), body: JSON.stringify({ role: 'viewer' }) });
+  assert.equal(byEditor.status, 403, 'an editor is not the owner');
+  const foreign = await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels/777`, { method: 'PUT', headers: jsonHeaders(3), body: JSON.stringify({ role: 'viewer' }) });
+  assert.equal(foreign.status, 403, 'not a member of channel 777');
+  const badRole = await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels/42`, { method: 'PUT', headers: jsonHeaders(3), body: JSON.stringify({ role: 'owner' }) });
+  assert.equal(badRole.status, 400);
+});
+
+test('guests are read-only by default and only edit when granted personally', async () => {
+  const canvas = await createStandalone('guest test');
+  guests.add(7);
+  // channel grant as editor: a guest member is capped at viewer
+  await fetch(`${baseUrl}/api/canvas/${canvas.id}/channels/42`, { method: 'PUT', headers: jsonHeaders(3), body: JSON.stringify({ role: 'editor' }) });
+  const capped = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}`, { headers: authHeader(7) })).json();
+  assert.equal(capped.canvas.myRole, 'viewer');
+  assert.equal((await sectionPatch(canvas.id, { content: 'guest edit', baseRevision: 1 }, 7)).status, 403);
+  // an explicit personal grant is a deliberate decision and is honoured
+  await fetch(`${baseUrl}/api/canvas/${canvas.id}/collaborators`, { method: 'POST', headers: jsonHeaders(3), body: JSON.stringify({ username: 'u7', role: 'editor' }) });
+  assert.equal((await sectionPatch(canvas.id, { content: 'granted guest edit', baseRevision: 1 }, 7)).status, 200);
+  // channel and DM canvases: guests can read but not edit
+  const channelCanvas = await (await fetch(`${baseUrl}/api/canvas/channel/42`, { headers: authHeader(3) })).json();
+  assert.equal((await fetch(`${baseUrl}/api/canvas/${channelCanvas.canvas.id}`, { headers: authHeader(7) })).status, 200);
+  assert.equal((await sectionPatch(channelCanvas.canvas.id, { content: 'guest edit', baseRevision: channelCanvas.canvas.revision }, 7)).status, 403);
+  guests.delete(7);
+  assert.equal((await sectionPatch(channelCanvas.canvas.id, { content: 'member edit', baseRevision: channelCanvas.canvas.revision }, 7)).status, 200);
 });

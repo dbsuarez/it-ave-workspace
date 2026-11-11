@@ -544,7 +544,7 @@
             <div class="canvas-sheet-actions">
               <span class="canvas-sheet-status" id="canvas-sheet-status" aria-live="polite">Saved</span>
               <button class="icon-btn" id="btn-close-canvas" type="button" title="Close canvas" aria-label="Close canvas">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
           </header>
@@ -617,7 +617,7 @@
     <div class="modal" id="modal-profile">
       <div class="modal-header">
         <h3>Edit profile</h3>
-        <button class="modal-close" id="btn-close-profile" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+        <button class="modal-close" id="btn-close-profile" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <form id="profile-form">
         <div class="modal-body">
@@ -803,7 +803,7 @@
     <div class="modal" id="modal-account">
       <div class="modal-header">
         <h3>Account settings</h3>
-        <button class="modal-close" id="btn-close-account" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+        <button class="modal-close" id="btn-close-account" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <form id="account-form">
         <div class="modal-body">
@@ -835,7 +835,7 @@
     <div class="modal" id="modal-user-profile">
       <div class="modal-header">
         <h3>Profile</h3>
-        <button class="modal-close" id="btn-close-user-profile" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+        <button class="modal-close" id="btn-close-user-profile" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="modal-body user-profile-body">
         <div class="user-profile-avatar" id="user-profile-avatar">E</div>
@@ -871,7 +871,7 @@
       <div class="modal-header">
         <h3>Share canvas</h3>
         <button class="modal-close" id="btn-close-canvas2-share" type="button" aria-label="Close">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div class="modal-body canvas2-share-body">
@@ -886,6 +886,27 @@
             </select>
             <button class="btn primary" type="submit">Add</button>
           </form>
+        </div>
+        <div class="canvas2-share-section" id="canvas2-channels-section">
+          <h4>Channels</h4>
+          <ul class="canvas2-share-list" id="canvas2-channel-list" aria-live="polite"></ul>
+          <form class="canvas2-share-add" id="canvas2-channel-add-form" autocomplete="off">
+            <select id="canvas2-channel-select" aria-label="Channel to share with"></select>
+            <select id="canvas2-channel-role" aria-label="Role for channel members">
+              <option value="viewer">Can view</option>
+              <option value="editor">Can edit</option>
+            </select>
+            <button class="btn primary" type="submit">Share</button>
+          </form>
+          <p class="canvas2-share-note">Every member of the channel gets this access. Guests stay view-only unless you add them by name above.</p>
+        </div>
+        <div class="canvas2-share-section" id="canvas2-owner-section">
+          <h4>Owner</h4>
+          <form class="canvas2-share-add" id="canvas2-owner-form" autocomplete="off">
+            <input id="canvas2-owner-username" type="text" placeholder="Username of the new owner" aria-label="Username of the new owner" autocomplete="off" required>
+            <button class="btn danger" type="submit">Transfer</button>
+          </form>
+          <p class="canvas2-share-note">The new owner controls sharing and deleting. You stay on as an editor.</p>
         </div>
         <div class="canvas2-share-section">
           <h4>Share link</h4>
@@ -908,7 +929,7 @@
     <div class="modal image-viewer-modal" id="image-viewer-modal" role="dialog" aria-label="Image viewer" aria-modal="true">
       <div class="image-viewer-body">
         <button class="image-viewer-close icon-btn" id="btn-close-image-viewer" type="button" aria-label="Close viewer" title="Close">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
         <div class="image-viewer-header">
           <div>

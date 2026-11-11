@@ -372,6 +372,7 @@ CREATE TABLE IF NOT EXISTS canvases (
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      revision INTEGER NOT NULL DEFAULT 1,
+     owner_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
      CHECK (
          (kind = 'channel' AND channel_id IS NOT NULL)
        OR (kind = 'dm' AND dm_user_low IS NOT NULL AND dm_user_high IS NOT NULL)
@@ -401,3 +402,13 @@ CREATE TABLE IF NOT EXISTS canvas_shares (
      expires_at TIMESTAMP WITH TIME ZONE
    );
 CREATE INDEX IF NOT EXISTS idx_canvas_shares_token ON canvas_shares(token);
+
+CREATE TABLE IF NOT EXISTS canvas_channel_grants (
+     canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     role VARCHAR(16) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'editor')),
+     granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     PRIMARY KEY (canvas_id, channel_id)
+   );
+CREATE INDEX IF NOT EXISTS idx_canvas_channel_grants_channel ON canvas_channel_grants(channel_id);

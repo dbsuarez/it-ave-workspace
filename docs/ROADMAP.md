@@ -298,7 +298,7 @@ granted; Lists stay channel-scoped until they have access levels.
 |---|---|
 | 1. Canvas revisions and 409 conflicts | **Done**: `revision` column, conditional save, client conflict dialog, live updates adopt the revision. Verified against the real database (5 simultaneous saves: 1 wins) and in the Electron client |
 | 2. Section lookup/edit operations, checklist toggle | **Done** (API): `GET /sections`, `PATCH` with an `operation`, 11 parser tests plus route tests, verified on the real database (3 concurrent edits: 1 wins). The checklist toggle is reachable from the UI once the rendered view exists (step 7) |
-| 3. Canvas owner level and channel grants | Not started |
+| 3. Canvas owner level and channel grants | **Done**: transferable owner, channel grants, guest read-only default (also for channel/DM canvases), share dialog sections for channels and ownership, viewers get a read-only editor. Verified on the real database and in the client |
 | 4. Lists typed schema with to-do migration | Not started |
 | 5. Select options, subtasks, archive, copy, duplicate, pagination | Not started |
 | 6. Lists access levels, table view | Not started |

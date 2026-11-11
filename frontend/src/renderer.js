@@ -4722,9 +4722,13 @@ async function openCanvas2Standalone(id) {
     canvas2StandaloneState.revision = canvas.revision ?? null;
     canvas2StandaloneState.savedTitle = title ? title.value : '';
     canvas2StandaloneState.savedContent = editor ? editor.value : '';
+    // Viewers (personal or via a channel) read but cannot change it
+    const canEdit = canvas.myRole === 'owner' || canvas.myRole === 'editor';
+    if (title) title.readOnly = !canEdit;
+    if (editor) editor.readOnly = !canEdit;
     showCanvas2EditorPane();
     renderCanvas2StandaloneList();
-    setCanvas2StandaloneStatus('Saved');
+    setCanvas2StandaloneStatus(canEdit ? 'Saved' : 'Read-only');
     if (state.socket) state.socket.emit('join_canvas', canvas.id);
   } catch (err) {
     console.error('Open standalone canvas error:', err);
@@ -4856,7 +4860,103 @@ async function openCanvas2ShareModal() {
     console.error('Load collaborators error:', err);
     showToast(err.message || 'Could not load collaborators.', 'error');
   }
+  // Channel sharing and ownership are the owner's decisions; everyone else just sees who has access.
+  const current = canvas2StandaloneState.list.find((c) => Number(c.id) === Number(id));
+  const isOwner = !current || current.myRole === 'owner' || Number(current.ownerId) === Number(state.user.id);
+  const ownerSection = document.getElementById('canvas2-owner-section');
+  const channelForms = document.getElementById('canvas2-channel-add-form');
+  if (ownerSection) ownerSection.hidden = !isOwner;
+  if (channelForms) channelForms.hidden = !isOwner;
+  await loadCanvas2ChannelGrants(isOwner);
   openSettingsModal(modal);
+}
+
+async function loadCanvas2ChannelGrants(isOwner) {
+  const id = canvas2StandaloneState.activeId;
+  const list = document.getElementById('canvas2-channel-list');
+  const select = document.getElementById('canvas2-channel-select');
+  if (!id || !list) return;
+  try {
+    const res = await api(`/api/canvas/${id}/channels`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load channel sharing');
+    const granted = data.channels || [];
+    list.innerHTML = '';
+    if (granted.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'canvas2-share-row canvas2-share-row-empty';
+      empty.textContent = 'Not shared with any channel.';
+      list.appendChild(empty);
+    }
+    for (const g of granted) {
+      const row = document.createElement('li');
+      row.className = 'canvas2-share-row';
+      row.innerHTML = `<span class="canvas2-share-row-name">#${escapeHtml(g.name)}</span><span class="canvas2-share-row-role">${g.role === 'editor' ? 'can edit' : 'can view'}</span>${isOwner ? `<button class="canvas2-share-row-remove" type="button" data-canvas2-remove-channel="${g.channelId}">Remove</button>` : ''}`;
+      list.appendChild(row);
+    }
+    if (select) {
+      const taken = new Set(granted.map((g) => Number(g.channelId)));
+      const options = (state.channels || []).filter((ch) => !taken.has(Number(ch.id)));
+      select.innerHTML = options.length
+        ? options.map((ch) => `<option value="${escapeHtml(String(ch.id))}">#${escapeHtml(ch.name)}</option>`).join('')
+        : '<option value="">No channels left</option>';
+    }
+  } catch (err) {
+    console.error('Load canvas channel grants error:', err);
+    showToast(err.message || 'Could not load channel sharing.', 'error');
+  }
+}
+
+async function shareCanvas2WithChannel(channelId, role) {
+  const id = canvas2StandaloneState.activeId;
+  if (!id || !channelId) return;
+  try {
+    const res = await api(`/api/canvas/${id}/channels/${channelId}`, { method: 'PUT', body: JSON.stringify({ role }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not share with the channel');
+    await loadCanvas2ChannelGrants(true);
+    showToast('Shared with the channel.', 'success');
+  } catch (err) {
+    console.error('Share canvas with channel error:', err);
+    showToast(err.message || 'Could not share with the channel.', 'error');
+  }
+}
+
+async function unshareCanvas2FromChannel(channelId) {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  try {
+    const res = await api(`/api/canvas/${id}/channels/${channelId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not stop sharing');
+    await loadCanvas2ChannelGrants(true);
+  } catch (err) {
+    console.error('Unshare canvas from channel error:', err);
+    showToast(err.message || 'Could not stop sharing.', 'error');
+  }
+}
+
+async function transferCanvas2Owner(username) {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  const ok = await confirmAction({
+    title: 'Transfer ownership?',
+    message: `${username} will control sharing and deleting this canvas. You will stay on as an editor.`,
+    confirmLabel: 'Transfer',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const res = await api(`/api/canvas/${id}/owner`, { method: 'POST', body: JSON.stringify({ username: username.trim().toLowerCase() }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not transfer ownership');
+    closeSettingsModal();
+    showToast(`${data.ownerUsername} is now the owner.`, 'success');
+    await loadCanvas2StandaloneList();
+  } catch (err) {
+    console.error('Transfer canvas ownership error:', err);
+    showToast(err.message || 'Could not transfer ownership.', 'error');
+  }
 }
 
 function renderCanvas2ShareCollaborators(collaborators) {
@@ -5068,6 +5168,13 @@ document.addEventListener('click', (event) => {
     closeSettingsModal();
     return;
   }
+  const removeChannel = event.target.closest('[data-canvas2-remove-channel]');
+  if (removeChannel) {
+    event.preventDefault();
+    event.stopPropagation();
+    unshareCanvas2FromChannel(removeChannel.dataset.canvas2RemoveChannel);
+    return;
+  }
   const removeCollab = event.target.closest('[data-canvas2-remove-collab]');
   if (removeCollab) {
     event.preventDefault();
@@ -5107,6 +5214,22 @@ document.getElementById('canvas2-share-add-form')?.addEventListener('submit', (e
   const role = roleSel?.value || 'editor';
   if (!username) return;
   addCanvas2ShareCollaborator(username, role);
+  if (input) input.value = '';
+});
+
+document.getElementById('canvas2-channel-add-form')?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const channelId = document.getElementById('canvas2-channel-select')?.value;
+  const role = document.getElementById('canvas2-channel-role')?.value || 'viewer';
+  if (channelId) shareCanvas2WithChannel(channelId, role);
+});
+
+document.getElementById('canvas2-owner-form')?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = document.getElementById('canvas2-owner-username');
+  const username = input?.value.trim();
+  if (!username) return;
+  transferCanvas2Owner(username);
   if (input) input.value = '';
 });
 

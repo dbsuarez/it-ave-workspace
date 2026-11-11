@@ -206,7 +206,7 @@ async function ensureDirectMessageAccess(query, userId, otherUserId) {
 
 async function getCanvasById(query, canvasId) {
   const result = await query(
-    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, created_by, title, content, created_at, updated_at, revision
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, created_by, title, content, created_at, updated_at, revision, owner_id
      FROM canvases
      WHERE id = $1`,
     [canvasId]
@@ -219,6 +219,45 @@ async function getCanvasById(query, canvasId) {
   return result.rows[0];
 }
 
+// The owner of a standalone canvas. owner_id is the transferable owner; older rows fall back to
+// the creator.
+function canvasOwnerId(canvas) {
+  const id = canvas.owner_id ?? canvas.created_by;
+  return id === null || id === undefined ? null : Number(id);
+}
+
+const CANVAS_ROLE_RANK = { viewer: 1, editor: 2, owner: 3 };
+
+async function isGuestAccount(query, userId) {
+  const result = await query('SELECT account_type FROM users WHERE id = $1', [userId]);
+  return result.rows[0]?.account_type === 'guest';
+}
+
+// The caller's role on a standalone canvas: 'owner', 'editor', 'viewer', or null for no access.
+// Sources: ownership, a personal grant (canvas_collaborators), and a grant to a channel the user
+// belongs to. Guests are read-only unless they were granted personally.
+async function getStandaloneCanvasRole(query, userId, canvas) {
+  if (canvasOwnerId(canvas) === Number(userId)) return 'owner';
+  const personal = await query(
+    'SELECT role FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2',
+    [canvas.id, userId]
+  );
+  const granted = await query(
+    `SELECT g.role FROM canvas_channel_grants g
+     JOIN channel_members cm ON cm.channel_id = g.channel_id
+     WHERE g.canvas_id = $1 AND cm.user_id = $2`,
+    [canvas.id, userId]
+  );
+  let channelRole = null;
+  if (granted.rows.length > 0) {
+    channelRole = granted.rows.some((row) => row.role === 'editor') ? 'editor' : 'viewer';
+    if (channelRole === 'editor' && await isGuestAccount(query, userId)) channelRole = 'viewer';
+  }
+  const roles = [personal.rows[0]?.role, channelRole].filter(Boolean);
+  if (roles.length === 0) return null;
+  return roles.reduce((best, role) => (CANVAS_ROLE_RANK[role] > CANVAS_ROLE_RANK[best] ? role : best));
+}
+
 // Returns the canvas row when userId meets the access requirements.
 // neededRole is 'viewer' (default) or 'editor'.
 async function ensureCanvasAccess(query, userId, canvasId, neededRole = 'viewer') {
@@ -228,30 +267,29 @@ async function ensureCanvasAccess(query, userId, canvasId, neededRole = 'viewer'
     throw err;
   }
   const canvas = await getCanvasById(query, canvasId);
-  if (canvas.kind === 'channel') {
-    await ensureChannelMembership(query, userId, canvas.channel_id);
-    return canvas;
-  }
-  if (canvas.kind === 'dm') {
-    if (Number(userId) !== Number(canvas.dm_user_low) && Number(userId) !== Number(canvas.dm_user_high)) {
+  if (canvas.kind === 'channel' || canvas.kind === 'dm') {
+    if (canvas.kind === 'channel') {
+      await ensureChannelMembership(query, userId, canvas.channel_id);
+    } else if (Number(userId) !== Number(canvas.dm_user_low) && Number(userId) !== Number(canvas.dm_user_high)) {
       const err = new Error('Canvas not found');
       err.status = 404;
       throw err;
     }
+    // Guests may read channel and DM canvases but not change them.
+    if (neededRole === 'editor' && await isGuestAccount(query, userId)) {
+      const err = new Error('Guests have view-only access to canvases');
+      err.status = 403;
+      throw err;
+    }
     return canvas;
   }
-  const collaborators = await query(
-    `SELECT role FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2`,
-    [canvasId, userId]
-  );
-  const isOwner = canvas.created_by !== null && Number(canvas.created_by) === Number(userId);
-  const row = collaborators.rows[0];
-  if (!isOwner && !row) {
+  const role = await getStandaloneCanvasRole(query, userId, canvas);
+  if (!role) {
     const err = new Error('Canvas not found');
     err.status = 404;
     throw err;
   }
-  if (neededRole === 'editor' && !isOwner && row?.role !== 'editor') {
+  if (neededRole === 'editor' && role === 'viewer') {
     const err = new Error('Viewer access only');
     err.status = 403;
     throw err;
@@ -327,6 +365,8 @@ module.exports = {
   ensureDirectMessageAccess,
   ensureCanvasAccess,
   getCanvasById,
+  canvasOwnerId,
+  getStandaloneCanvasRole,
   ensureFileAccess,
   isExtensionAllowed,
   isMimeAllowed,
