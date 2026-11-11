@@ -526,18 +526,25 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
       return reactions;
     };
 
+    // One reaction per person per message. If the user taps the same emoji they
+    // already used, that removes it. Tapping a different emoji replaces their
+    // previous reaction on this message.
     const existing = await query(
-      'SELECT id FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
-      [messageId, req.user.userId, emoji]
+      'SELECT id, emoji FROM reactions WHERE message_id = $1 AND user_id = $2',
+      [messageId, req.user.userId]
     );
 
-    if (existing.rows.length > 0) {
+    if (existing.rows.length > 0 && existing.rows[0].emoji === emoji) {
       await query(
-        'DELETE FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
-        [messageId, req.user.userId, emoji]
+        'DELETE FROM reactions WHERE id = $1',
+        [existing.rows[0].id]
       );
       res.json({ message: 'Reaction removed', reactions: await broadcastReactions() });
     } else {
+      await query(
+        'DELETE FROM reactions WHERE message_id = $1 AND user_id = $2',
+        [messageId, req.user.userId]
+      );
       await query(
         'INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)',
         [messageId, req.user.userId, emoji]

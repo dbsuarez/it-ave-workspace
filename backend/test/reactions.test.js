@@ -17,7 +17,8 @@ process.env.UPLOAD_DIR = uploadDir;
 const config = require('../src/config');
 const dbPath = require.resolve('../src/db');
 const previousDbModule = require.cache[dbPath];
-const reactions = new Set();
+const reactions = []; // { id, messageId, userId, emoji }
+let nextReactionId = 1;
 const queryCalls = [];
 const emitted = [];
 
@@ -38,25 +39,37 @@ require.cache[dbPath] = {
       if (sql.includes('SELECT 1 FROM channel_members')) {
         return params[0] === 7 && params[1] === 1 ? { rows: [{}] } : { rows: [] };
       }
-      if (sql.includes('SELECT id FROM reactions')) {
-        const key = `${params[0]}:${params[1]}:${params[2]}`;
-        return { rows: reactions.has(key) ? [{ id: 1 }] : [] };
+      if (sql.includes('SELECT id, emoji FROM reactions')) {
+        return {
+          rows: reactions
+            .filter((r) => Number(r.messageId) === Number(params[0]) && Number(r.userId) === Number(params[1]))
+            .map((r) => ({ id: r.id, emoji: r.emoji })),
+        };
       }
       if (sql.includes('INSERT INTO reactions')) {
-        reactions.add(`${params[0]}:${params[1]}:${params[2]}`);
+        reactions.push({ id: nextReactionId++, messageId: Number(params[0]), userId: Number(params[1]), emoji: params[2] });
+        return { rows: [] };
+      }
+      if (sql.includes('DELETE FROM reactions') && sql.includes('WHERE id = $1')) {
+        const index = reactions.findIndex((r) => r.id === Number(params[0]));
+        if (index !== -1) reactions.splice(index, 1);
         return { rows: [] };
       }
       if (sql.includes('DELETE FROM reactions')) {
-        reactions.delete(`${params[0]}:${params[1]}:${params[2]}`);
+        for (let i = reactions.length - 1; i >= 0; i -= 1) {
+          const r = reactions[i];
+          if (Number(r.messageId) === Number(params[0]) && Number(r.userId) === Number(params[1])) {
+            reactions.splice(i, 1);
+          }
+        }
         return { rows: [] };
       }
       if (sql.includes('FROM reactions') && sql.includes('GROUP BY emoji')) {
         const byEmoji = new Map();
-        for (const key of reactions) {
-          const [messageId, userId, emoji] = key.split(':');
-          if (Number(messageId) !== Number(params[0])) continue;
-          if (!byEmoji.has(emoji)) byEmoji.set(emoji, []);
-          byEmoji.get(emoji).push(Number(userId));
+        for (const entry of reactions) {
+          if (Number(entry.messageId) !== Number(params[0])) continue;
+          if (!byEmoji.has(entry.emoji)) byEmoji.set(entry.emoji, []);
+          byEmoji.get(entry.emoji).push(Number(entry.userId));
         }
         return { rows: [...byEmoji].map(([emoji, users]) => ({ emoji, count: users.length, users })) };
       }
@@ -131,12 +144,39 @@ test('clicking the same emoji toggles the reaction off', async () => {
   const second = await react('🎉');
   assert.equal(first.status, 201);
   assert.equal(second.status, 200);
-  assert.equal(reactions.has('5:1:🎉'), false);
+  assert.equal(reactions.some((r) => r.emoji === '🎉'), false);
   assert.ok(queryCalls.some(({ sql }) => sql.includes('DELETE FROM reactions')));
 });
 
+test('adding a different emoji replaces the previous one', async () => {
+  reactions.length = 0;
+  emitted.length = 0;
+
+  const first = await react('👍');
+  assert.equal(first.status, 201);
+
+  const second = await react('❤️');
+  assert.equal(second.status, 201);
+
+  const emojiList = reactions.map((r) => r.emoji);
+  assert.deepEqual(emojiList, ['❤️']);
+});
+
+test('clicking a different emoji when none exist leaves exactly one reaction', async () => {
+  reactions.length = 0;
+  emitted.length = 0;
+
+  await react('👍');
+  await react('🔥');
+  await react('🤔');
+
+  const mine = reactions.filter((r) => r.userId === 1);
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].emoji, '🤔');
+});
+
 test('reaction changes are broadcast to the channel with current counts and users', async () => {
-  reactions.clear();
+  reactions.length = 0;
   emitted.length = 0;
 
   await react('🚀');
@@ -156,8 +196,21 @@ test('reaction changes are broadcast to the channel with current counts and user
   assert.deepEqual(updates.at(-1).payload.reactions, []);
 });
 
+test('broadcast reflects the replacement after a different emoji is chosen', async () => {
+  reactions.length = 0;
+  emitted.length = 0;
+
+  await react('👍');
+  await react('❤️');
+  const updates = emitted.filter((entry) => entry.event === 'message_reactions_updated');
+  const last = updates.at(-1);
+  assert.deepEqual(last.payload.reactions, [
+    { emoji: '❤️', count: 1, users: [1] },
+  ]);
+});
+
 test('adding a reaction notifies the message author, removing it does not', async () => {
-  reactions.clear();
+  reactions.length = 0;
   emitted.length = 0;
 
   await react('👏');

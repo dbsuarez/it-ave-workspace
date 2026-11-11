@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
   try {
     const messages = await query(
       `SELECT s.id, s.created_at AS saved_at, m.id AS message_id, m.channel_id, m.content,
-              m.created_at, c.name AS channel_name, u.username, u.avatar_color
+              m.created_at, c.name AS channel_name, u.username, u.avatar_color, u.id AS user_id
        FROM saved_items s
        JOIN messages m ON m.id = s.message_id
        JOIN channels c ON c.id = m.channel_id
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
     );
     const files = await query(
       `SELECT s.id, s.created_at AS saved_at, f.id AS file_id, f.original_name, f.size, f.mime_type,
-              m.id AS message_id, m.channel_id, c.name AS channel_name, u.username
+              m.id AS message_id, m.channel_id, c.name AS channel_name, u.username, u.id AS user_id
        FROM saved_items s
        JOIN files f ON f.id = s.file_id
        JOIN messages m ON m.id = f.message_id
@@ -59,6 +59,7 @@ router.get('/', async (req, res) => {
         channelName: row.channel_name,
         username: row.username,
         avatarColor: row.avatar_color,
+        userId: row.user_id,
         content: row.content,
         createdAt: row.created_at,
       })),
@@ -74,6 +75,7 @@ router.get('/', async (req, res) => {
         channelId: row.channel_id,
         channelName: row.channel_name,
         username: row.username || 'former user',
+        userId: row.user_id || null,
       })),
     ].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
     res.json({ items });

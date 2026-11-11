@@ -196,6 +196,20 @@
         </div>
       </nav>
 
+      <div class="menu user-context-menu" id="user-context-menu" role="menu" aria-label="User actions">
+        <div class="menu-account">
+          <div class="menu-account-name" id="user-context-name"></div>
+          <div class="menu-account-sub" id="user-context-status"></div>
+        </div>
+        <div class="menu-sep"></div>
+        <button class="menu-item" data-user-action="profile" role="menuitem">Profile</button>
+        <button class="menu-item" data-user-action="message" role="menuitem">Message</button>
+        <button class="menu-item" data-user-action="edit" role="menuitem">Edit my profile</button>
+        <button class="menu-item" data-user-action="preferences" role="menuitem">Preferences</button>
+        <div class="menu-sep" id="user-context-sep"></div>
+        <button class="menu-item danger" data-user-action="signout" role="menuitem">Sign out</button>
+      </div>
+
       <!-- List pane (channels / DMs / activity) -->
       <aside class="list-pane" id="list-pane">
         <div class="pane-header">
@@ -271,7 +285,7 @@
               </div>
               <textarea id="message-input" placeholder="Say something…" rows="1" title="Formatting: **bold**, *italic*, ~~strike~~, `code`, > quote, - list. Type @ to mention someone."></textarea>
               <button class="icon-btn schedule-btn" id="btn-schedule" type="button" title="Send later" aria-label="Send later"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></button>
-              <button class="send-btn" id="send-btn">Send</button>
+              <button class="send-btn" id="send-btn" type="button" title="Send message" aria-label="Send message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
             </div>
           </div>
         </div>
@@ -299,7 +313,7 @@
               </div>
               <textarea id="dm-message-input" placeholder="Send a message…" rows="1"></textarea>
               <button class="icon-btn schedule-btn" id="btn-dm-schedule" type="button" title="Send later" aria-label="Send later"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></button>
-              <button class="send-btn" id="send-dm-btn">Send</button>
+              <button class="send-btn" id="send-dm-btn" type="button" title="Send message" aria-label="Send message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
             </div>
           </div>
         </div>
@@ -744,6 +758,41 @@
           <button class="btn primary" type="submit">Save account</button>
         </div>
       </form>
+    </div>
+
+    <div class="modal" id="modal-user-profile">
+      <div class="modal-header">
+        <h3>Profile</h3>
+        <button class="modal-close" id="btn-close-user-profile" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <div class="modal-body user-profile-body">
+        <div class="user-profile-avatar" id="user-profile-avatar">E</div>
+        <div>
+          <div class="user-profile-name" id="user-profile-name"></div>
+          <div class="user-profile-status">
+            <span class="user-profile-dot" id="user-profile-dot"></span>
+            <span id="user-profile-status-text">Offline</span>
+          </div>
+        </div>
+        <div class="user-profile-rows">
+          <div class="profile-detail-row" id="user-profile-email-row">
+            <span class="profile-detail-label">Email</span>
+            <span class="profile-detail-value" id="user-profile-email"></span>
+          </div>
+          <div class="profile-detail-row">
+            <span class="profile-detail-label">Member since</span>
+            <span class="profile-detail-value" id="user-profile-member-since"></span>
+          </div>
+          <div class="profile-detail-row">
+            <span class="profile-detail-label">Last seen</span>
+            <span class="profile-detail-value" id="user-profile-last-seen"></span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn primary" type="button" id="btn-user-profile-message" hidden>Send a message</button>
+        <button class="btn primary" type="button" id="btn-user-profile-edit" hidden>Edit my profile</button>
+      </div>
     </div>
   </div>
 

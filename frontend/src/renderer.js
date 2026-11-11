@@ -176,6 +176,25 @@ const els = {
   profileModal: document.getElementById('modal-profile'),
   preferencesModal: document.getElementById('modal-preferences'),
   accountModal: document.getElementById('modal-account'),
+  userProfileModal: document.getElementById('modal-user-profile'),
+  userContextMenu: document.getElementById('user-context-menu'),
+  userContextName: document.getElementById('user-context-name'),
+  userContextStatus: document.getElementById('user-context-status'),
+  userContextMessage: document.querySelector('[data-user-action="message"]'),
+  userContextEdit: document.querySelector('[data-user-action="edit"]'),
+  userContextPreferences: document.querySelector('[data-user-action="preferences"]'),
+  userContextSignout: document.querySelector('[data-user-action="signout"]'),
+  userContextSep: document.getElementById('user-context-sep'),
+  userProfileAvatar: document.getElementById('user-profile-avatar'),
+  userProfileName: document.getElementById('user-profile-name'),
+  userProfileDot: document.getElementById('user-profile-dot'),
+  userProfileStatusText: document.getElementById('user-profile-status-text'),
+  userProfileEmail: document.getElementById('user-profile-email'),
+  userProfileEmailRow: document.getElementById('user-profile-email-row'),
+  userProfileMemberSince: document.getElementById('user-profile-member-since'),
+  userProfileLastSeen: document.getElementById('user-profile-last-seen'),
+  userProfileMessageBtn: document.getElementById('btn-user-profile-message'),
+  userProfileEditBtn: document.getElementById('btn-user-profile-edit'),
   filesGrid: document.getElementById('files-grid'),
   notesGrid: document.getElementById('notes-grid'),
   listsChannelSelect: document.getElementById('lists-channel-select'),
@@ -319,6 +338,31 @@ function setupEventListeners() {
       handleAccountAction(item.dataset.account);
     });
   });
+
+  // User context menu (avatars in chat, reaction popup, saved items, read receipts)
+  document.querySelectorAll('#user-context-menu [data-user-action]').forEach((item) => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const userId = activeUserContextMenuId;
+      closeAllMenus();
+      if (!userId) return;
+      const action = item.dataset.userAction;
+      if (action === 'profile') {
+        showUserProfile(userId);
+      } else if (action === 'message') {
+        openDM(userId);
+      } else if (action === 'edit') {
+        openProfileModal();
+      } else if (action === 'preferences') {
+        openPreferencesModal();
+      } else if (action === 'signout') {
+        handleLogout();
+      }
+    });
+  });
+
+  // Profile modal close buttons
+  on('btn-close-user-profile', 'click', closeSettingsModal);
 
   // App menu (hamburger)
   on('btn-app-menu', 'click', (e) => { e.stopPropagation(); toggleMenu('app-menu', 'btn-app-menu'); });
@@ -1378,7 +1422,7 @@ function renderReadReceipts(channelId) {
   container.style.display = 'flex';
   container.innerHTML = `
     <div class="read-receipt-avatars">
-      ${visibleUsers.map((u) => `<span class="read-receipt-avatar" title="${escapeHtml(u.username)}" style="background:${escapeHtml(u.avatarColor || '#A855F7')};">${escapeHtml((u.username || 'U').charAt(0).toUpperCase())}</span>`).join('')}
+      ${visibleUsers.map((u) => `<span class="read-receipt-avatar" title="${escapeHtml(u.username)}" style="background:${escapeHtml(u.avatarColor || '#A855F7')};" data-user-id="${escapeHtml(String(u.id ?? u.userId ?? ''))}" role="button" tabindex="0" aria-label="View ${escapeHtml((u.username || 'user').trim())}'s profile">${escapeHtml((u.username || 'U').charAt(0).toUpperCase())}</span>`).join('')}
     </div>
     <span class="read-receipt-text">Seen by ${escapeHtml(names)}${escapeHtml(more)}</span>
   `;
@@ -1609,12 +1653,17 @@ function renderMessageEl(msg, allowReply = false) {
   el.className = `message${msg.pending ? ' pending' : ''}${isYou ? ' own' : ''}`;
   el.id = `message-${msg.id}`;
 
-  const reactionsHtml = (msg.reactions || []).map((r) => {
-    const hasMe = r.users && r.users.includes(state.user.id);
-    return `<button type="button" class="reaction${hasMe ? ' me' : ''}" data-reaction-message="${escapeHtml(String(msg.id))}" data-reaction-emoji="${escapeHtml(r.emoji)}" aria-label="${escapeHtml(r.emoji)} reaction, ${Number(r.count) === 1 ? '1 person' : `${r.count} people`}">
-      <span class="emoji">${r.emoji}</span>${Number(r.count) === 1 ? '' : `<span class="count">${r.count}</span>`}
-    </button>`;
-  }).join('');
+  // Single combined pill: all unique reaction emojis + total count
+  const reactionList = msg.reactions || [];
+  const reactionTotal = reactionList.reduce((sum, r) => sum + Number(r.count || 0), 0);
+  const reactionEmojis = [...new Set(reactionList.map((r) => r.emoji))];
+  const reactionHasMe = reactionList.some((r) => r.users && r.users.includes(state.user.id));
+  const reactionTitle = reactionList.map((r) => `${r.emoji} × ${r.count}`).join(', ');
+  const reactionsHtml = reactionTotal > 0
+    ? `<button type="button" class="reaction${reactionHasMe ? ' me' : ''}" data-reaction-message="${escapeHtml(String(msg.id))}" data-reaction-emoji="" aria-label="Reactions, ${reactionTotal} ${reactionTotal === 1 ? 'person' : 'people'}" title="${escapeHtml(reactionTitle)}">
+      ${reactionEmojis.map((emoji) => `<span class="emoji">${emoji}</span>`).join('')}${reactionTotal === 1 ? '' : `<span class="count">${reactionTotal}</span>`}
+    </button>`
+    : '';
 
   const attachmentsHtml = (msg.attachments || []).map((a) => `
     <div class="attachment-row">
@@ -1630,7 +1679,7 @@ function renderMessageEl(msg, allowReply = false) {
   const replyPreview = msg.replyTo ? (msg.replyToMessage || {}) : null;
 
   el.innerHTML = `
-    <div class="avatar-mini" style="background:${avatarColor};">${initials}</div>
+    <div class="avatar-mini" style="background:${avatarColor};" data-user-id="${escapeHtml(String(msg.userId ?? msg.senderId ?? ''))}" role="button" tabindex="0" title="View profile" aria-label="View profile">${initials}</div>
     <div class="message-body">
       <div class="message-header">
         <span class="name">${escapeHtml(username)}</span>
@@ -1910,7 +1959,7 @@ async function showReactionDetails(messageId) {
         const you = String(u.user_id) === meId;
         const initial = (u.username || '?').charAt(0).toUpperCase();
         const name = escapeHtml(u.username || 'Unknown');
-        const inner = `<span class="avatar-mini" style="background:${escapeHtml(u.avatar_color || '#A855F7')};">${initial}</span>
+        const inner = `<span class="avatar-mini" style="background:${escapeHtml(u.avatar_color || '#A855F7')};" data-user-id="${escapeHtml(String(u.user_id ?? ''))}" role="button" tabindex="0" title="View profile" aria-label="View profile">${initial}</span>
           <span class="reaction-row-name">${name}${you ? ' (You)' : ''}</span>
           <span class="reaction-row-emoji">${emoji}</span>`;
         return you
@@ -2866,6 +2915,15 @@ function renderActivity() {
 }
 
 function handleDocumentClick(event) {
+  // Clicking any avatar opens the profile context menu
+  const avatar = event.target.closest('[data-user-id]');
+  if (avatar) {
+    const userId = avatar.getAttribute('data-user-id');
+    if (userId) {
+      handleAvatarContextClick(avatar, event);
+      return;
+    }
+  }
   // Toggle a per-message "More actions" menu open/closed
   const more = event.target.closest('[data-message-more]');
   if (more) {
@@ -2890,6 +2948,122 @@ function handleDocumentClick(event) {
   // Clear long-pressed mobile action state when tapping elsewhere
   if (!event.target.closest('.message')) {
     document.querySelectorAll('.message.actions-visible').forEach((node) => node.classList.remove('actions-visible'));
+  }
+}
+
+let activeUserContextMenuId = null;
+
+function openUserContextMenu(anchor, userId, usernameHint) {
+  const menu = els.userContextMenu;
+  if (!menu) return;
+  activeUserContextMenuId = String(userId);
+  const isSelf = Number(userId) === Number(state.user.id);
+  const user = (state.users || []).find((u) => Number(u.id) === Number(userId));
+  const name = user?.username || usernameHint || 'Unknown';
+  if (els.userContextName) els.userContextName.textContent = name;
+  if (els.userContextStatus) {
+    const status = user?.status ? statusLabelFor(user.status) : 'Tap to see profile';
+    els.userContextStatus.textContent = isSelf ? 'This is you' : status;
+  }
+  const toggle = (el, show) => { if (el) el.hidden = !show; };
+  toggle(els.userContextMessage, !isSelf);
+  toggle(els.userContextEdit, isSelf);
+  toggle(els.userContextPreferences, isSelf);
+  toggle(els.userContextSignout, isSelf);
+  toggle(els.userContextSep, true);
+
+  closeAllMenus();
+  menu.classList.add('open');
+  positionUserContextMenu(menu, anchor);
+}
+
+function statusLabelFor(status) {
+  if (status === 'online') return 'Online';
+  if (status === 'away') return 'Away';
+  return 'Offline';
+}
+
+function positionUserContextMenu(menu, anchor) {
+  const margin = 12;
+  const rect = anchor.getBoundingClientRect();
+  const menuWidth = menu.offsetWidth || 200;
+  const menuHeight = menu.offsetHeight || 200;
+  const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - menuWidth - margin));
+  let top = rect.bottom + 6;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - menuHeight - 6);
+  }
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function handleAvatarContextClick(avatar, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const userId = avatar.getAttribute('data-user-id');
+  if (!userId) return false;
+  const container = avatar.closest('.message, .reaction-row, .later-item, .read-receipt-avatar, .dm-item, .user-profile-avatar, .huddle-participant');
+  const name = container?.querySelector?.('.name, .reaction-row-name, .later-item-title strong, .dm-name, .huddle-participant-name')?.textContent
+    || avatar.getAttribute('title')
+    || avatar.textContent?.trim?.()
+    || '';
+  toggleUserContextMenu(avatar, userId, name);
+  return true;
+}
+
+function toggleUserContextMenu(anchor, userId, name) {
+  const menu = els.userContextMenu;
+  if (!menu) { openUserContextMenu(anchor, userId, name); return; }
+  const isOpenForSameUser = menu.classList.contains('open') && activeUserContextMenuId === String(userId);
+  if (isOpenForSameUser) {
+    closeAllMenus();
+    return;
+  }
+  openUserContextMenu(anchor, userId, name);
+}
+
+function formatMemberSince(iso) {
+  if (!iso) return 'Unknown';
+  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function formatLastSeen(iso, status) {
+  if (status === 'online') return 'Active now';
+  if (!iso) return 'Unknown';
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+async function showUserProfile(userId) {
+  try {
+    const res = await api(`/api/users/${userId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load profile');
+    const u = data.user;
+    const isSelf = Number(u.id) === Number(state.user.id);
+
+    if (els.userProfileAvatar) {
+      els.userProfileAvatar.textContent = (u.username || 'U').charAt(0).toUpperCase();
+      els.userProfileAvatar.style.background = u.avatarColor || '#A855F7';
+    }
+    if (els.userProfileName) els.userProfileName.textContent = u.username || 'User';
+    if (els.userProfileDot) els.userProfileDot.className = `user-profile-dot ${u.status || 'offline'}`;
+    if (els.userProfileStatusText) els.userProfileStatusText.textContent = statusLabelFor(u.status);
+    if (els.userProfileEmailRow) els.userProfileEmailRow.hidden = !isSelf;
+    if (els.userProfileEmail) els.userProfileEmail.textContent = u.email || '';
+    if (els.userProfileMemberSince) els.userProfileMemberSince.value = formatMemberSince(u.createdAt);
+    if (els.userProfileLastSeen) els.userProfileLastSeen.value = formatLastSeen(u.lastSeen, u.status);
+    if (els.userProfileMessageBtn) {
+      els.userProfileMessageBtn.hidden = isSelf;
+      els.userProfileMessageBtn.onclick = () => { closeSettingsModal(); openDM(userId); };
+    }
+    if (els.userProfileEditBtn) {
+      els.userProfileEditBtn.hidden = !isSelf;
+      els.userProfileEditBtn.onclick = () => { closeSettingsModal(); openProfileModal(); };
+    }
+    openSettingsModal(els.userProfileModal);
+  } catch (err) {
+    console.error('Show user profile error:', err);
+    showToast(err.message || 'Could not load this profile.', 'error');
   }
 }
 
@@ -2937,6 +3111,10 @@ function closeAllMenus() {
     m.classList.remove('open');
     closed = true;
   });
+  if (els.userContextMenu?.classList.contains('open')) {
+    els.userContextMenu.classList.remove('open');
+    closed = true;
+  }
   document.querySelectorAll('[data-message-more][aria-expanded="true"]').forEach((b) => {
     b.setAttribute('aria-expanded', 'false');
   });

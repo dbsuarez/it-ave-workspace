@@ -318,7 +318,7 @@ function renderLaterView() {
     body.classList.toggle('has-empty-record', later.saved.length === 0);
     body.innerHTML = later.saved.length ? later.saved.map((item) => (item.type === 'message' ? `
       <div class="later-item" data-open-saved="${item.id}">
-        <span class="avatar-mini" style="background:${escapeHtml(item.avatarColor || '#A855F7')};">${escapeHtml((item.username || '?').charAt(0).toUpperCase())}</span>
+        <span class="avatar-mini" style="background:${escapeHtml(item.avatarColor || '#A855F7')};" ${item.userId ? `data-user-id="${escapeHtml(String(item.userId))}" role="button" tabindex="0" title="View profile" aria-label="View profile"` : ''}>${escapeHtml((item.username || '?').charAt(0).toUpperCase())}</span>
         <span class="later-item-body">
           <span class="later-item-title"><strong>${escapeHtml(item.username)}</strong> in <strong>#${escapeHtml(item.channelName)}</strong></span>
           <span class="later-item-text">${escapeHtml(item.content || 'Attachment')}</span>
