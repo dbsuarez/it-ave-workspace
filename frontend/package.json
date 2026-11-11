@@ -5,19 +5,24 @@
   "description": "IT Avenue Workspace desktop client",
   "main": "main.js",
   "scripts": {
+    "check": "node scripts/check.js",
+    "vendor": "node scripts/vendor.js",
+    "prestart": "npm run check",
     "start": "electron .",
     "dev": "electron .",
+    "prepack": "npm run check",
     "pack": "electron-builder --dir",
+    "predist": "npm run check",
     "dist": "electron-builder"
   },
   "devDependencies": {
+    "@fontsource/lato": "^5.3.0",
     "electron": "^28.0.0",
-    "electron-builder": "^24.0.0"
+    "electron-builder": "^24.0.0",
+    "socket.io-client": "^4.7.2"
   },
   "dependencies": {
-    "@fontsource/lato": "^5.3.0",
-    "electron-store": "^8.1.0",
-    "socket.io-client": "^4.7.2"
+    "electron-store": "^8.1.0"
   },
   "build": {
     "appId": "com.itavenue.workspace",

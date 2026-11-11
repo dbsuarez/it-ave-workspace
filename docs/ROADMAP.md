@@ -208,17 +208,25 @@ local TURN server, but not yet with real microphones on two devices.
 
 ## Known defects being carried right now
 
-- Login form exposes `electronAPI` global before listeners attach; works but is fragile layout of
-  responsibilities. Do not re-declare `electronAPI` anywhere (crashes parse).
-- Desktop renderer loads socket.io client from node_modules directly; this is a development-time
-  smell. For distribution, bundle with esbuild or similar.
-- `renderer.js` parse-time vulnerabilities: renderer can die before any listener attaches. A syntax
-  check rule (`node --check renderer.js`) is the guard we use; integrate into build/CI.
-- `.env` contains defaults and is referenced by the repository. Secrets must be rotated.
 - The backend container does not mount source; run `docker compose up -d --build backend` after
   backend changes or the app runs stale code.
-- Docker Compose exposes Postgres on `5432` on all interfaces. If this machine is not trusted
-  (office LAN), bind Postgres to `127.0.0.1:5432:5432` in the compose file.
+- `renderer.js` is still one large classic script, so its top-level names are page globals. The
+  build check (below) guards the known ways that breaks.
+
+## Hardening done (2026-11-11)
+
+- Postgres is published on `127.0.0.1:5432` only; the backend reaches it over the Docker network.
+- `npm run check` (`frontend/scripts/check.js`) runs automatically before `npm start`,
+  `npm run pack`, and `npm run dist`. It fails on a syntax error in any desktop script, a
+  re-declaration of `electronAPI`, a `prompt()` call, a reference into `node_modules`, or a
+  missing local asset.
+- The socket.io client and Lato fonts are vendored into `frontend/src/vendor` (`npm run vendor`
+  refreshes them) and are no longer shipped as runtime dependencies.
+- `login.js` is wrapped in a function scope, attaches its listeners before any asynchronous work,
+  and uses one submit handler. This also fixed sign-up firing a login request alongside the
+  registration.
+- The local `.env` database password and JWT secret were replaced with random values. Production
+  must use its own secrets, set at deployment.
 
 ## How to read this progress
 
