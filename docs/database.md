@@ -16,9 +16,14 @@ The `init.sql` file creates:
 - **reactions** - Emoji reactions on messages
 - **files** - File attachment metadata (`message_id` for channel messages, `dm_message_id` for DMs)
 - **notes** - Per-user notes (title, content, created_at, updated_at)
-- **channel_lists** - Channel-shared checklist names and creator metadata
-- **channel_list_items** - Checklist titles, completion state, optional channel-member
-  assignees, optional due dates, and creator metadata
+- **channel_lists** - Channel-shared lists: title, description, `todo_mode`, creator metadata
+- **list_columns** - A list's typed columns (`text`, `checkbox`, `date`, `user`, `select`, `number`,
+  `link`) with `options` (JSON), a stable `key`, and exactly one `is_primary` text column per list
+- **list_rows** / **list_cells** - Rows (with `parent_row_id`, `archived_at`, who and when) and one
+  JSON value per row and column. A missing cell is an empty cell
+- **channel_list_items** - The old fixed-column items. Frozen after the one-time move into rows
+  (row ids equal the old item ids); kept as a safety copy and no longer written
+- **schema_markers** - Names of one-off data migrations that have already run
 - **channel_canvases** - Channel-shared Markdown documents and creator metadata
 - **moderation_settings** - Workspace default and maximum timeout durations
 - **channel_timeouts** - Expiring channel-scoped user timeouts

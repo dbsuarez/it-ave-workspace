@@ -1,222 +1,288 @@
+// Lists routes against a real PostgreSQL (a scratch database, see helpers/scratchDb.js).
+// Skipped when no database is reachable.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const { createScratchDatabase } = require('./helpers/scratchDb');
 
-process.env.DATABASE_URL ||= 'postgres://127.0.0.1/test';
-const previousJwtSecret = process.env.JWT_SECRET;
-process.env.JWT_SECRET = 'lists-test-secret';
-
-const config = require('../src/config');
-const dbPath = require.resolve('../src/db');
-const previousDbModule = require.cache[dbPath];
-const memberships = new Set(['1:7', '2:7']);
-const queryCalls = [];
-const insertedLists = [];
-const insertedItems = [];
-
-require.cache[dbPath] = {
-  id: dbPath,
-  filename: dbPath,
-  loaded: true,
-  exports: {
-    query: async (sql, params = []) => {
-      queryCalls.push({ sql, params });
-      if (sql.includes('SELECT token_version FROM users')) {
-        return { rows: [{ token_version: 0 }] };
-      }
-      if (sql.includes('SELECT 1 FROM channel_members')) {
-        return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{}] : [] };
-      }
-      if (sql.includes('SELECT l.id, l.channel_id')) {
-        return {
-          rows: [{
-            id: 11,
-            channel_id: 7,
-            channel_name: 'general',
-            title: 'Release checklist',
-            created_at: '2026-01-01T00:00:00Z',
-            updated_at: '2026-01-02T00:00:00Z',
-            item_id: 21,
-            item_title: 'Review release notes',
-            is_completed: false,
-            assignee_id: 2,
-            assignee_name: 'bob',
-            due_date: '2026-02-01',
-            item_created_at: '2026-01-01T00:00:00Z',
-            item_updated_at: '2026-01-02T00:00:00Z',
-          }],
-        };
-      }
-      if (sql.includes('SELECT u.id, u.username')) {
-        return { rows: [{ id: 1, username: 'alice' }, { id: 2, username: 'bob' }] };
-      }
-      if (sql.includes('SELECT channel_id FROM channel_lists')) {
-        return { rows: Number(params[0]) === 11 ? [{ channel_id: 7 }] : [] };
-      }
-      if (sql.includes('INSERT INTO channel_lists')) {
-        const list = {
-          id: 12,
-          channel_id: params[0],
-          title: params[1],
-          created_at: '2026-01-03T00:00:00Z',
-          updated_at: '2026-01-03T00:00:00Z',
-        };
-        insertedLists.push(list);
-        return { rows: [list] };
-      }
-      if (sql.includes('INSERT INTO channel_list_items')) {
-        const item = {
-          id: 22,
-          title: params[1],
-          is_completed: false,
-          assignee_id: params[2],
-          due_date: params[3],
-          created_at: '2026-01-03T00:00:00Z',
-          updated_at: '2026-01-03T00:00:00Z',
-        };
-        insertedItems.push(item);
-        return { rows: [item] };
-      }
-      if (sql.includes('SELECT username FROM users')) {
-        return { rows: [{ username: 'bob' }] };
-      }
-      if (sql.includes('SELECT id FROM channel_list_items')) {
-        return { rows: Number(params[0]) === 21 && Number(params[1]) === 11 ? [{ id: 21 }] : [] };
-      }
-      if (sql.includes('UPDATE channel_list_items')) {
-        return {
-          rows: [{
-            id: params.at(-2),
-            title: 'Review release notes',
-            is_completed: params[0],
-            assignee_id: 2,
-            due_date: '2026-02-01',
-            updated_at: '2026-01-04T00:00:00Z',
-          }],
-        };
-      }
-      return { rows: [], rowCount: 1 };
-    },
-  },
-};
-
-const app = express();
-app.use(express.json());
-app.use('/api/lists', require('../src/routes/lists'));
+let scratch;
+let admin;
 let server;
 let baseUrl;
+let pool;
+let config;
+const ids = {};
 
 test.before(async () => {
+  scratch = await createScratchDatabase();
+  if (!scratch) return;
+  admin = await scratch.open();
+  await scratch.applyInit(admin);
+  await scratch.applyMigrations(admin);
+  process.env.DATABASE_URL = scratch.url;
+  process.env.JWT_SECRET = 'lists-test-secret';
+  config = require('../src/config');
+  pool = require('../src/db').pool;
+
+  const user = async (name, accountType = 'member') => (await admin.query(
+    'INSERT INTO users (username, email, password_hash, account_type) VALUES ($1, $2, $3, $4) RETURNING id',
+    [name, `${name}@x.test`, 'x', accountType]
+  )).rows[0].id;
+  ids.alice = await user('alice');
+  ids.bob = await user('bob');
+  ids.carol = await user('carol', 'guest');
+  ids.dave = await user('dave'); // not in the channel
+  const channel = async (name) => (await admin.query('INSERT INTO channels (name, created_by) VALUES ($1, $2) RETURNING id', [name, ids.alice])).rows[0].id;
+  ids.team = await channel('team');
+  ids.other = await channel('other');
+  for (const member of [ids.alice, ids.bob, ids.carol]) {
+    await admin.query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)', [ids.team, member]);
+  }
+  await admin.query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)', [ids.other, ids.dave]);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/lists', require('../src/routes/lists'));
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
 test.after(async () => {
-  if (server) await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
-  if (previousDbModule) {
-    require.cache[dbPath] = previousDbModule;
-  } else {
-    delete require.cache[dbPath];
-  }
-  if (previousJwtSecret === undefined) {
-    delete process.env.JWT_SECRET;
-  } else {
-    process.env.JWT_SECRET = previousJwtSecret;
-  }
+  if (server) await new Promise((resolve) => server.close(resolve));
+  if (pool) await pool.end();
+  if (admin) await admin.end();
+  if (scratch) await scratch.drop();
 });
 
-function authHeader(userId = 1) {
-  const token = jwt.sign({ userId, username: userId === 1 ? 'alice' : 'bob' }, config.JWT_SECRET);
-  return { Authorization: `Bearer ${token}` };
+const as = (userId) => ({
+  Authorization: `Bearer ${jwt.sign({ userId, username: 'u', tokenVersion: 0 }, config.JWT_SECRET)}`,
+  'Content-Type': 'application/json',
+});
+const call = async (userId, method, path, body) => {
+  const res = await fetch(`${baseUrl}/api/lists${path}`, { method, headers: as(userId), body: body === undefined ? undefined : JSON.stringify(body) });
+  return { status: res.status, json: await res.json() };
+};
+const skipIfNoDb = (t) => { if (!scratch) { t.skip('no PostgreSQL reachable'); return true; } return false; };
+
+// ---- the original to-do behaviour, unchanged for older clients ----------------------------------
+
+test('a to-do list returns channel-scoped items and member choices', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const created = await call(ids.alice, 'POST', '', { channelId: ids.team, title: '  Launch  ' });
+  assert.equal(created.status, 201);
+  assert.equal(created.json.list.title, 'Launch', 'the title is trimmed');
+  assert.equal(created.json.list.todoMode, true);
+  const listId = created.json.list.id;
+  const item = await call(ids.alice, 'POST', `/${listId}/items`, { title: 'Write plan', assigneeId: ids.bob, dueDate: '2026-03-04' });
+  assert.equal(item.status, 201);
+  assert.deepEqual({ ...item.json.item, createdAt: undefined, updatedAt: undefined, id: undefined }, {
+    id: undefined, title: 'Write plan', completed: false, assigneeId: ids.bob, assigneeName: 'bob', dueDate: '2026-03-04', createdAt: undefined, updatedAt: undefined,
+  });
+  const listed = await call(ids.bob, 'GET', `?channelId=${ids.team}`);
+  assert.equal(listed.status, 200);
+  assert.equal(listed.json.lists[0].items[0].title, 'Write plan');
+  assert.deepEqual(listed.json.members.map((m) => m.username), ['alice', 'bob', 'carol']);
+});
+
+test('non-members cannot read or create channel lists', async (t) => {
+  if (skipIfNoDb(t)) return;
+  assert.equal((await call(ids.dave, 'GET', `?channelId=${ids.team}`)).status, 403);
+  assert.equal((await call(ids.dave, 'POST', '', { channelId: ids.team, title: 'x' })).status, 403);
+});
+
+test('titles are validated', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const bad = await call(ids.alice, 'POST', '', { channelId: ids.team, title: '   ' });
+  assert.equal(bad.status, 400);
+  assert.match(bad.json.error, /between 1 and 120/);
+  assert.equal((await call(ids.alice, 'POST', '', { channelId: 'abc', title: 'x' })).status, 400);
+});
+
+test('items validate same-channel assignees and due dates', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { json } = await call(ids.alice, 'POST', '', { channelId: ids.team, title: 'Checks' });
+  const path = `/${json.list.id}/items`;
+  const outsider = await call(ids.alice, 'POST', path, { title: 'x', assigneeId: ids.dave });
+  assert.equal(outsider.status, 400);
+  assert.match(outsider.json.error, /member of this channel/);
+  assert.equal((await call(ids.alice, 'POST', path, { title: 'x', dueDate: '2026-02-30' })).status, 400);
+  assert.equal((await call(ids.alice, 'POST', path, { title: '' })).status, 400);
+  const empty = await call(ids.alice, 'GET', `/${json.list.id}`);
+  assert.equal(empty.json.rows.length, 0, 'rejected items left nothing behind');
+});
+
+test('completion, assignee and due date updates go through, and need a boolean', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const list = (await call(ids.alice, 'POST', '', { channelId: ids.team, title: 'Updates' })).json.list;
+  const item = (await call(ids.alice, 'POST', `/${list.id}/items`, { title: 'Do it' })).json.item;
+  const base = `/${list.id}/items/${item.id}`;
+  assert.equal((await call(ids.alice, 'PATCH', base, { completed: 'yes' })).status, 400);
+  assert.equal((await call(ids.alice, 'PATCH', base, {})).status, 400);
+  const done = await call(ids.bob, 'PATCH', base, { completed: true, assigneeId: ids.alice, dueDate: '2026-05-06' });
+  assert.equal(done.status, 200);
+  assert.equal(done.json.item.completed, true);
+  assert.equal(done.json.item.assigneeName, 'alice');
+  assert.equal(done.json.item.dueDate, '2026-05-06');
+  const cleared = await call(ids.bob, 'PATCH', base, { completed: false, assigneeId: null, dueDate: null });
+  assert.equal(cleared.json.item.completed, false);
+  assert.equal(cleared.json.item.assigneeId, null);
+  assert.equal(cleared.json.item.dueDate, null);
+  assert.equal((await call(ids.dave, 'PATCH', base, { completed: true })).status, 403);
+  assert.equal((await call(ids.alice, 'PATCH', `/${list.id}/items/999999`, { completed: true })).status, 404);
+  assert.equal((await call(ids.alice, 'DELETE', base)).status, 200);
+  assert.equal((await call(ids.alice, 'DELETE', base)).status, 404);
+});
+
+test('list routes require authentication', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const res = await fetch(`${baseUrl}/api/lists`);
+  assert.equal(res.status, 401);
+});
+
+// ---- typed lists ---------------------------------------------------------------------------------
+
+async function createTable(columns) {
+  const res = await call(ids.alice, 'POST', '', { channelId: ids.team, title: 'Tracker', todoMode: false, columns });
+  assert.equal(res.status, 201, JSON.stringify(res.json));
+  return res.json;
 }
+const colByName = (columns, name) => columns.find((c) => c.name === name);
 
-test('lists return channel-scoped items and member choices', async () => {
-  const response = await fetch(`${baseUrl}/api/lists?channelId=7`, { headers: authHeader() });
-  const data = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.equal(data.lists[0].title, 'Release checklist');
-  assert.equal(data.lists[0].items[0].assigneeName, 'bob');
-  assert.deepEqual(data.members.map((member) => member.username), ['alice', 'bob']);
-  assert.ok(queryCalls.some(({ sql }) => sql.includes('member.user_id = $1')));
+test('a table list starts with one primary text column plus the requested columns', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list, columns } = await createTable([
+    { name: 'Status', type: 'select', options: { choices: [{ label: 'Open', color: 'blue' }, { label: 'Done', color: 'green' }] } },
+    { name: 'Estimate', type: 'number', options: { precision: 1 } },
+    { name: 'Docs', type: 'link' },
+  ]);
+  assert.equal(list.todoMode, false);
+  assert.deepEqual(columns.map((c) => [c.name, c.type, c.isPrimary]), [['Name', 'text', true], ['Status', 'select', false], ['Estimate', 'number', false], ['Docs', 'link', false]]);
+  assert.equal(columns[1].options.choices.length, 2);
+  assert.ok(columns[1].options.choices.every((c) => /^c_[0-9a-f]{8}$/.test(c.id)), 'choices get stable ids');
 });
 
-test('non-members cannot read or create channel lists', async () => {
-  const readResponse = await fetch(`${baseUrl}/api/lists?channelId=8`, { headers: authHeader() });
-  assert.equal(readResponse.status, 403);
-
-  const createResponse = await fetch(`${baseUrl}/api/lists`, {
-    method: 'POST',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: 8, title: 'Private work' }),
+test('rows hold typed cells, validated per column, and a bad cell stores nothing', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list, columns } = await createTable([
+    { name: 'Status', type: 'select', options: { choices: [{ label: 'Open' }, { label: 'Done' }] } },
+    { name: 'Estimate', type: 'number', options: { precision: 1 } },
+    { name: 'Owner', type: 'user' },
+    { name: 'Due', type: 'date' },
+    { name: 'Docs', type: 'link' },
+    { name: 'Ready', type: 'checkbox' },
+  ]);
+  const col = (n) => colByName(columns, n);
+  const open = col('Status').options.choices[0].id;
+  const base = `/${list.id}/rows`;
+  const created = await call(ids.alice, 'POST', base, {
+    cells: { title: 'Build login', status: open, estimate: 2.46, owner: ids.bob, due: '2026-04-01', docs: 'https://example.com/spec', ready: true },
   });
-  assert.equal(createResponse.status, 403);
-  assert.equal(insertedLists.length, 0);
+  assert.equal(created.status, 201, JSON.stringify(created.json));
+  const cells = created.json.row.cells;
+  assert.equal(cells[col('Name').id], 'Build login');
+  assert.deepEqual(cells[col('Status').id], [open]);
+  assert.equal(cells[col('Estimate').id], 2.5, 'rounded to the column precision');
+  assert.deepEqual(cells[col('Owner').id], [ids.bob]);
+  assert.deepEqual(cells[col('Docs').id], { url: 'https://example.com/spec' });
+
+  const bad = [
+    [{ estimate: 'lots' }, /must be a number/],
+    [{ status: 'c_nothere' }, /does not exist/],
+    [{ owner: ids.dave }, /members of its channel/],
+    [{ due: '2026-13-01' }, /valid YYYY-MM-DD/],
+    [{ docs: 'javascript:alert(1)' }, /http/],
+    [{ nope: 1 }, /Unknown column/],
+    [{ title: '' }, /cannot be empty/],
+  ];
+  for (const [change, pattern] of bad) {
+    const res = await call(ids.alice, 'PATCH', `${base}/${created.json.row.id}`, { cells: { ready: false, ...change } });
+    assert.equal(res.status, 400, JSON.stringify(change));
+    assert.match(res.json.error, pattern);
+  }
+  const after = (await call(ids.alice, 'GET', `/${list.id}`)).json.rows[0].cells;
+  assert.equal(after[col('Ready').id], true, 'a rejected edit applies none of its cells, valid ones included');
 });
 
-test('list creation trims the title and rejects empty titles', async () => {
-  const invalid = await fetch(`${baseUrl}/api/lists`, {
-    method: 'POST',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: 7, title: '   ' }),
-  });
-  assert.equal(invalid.status, 400);
-
-  const response = await fetch(`${baseUrl}/api/lists`, {
-    method: 'POST',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: 7, title: '  Sprint tasks  ' }),
-  });
-  const data = await response.json();
-  assert.equal(response.status, 201);
-  assert.equal(data.list.title, 'Sprint tasks');
-  assert.equal(insertedLists.at(-1).title, 'Sprint tasks');
+test('a row needs its primary cell, and several cells change together', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list, columns } = await createTable([{ name: 'Notes', type: 'text' }]);
+  assert.equal((await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { notes: 'orphan' } })).status, 400);
+  const row = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'A' } })).json.row;
+  const changed = await call(ids.bob, 'PATCH', `/${list.id}/rows/${row.id}`, { cells: { title: 'B', notes: 'n' } });
+  assert.equal(changed.json.row.cells[colByName(columns, 'Name').id], 'B');
+  assert.equal(changed.json.row.updatedBy, ids.bob);
+  const cleared = await call(ids.bob, 'PATCH', `/${list.id}/rows/${row.id}`, { cells: { notes: null } });
+  assert.equal(cleared.json.row.cells[colByName(columns, 'Notes').id], undefined, 'null clears a cell');
+  assert.equal((await call(ids.bob, 'PATCH', `/${list.id}/rows/${row.id}`, { cells: {} })).status, 400);
+  const many = Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`k${i}`, 1]));
+  assert.equal((await call(ids.bob, 'PATCH', `/${list.id}/rows/${row.id}`, { cells: many })).status, 400, 'at most 100 cells per call');
 });
 
-test('items validate same-channel assignees and preserve due dates', async () => {
-  const before = insertedItems.length;
-  const invalid = await fetch(`${baseUrl}/api/lists/11/items`, {
-    method: 'POST',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Review docs', assigneeId: 99 }),
+test('columns can be added, renamed and removed; the primary one is permanent', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list, columns } = await createTable([]);
+  const primary = columns[0];
+  const added = await call(ids.alice, 'POST', `/${list.id}/columns`, { name: 'Priority', type: 'select', options: { choices: [{ label: 'High', color: 'red' }, { label: 'Low' }] } });
+  assert.equal(added.status, 201);
+  const priority = added.json.column;
+  assert.equal((await call(ids.alice, 'POST', `/${list.id}/columns`, { name: 'x', type: 'vote' })).status, 400);
+  assert.equal((await call(ids.alice, 'PATCH', `/${list.id}/columns/${priority.id}`, { type: 'text' })).status, 400, 'type is fixed');
+  const [high, low] = priority.options.choices.map((c) => c.id);
+  const row = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Task', priority: [high] } })).json.row;
+  await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Other', priority: [low] } });
+  // rename a choice (same id) and drop the other: cells on the renamed one survive, the dropped one clears
+  const renamed = await call(ids.alice, 'PATCH', `/${list.id}/columns/${priority.id}`, {
+    name: 'Urgency', options: { choices: [{ id: high, label: 'Critical', color: 'red' }] },
   });
-  assert.equal(invalid.status, 400);
-  assert.equal(insertedItems.length, before);
-
-  const response = await fetch(`${baseUrl}/api/lists/11/items`, {
-    method: 'POST',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: ' Review docs ', assigneeId: 2, dueDate: '2026-02-01' }),
-  });
-  const data = await response.json();
-  assert.equal(response.status, 201);
-  assert.equal(data.item.title, 'Review docs');
-  assert.equal(data.item.assigneeName, 'bob');
-  assert.equal(data.item.dueDate, '2026-02-01');
+  assert.equal(renamed.status, 200);
+  assert.equal(renamed.json.column.name, 'Urgency');
+  const rows = (await call(ids.alice, 'GET', `/${list.id}`)).json.rows;
+  assert.deepEqual(rows.find((r) => r.id === row.id).cells[priority.id], [high]);
+  assert.equal(rows.find((r) => r.id !== row.id).cells[priority.id], undefined, 'removed choice cleared from cells');
+  assert.equal((await call(ids.alice, 'DELETE', `/${list.id}/columns/${primary.id}`)).status, 400);
+  assert.equal((await call(ids.alice, 'DELETE', `/${list.id}/columns/${priority.id}`)).status, 200);
+  const afterDelete = (await call(ids.alice, 'GET', `/${list.id}`)).json;
+  assert.ok(!afterDelete.columns.some((c) => c.id === priority.id));
+  assert.ok(afterDelete.rows.every((r) => r.cells[priority.id] === undefined), 'its cells went with it');
 });
 
-test('item completion updates require list membership and a boolean value', async () => {
-  const invalid = await fetch(`${baseUrl}/api/lists/11/items/21`, {
-    method: 'PATCH',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ completed: 'yes' }),
-  });
-  assert.equal(invalid.status, 400);
-
-  const response = await fetch(`${baseUrl}/api/lists/11/items/21`, {
-    method: 'PATCH',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ completed: true }),
-  });
-  const data = await response.json();
-  assert.equal(response.status, 200);
-  assert.equal(data.item.completed, true);
+test('guests can read lists but not change them', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list } = await createTable([]);
+  const row = (await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'Visible' } })).json.row;
+  assert.equal((await call(ids.carol, 'GET', `/${list.id}`)).status, 200);
+  assert.equal((await call(ids.carol, 'GET', `?channelId=${ids.team}`)).status, 200);
+  assert.equal((await call(ids.carol, 'POST', `/${list.id}/rows`, { cells: { title: 'x' } })).status, 403);
+  assert.equal((await call(ids.carol, 'PATCH', `/${list.id}/rows/${row.id}`, { cells: { title: 'x' } })).status, 403);
+  assert.equal((await call(ids.carol, 'POST', '', { channelId: ids.team, title: 'guest list' })).status, 403);
+  assert.equal((await call(ids.carol, 'DELETE', `/${list.id}`)).status, 403);
+  assert.equal((await call(ids.dave, 'GET', `/${list.id}`)).status, 403, 'outsiders see nothing');
 });
 
-test('list routes require authentication', async () => {
-  const response = await fetch(`${baseUrl}/api/lists?channelId=7`);
-  assert.equal(response.status, 401);
+test('deleting a list removes its columns, rows and cells', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const { list } = await createTable([{ name: 'Notes', type: 'text' }]);
+  await call(ids.alice, 'POST', `/${list.id}/rows`, { cells: { title: 'A', notes: 'x' } });
+  assert.equal((await call(ids.alice, 'DELETE', `/${list.id}`)).status, 200);
+  const left = await admin.query(
+    `SELECT (SELECT count(*) FROM list_columns WHERE list_id = $1) AS c, (SELECT count(*) FROM list_rows WHERE list_id = $1) AS r`,
+    [list.id]
+  );
+  assert.deepEqual([left.rows[0].c, left.rows[0].r], ['0', '0']);
+  assert.equal((await call(ids.alice, 'GET', `/${list.id}`)).status, 404);
+});
+
+test('to-do items and table rows are the same thing underneath', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const list = (await call(ids.alice, 'POST', '', { channelId: ids.team, title: 'Both views' })).json.list;
+  const item = (await call(ids.alice, 'POST', `/${list.id}/items`, { title: 'Via old endpoint', assigneeId: ids.bob })).json.item;
+  const typed = (await call(ids.alice, 'GET', `/${list.id}`)).json;
+  const row = typed.rows.find((r) => r.id === item.id);
+  assert.equal(row.cells[colByName(typed.columns, 'Title').id], 'Via old endpoint');
+  await call(ids.alice, 'PATCH', `/${list.id}/rows/${item.id}`, { cells: { completed: true } });
+  const legacy = (await call(ids.alice, 'GET', `?channelId=${ids.team}`)).json.lists.find((l) => l.id === list.id);
+  assert.equal(legacy.items.find((i) => i.id === item.id).completed, true, 'a typed edit shows in the old shape');
 });

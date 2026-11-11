@@ -61,16 +61,32 @@ Node.js + Express + Socket.io API server with PostgreSQL.
 ### Lists
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/lists?channelId=:id` | List shared checklists and channel members |
-| POST | `/api/lists` | Create a channel checklist |
-| PATCH | `/api/lists/:listId` | Rename a checklist |
-| DELETE | `/api/lists/:listId` | Delete a checklist and its items |
-| POST | `/api/lists/:listId/items` | Add an item with optional channel-member assignee and due date |
-| PATCH | `/api/lists/:listId/items/:itemId` | Update item title, completion, assignee, or due date |
-| DELETE | `/api/lists/:listId/items/:itemId` | Delete a checklist item |
+| GET | `/api/lists?channelId=:id` | Lists with to-do `items` (older shape) and channel members |
+| POST | `/api/lists` | Create a list. Default is a to-do list; `{ todoMode: false, primaryName?, columns?: [{ name, type, options }] }` makes a table list |
+| GET | `/api/lists/:listId` | One list: `{ list, columns, rows, members }` |
+| PATCH | `/api/lists/:listId` | Rename and/or change the description |
+| DELETE | `/api/lists/:listId` | Delete a list with its columns, rows and cells |
+| POST | `/api/lists/:listId/columns` | Add a column `{ name, type, options }` (max 50 per list) |
+| PATCH | `/api/lists/:listId/columns/:columnId` | Rename, or replace `options` (the type is fixed). Removing a select choice clears it from cells |
+| DELETE | `/api/lists/:listId/columns/:columnId` | Delete a column (not the primary one) |
+| POST | `/api/lists/:listId/rows` | Add a row `{ cells: { <column id or key>: value } }`; the primary cell is required |
+| PATCH | `/api/lists/:listId/rows/:rowId` | Change up to 100 cells in one transaction (`null` clears a cell); all apply or none |
+| DELETE | `/api/lists/:listId/rows/:rowId` | Delete a row |
+| POST / PATCH / DELETE | `/api/lists/:listId/items[/:itemId]` | The original to-do endpoints (title, completed, assigneeId, dueDate), now backed by rows and cells |
 
-Every list operation requires current channel membership. Assignees must also belong to
-the list's channel.
+**Typed lists** (`src/listValues.js`, `src/listsStore.js`). A list is a table: columns define the
+schema, rows hold one cell per column. Types and stored values: `text` (string; the primary column
+is 1 to 200 characters), `checkbox` (boolean), `date` (`YYYY-MM-DD`, real calendar days), `number`
+(finite; optional `precision` 0 to 10 rounds), `link` (`{ url, name? }`, http or https only),
+`select` (array of choice ids; choices are `{ id, label, color }` with up to 100 per column and 50
+chosen per cell; ids are stable so renaming a label never breaks stored values), `user` (array of
+user ids, who must be members of the list's channel). Every value is validated per type before
+anything is written. Cells are addressed by column id or key (`title` for the primary column of a
+to-do list, `completed`, `assignee`, `due_date`). A to-do list is a table list with those four
+columns, so the old items API and the table API read and write the same data.
+
+Every list operation requires current channel membership. **Guests can read lists but not create,
+change or delete them.** Assignees and `user` cells must belong to the list's channel.
 
 ### Canvases
 | Method | Endpoint | Description |

@@ -157,4 +157,93 @@ module.exports = [
      PRIMARY KEY (canvas_id, channel_id)
    )`,
   'CREATE INDEX IF NOT EXISTS idx_canvas_channel_grants_channel ON canvas_channel_grants(channel_id)',
+
+  // Lists as typed tables: columns, rows and cells (see REAGHIDRA/05). Existing to-do items move over once.
+  "ALTER TABLE channel_lists ADD COLUMN IF NOT EXISTS todo_mode BOOLEAN NOT NULL DEFAULT TRUE",
+  "ALTER TABLE channel_lists ADD COLUMN IF NOT EXISTS description VARCHAR(500) NOT NULL DEFAULT ''",
+  "ALTER TABLE channel_lists ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE",
+  `CREATE TABLE IF NOT EXISTS list_columns (
+     id SERIAL PRIMARY KEY,
+     list_id INTEGER NOT NULL REFERENCES channel_lists(id) ON DELETE CASCADE,
+     key VARCHAR(40) NOT NULL,
+     name VARCHAR(80) NOT NULL,
+     type VARCHAR(16) NOT NULL CHECK (type IN ('text', 'checkbox', 'date', 'user', 'select', 'number', 'link')),
+     options JSONB NOT NULL DEFAULT '{}'::jsonb,
+     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+     position INTEGER NOT NULL DEFAULT 0,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     UNIQUE (list_id, key),
+     CHECK (NOT is_primary OR type = 'text')
+   )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_list_columns_one_primary ON list_columns(list_id) WHERE is_primary",
+  `CREATE TABLE IF NOT EXISTS list_rows (
+     id SERIAL PRIMARY KEY,
+     list_id INTEGER NOT NULL REFERENCES channel_lists(id) ON DELETE CASCADE,
+     parent_row_id INTEGER REFERENCES list_rows(id) ON DELETE CASCADE,
+     position INTEGER NOT NULL DEFAULT 0,
+     archived_at TIMESTAMP WITH TIME ZONE,
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  "CREATE INDEX IF NOT EXISTS idx_list_rows_list ON list_rows(list_id, position, id)",
+  `CREATE TABLE IF NOT EXISTS list_cells (
+     row_id INTEGER NOT NULL REFERENCES list_rows(id) ON DELETE CASCADE,
+     column_id INTEGER NOT NULL REFERENCES list_columns(id) ON DELETE CASCADE,
+     value JSONB NOT NULL,
+     PRIMARY KEY (row_id, column_id)
+   )`,
+  "CREATE INDEX IF NOT EXISTS idx_list_cells_column ON list_cells(column_id)",
+  `CREATE TABLE IF NOT EXISTS schema_markers (
+     name VARCHAR(80) PRIMARY KEY,
+     applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  `DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_markers WHERE name = 'lists_typed_v1') THEN
+    INSERT INTO list_columns (list_id, key, name, type, is_primary, position)
+      SELECT l.id, c.key, c.name, c.type, c.is_primary, c.position
+      FROM channel_lists l
+      CROSS JOIN (VALUES
+        ('title', 'Title', 'text', TRUE, 0),
+        ('completed', 'Completed', 'checkbox', FALSE, 1),
+        ('assignee', 'Assignee', 'user', FALSE, 2),
+        ('due_date', 'Due date', 'date', FALSE, 3)
+      ) AS c(key, name, type, is_primary, position)
+      ON CONFLICT (list_id, key) DO NOTHING;
+
+    INSERT INTO list_rows (id, list_id, position, created_by, updated_by, created_at, updated_at)
+      SELECT i.id, i.list_id, i.id, i.created_by, i.created_by, i.created_at, i.updated_at
+      FROM channel_list_items i
+      ON CONFLICT (id) DO NOTHING;
+
+    PERFORM setval(pg_get_serial_sequence('list_rows', 'id'),
+                   GREATEST((SELECT COALESCE(MAX(id), 0) FROM list_rows), 1),
+                   (SELECT COUNT(*) FROM list_rows) > 0);
+
+    INSERT INTO list_cells (row_id, column_id, value)
+      SELECT i.id, c.id, to_jsonb(i.title)
+      FROM channel_list_items i JOIN list_columns c ON c.list_id = i.list_id AND c.key = 'title'
+      ON CONFLICT DO NOTHING;
+    INSERT INTO list_cells (row_id, column_id, value)
+      SELECT i.id, c.id, to_jsonb(TRUE)
+      FROM channel_list_items i JOIN list_columns c ON c.list_id = i.list_id AND c.key = 'completed'
+      WHERE i.is_completed
+      ON CONFLICT DO NOTHING;
+    INSERT INTO list_cells (row_id, column_id, value)
+      SELECT i.id, c.id, jsonb_build_array(i.assignee_id)
+      FROM channel_list_items i JOIN list_columns c ON c.list_id = i.list_id AND c.key = 'assignee'
+      WHERE i.assignee_id IS NOT NULL
+      ON CONFLICT DO NOTHING;
+    INSERT INTO list_cells (row_id, column_id, value)
+      SELECT i.id, c.id, to_jsonb(to_char(i.due_date, 'YYYY-MM-DD'))
+      FROM channel_list_items i JOIN list_columns c ON c.list_id = i.list_id AND c.key = 'due_date'
+      WHERE i.due_date IS NOT NULL
+      ON CONFLICT DO NOTHING;
+
+    INSERT INTO schema_markers (name) VALUES ('lists_typed_v1');
+  END IF;
+END
+$$`,
 ];
