@@ -3086,3 +3086,96 @@ body.theme-dark .mention.mention-me {
 #view-activity #activity-grid[hidden] {
   display: none;
 }
+
+/* ============================================================
+   Notification settings, status, and group messages
+   ============================================================ */
+.modal-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 18px 0 10px;
+}
+
+.notification-pause {
+  margin-top: 6px;
+}
+
+.user-status-emoji {
+  margin-left: 6px;
+  font-size: 13px;
+}
+
+.user-dnd {
+  margin-left: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.nav-label-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-label-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  line-height: 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.nav-label-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.group-list-empty {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 2px 8px 8px;
+}
+
+.group-count {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.group-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-user-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px 0;
+}
+
+#view-dm .channel-actions .btn[hidden],
+#btn-dm-attach[hidden] {
+  display: none;
+}

@@ -8,7 +8,8 @@ const { ensureDirectMessageAccess } = require('../security');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, username, avatar_color, status, last_seen, created_at
+      `SELECT id, username, avatar_color, status, last_seen, created_at,
+              status_text, status_emoji, dnd_until
        FROM users
        WHERE id != $1
        ORDER BY username`,
@@ -23,6 +24,9 @@ router.get('/', authenticateToken, async (req, res) => {
         status: u.status,
         lastSeen: u.last_seen,
         createdAt: u.created_at,
+        statusText: u.status_text || '',
+        statusEmoji: u.status_emoji || '',
+        dndUntil: u.dnd_until && new Date(u.dnd_until) > new Date() ? u.dnd_until : null,
       })),
     });
   } catch (err) {

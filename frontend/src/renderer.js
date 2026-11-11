@@ -191,6 +191,8 @@ async function init() {
     loadUsers();
     loadModerationAccess();
     loadActivity();
+    loadUserSettings();
+    loadGroups();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
   } else {
@@ -426,6 +428,8 @@ function setupEventListeners() {
   on('dm-file-picker', 'change', handleDmFilePick);
 
   setupActivityFeatures();
+  setupNotificationFeatures();
+  setupGroupFeatures();
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
@@ -477,6 +481,7 @@ function openProfileModal() {
 function openPreferencesModal() {
   document.getElementById('preference-theme').value = state.preferences.theme;
   document.getElementById('preference-enter-to-send').checked = state.preferences.enterToSend;
+  fillNotificationSettingsForm();
   openSettingsModal(els.preferencesModal);
 }
 
@@ -516,11 +521,12 @@ async function savePreferences(event) {
   try {
     await electronAPI.storeSet(preferenceStorageKey(), state.preferences);
     applyPreferences();
+    await saveNotificationSettingsFromForm();
     closeSettingsModal();
-    showToast('Preferences saved on this device.', 'success');
+    showToast('Preferences saved.', 'success');
   } catch (err) {
     console.error('Save preferences error:', err);
-    showToast('Could not save preferences.', 'error');
+    showToast(err.message || 'Could not save preferences.', 'error');
   }
 }
 
@@ -748,7 +754,10 @@ function connectSocket() {
     console.log('Socket authenticated:', data.username);
   });
   state.socket.on('message_error', ({ error, clientMessageId }) => {
-    if (clientMessageId) removePendingMessage(clientMessageId);
+    if (clientMessageId) {
+      removePendingMessage(clientMessageId);
+      removePendingGroupMessage(clientMessageId);
+    }
     showToast(error || 'Message could not be sent.', 'error');
   });
   state.socket.on('message_sent', ({ message }) => {
@@ -819,15 +828,8 @@ function connectSocket() {
           return loadReadReceipts(msg.channelId);
         })
         .catch(() => {});
-    } else {
-      // Increment unread badge for that channel in the sidebar and activity
-      const ch = state.channels.find(c => c.id === msg.channelId);
-      if (ch) {
-        ch.unreadCount = (ch.unreadCount || 0) + 1;
-        renderSidebar();
-        renderActivity();
-      }
     }
+    // Unread counts for channels that are not on screen come from `channel_activity`.
   });
 
   state.socket.on('message_pin_updated', (event) => {
@@ -848,6 +850,11 @@ function connectSocket() {
   });
 
   state.socket.on('activity', handleActivityEvent);
+  state.socket.on('channel_activity', handleChannelActivity);
+  state.socket.on('user_status_updated', handleUserStatusUpdated);
+  state.socket.on('new_group_message', handleNewGroupMessage);
+  state.socket.on('conversation_updated', handleConversationUpdated);
+  state.socket.on('conversation_removed', handleConversationRemoved);
 
   state.socket.on('message_reactions_updated', (event) => {
     const channelId = Number(event.channelId);
@@ -881,6 +888,7 @@ function connectSocket() {
     if (Number(state.currentDMId) === Number(otherUserId) && state.view === 'dm') {
       renderMessages('dm-messages', messages);
     }
+    handleDirectMessageNotification(dm);
   });
 
   state.socket.on('user_typing', (data) => {
@@ -1355,7 +1363,7 @@ async function loadUsers() {
     state.usersLoaded = true;
     state.dms = data.users.filter(u => u.id !== state.user.id);
     renderDmList();
-    if (state.section === 'dms' && !state.currentDMId) {
+    if (state.section === 'dms' && !state.currentDMId && !state.currentGroupId) {
       if (state.dms.length === 0) {
         els.dmTitle.textContent = 'Direct Messages';
         els.dmTopic.textContent = '';
@@ -1385,6 +1393,7 @@ function presenceLabel(status) {
 }
 
 function renderDmList() {
+  renderGroupList();
   els.dmList.innerHTML = '';
   els.dmList.classList.toggle('has-empty-record', state.usersLoaded && state.dms.length === 0);
 
@@ -1406,7 +1415,7 @@ function renderDmList() {
     const slabel = presenceLabel(dm.status);
     item.innerHTML = `
       <div class="dot" style="background:${color};" title="${escapeHtml(slabel)}"></div>
-      <span>${escapeHtml(dm.username)}</span>
+      <span>${escapeHtml(dm.username)}</span>${userStatusMarkup(dm)}
       <span style="margin-left:auto; font-size:11px; opacity:0.6;">${escapeHtml(slabel)}</span>
     `;
     item.onclick = (e) => { e.stopPropagation(); openDM(dm.id); };
@@ -1415,6 +1424,7 @@ function renderDmList() {
 }
 
 async function openDM(userId) {
+  leaveGroupView();
   state.currentDMId = userId;
   state.currentChannelId = null;
   cancelReply();
@@ -1427,7 +1437,7 @@ async function openDM(userId) {
   const user = state.dms.find(u => u.id === userId);
   if (user) {
     els.dmTitle.textContent = user.username;
-    els.dmTopic.textContent = `Direct message with ${user.username}`;
+    els.dmTopic.textContent = dmTopicText(user);
   }
 
   renderSidebar();
@@ -1707,6 +1717,10 @@ async function sendChannelMessage() {
 }
 
 async function sendDmMessage() {
+  if (state.currentGroupId) {
+    sendGroupMessage();
+    return;
+  }
   const text = els.dmMessageInput.value.trim();
   if (!text || !state.currentDMId) return;
   if (!state.socketAuthenticated) {
@@ -2040,7 +2054,9 @@ async function setSection(section) {
     if (state.currentChannelId) await loadChannelMessages(state.currentChannelId);
     els.messageInput?.focus();
   } else if (section === 'dms') {
-    if (state.currentDMId) {
+    if (state.currentGroupId) {
+      await openGroup(state.currentGroupId);
+    } else if (state.currentDMId) {
       await loadDmMessages(state.currentDMId);
     } else if (state.dms.length > 0) {
       await openDM(state.dms[0].id);
@@ -2784,7 +2800,9 @@ function handleAccountAction(action) {
     handleLogout();
     return;
   }
-  if (action === 'profile') {
+  if (action === 'status') {
+    openStatusModal();
+  } else if (action === 'profile') {
     openProfileModal();
   } else if (action === 'preferences') {
     openPreferencesModal();

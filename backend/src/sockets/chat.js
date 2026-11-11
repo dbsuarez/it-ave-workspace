@@ -13,6 +13,21 @@ const { findMentionedUsers } = require('../mentions');
 async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
   try {
     const channel = await query('SELECT name FROM channels WHERE id = $1', [messageData.channelId]);
+    const recipients = await query(
+      'SELECT user_id FROM channel_members WHERE channel_id = $1 AND user_id <> $2',
+      [messageData.channelId, messageData.userId]
+    );
+    for (const recipient of recipients.rows) {
+      io.to(`user_${recipient.user_id}`).emit('channel_activity', {
+        channelId: messageData.channelId,
+        channelName: channel.rows[0]?.name || '',
+        messageId: messageData.id,
+        userId: messageData.userId,
+        username: messageData.username,
+        preview: String(messageData.content || '').slice(0, 200),
+        createdAt: messageData.createdAt,
+      });
+    }
     const base = {
       messageId: messageData.id,
       channelId: messageData.channelId,
@@ -481,6 +496,70 @@ module.exports = (io, socket) => {
     } catch (err) {
       console.error('Send direct message error:', err);
       socket.emit('message_error', { error: err.message || 'Failed to send direct message' });
+    }
+  });
+
+  // Send a message to a group conversation
+  socket.on('send_group_message', async (data = {}) => {
+    if (!currentUserId) return;
+    const conversationId = Number(data.conversationId);
+    const content = typeof data.content === 'string' ? data.content.trim() : '';
+    const clientMessageId = typeof data.clientMessageId === 'string'
+      ? data.clientMessageId.slice(0, 100)
+      : null;
+
+    if (!Number.isSafeInteger(conversationId) || conversationId < 1 || !content) {
+      socket.emit('message_error', { error: 'Conversation and content are required', clientMessageId });
+      return;
+    }
+    if (content.length > 10000) {
+      socket.emit('message_error', { error: 'Message is too long', clientMessageId });
+      return;
+    }
+
+    try {
+      const { query } = require('../db');
+      const members = await query(
+        'SELECT user_id FROM conversation_members WHERE conversation_id = $1',
+        [conversationId]
+      );
+      if (!members.rows.some((row) => Number(row.user_id) === Number(currentUserId))) {
+        socket.emit('message_error', { error: 'Access denied', clientMessageId });
+        return;
+      }
+
+      const result = await query(
+        `INSERT INTO conversation_messages (conversation_id, user_id, content)
+         VALUES ($1, $2, $3)
+         RETURNING id, conversation_id, user_id, content, created_at`,
+        [conversationId, currentUserId, content]
+      );
+      const userResult = await query(
+        'SELECT username, avatar_color FROM users WHERE id = $1',
+        [currentUserId]
+      );
+      const row = result.rows[0];
+      const messageData = {
+        id: row.id,
+        conversationId: row.conversation_id,
+        senderId: row.user_id,
+        senderUsername: userResult.rows[0].username,
+        senderAvatarColor: userResult.rows[0].avatar_color,
+        content: row.content,
+        createdAt: row.created_at,
+        attachments: [],
+        clientMessageId,
+      };
+      await query(
+        'UPDATE conversation_members SET last_read_at = NOW() WHERE conversation_id = $1 AND user_id = $2',
+        [conversationId, currentUserId]
+      );
+      members.rows.forEach((member) => {
+        io.to(`user_${member.user_id}`).emit('new_group_message', messageData);
+      });
+    } catch (err) {
+      console.error('Send group message error:', err);
+      socket.emit('message_error', { error: err.message || 'Failed to send message', clientMessageId });
     }
   });
 

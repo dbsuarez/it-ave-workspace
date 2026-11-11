@@ -16,6 +16,8 @@ const listsRoutes = require('./src/routes/lists');
 const canvasesRoutes = require('./src/routes/canvases');
 const moderationRoutes = require('./src/routes/moderation');
 const activityRoutes = require('./src/routes/activity');
+const settingsRoutes = require('./src/routes/settings');
+const conversationRoutes = require('./src/routes/conversations');
 const migrations = require('./src/migrations');
 const chatSockets = require('./src/sockets/chat');
 
@@ -58,6 +60,8 @@ app.use('/api/lists', listsRoutes);
 app.use('/api/canvases', canvasesRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/conversations', conversationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

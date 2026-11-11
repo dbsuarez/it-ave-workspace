@@ -308,8 +308,9 @@ function handleActivityEvent(event) {
     activity.unseenCount += 1;
   }
   updateActivityBadge();
-  if (typeof notifyUser === 'function') notifyUser(event.type, activityPlainSentence(event), event);
-  else showToast(activityPlainSentence(event));
+  // Lets the channel-message notifier skip a message that was already announced here.
+  recentlyNotifiedMessages().add(Number(event.messageId));
+  notifyUser(event.type, activityPlainSentence(event), event);
 }
 
 function setupActivityFeatures() {
