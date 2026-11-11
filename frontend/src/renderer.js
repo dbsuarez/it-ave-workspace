@@ -180,11 +180,12 @@ const els = {
   userContextMenu: document.getElementById('user-context-menu'),
   userContextName: document.getElementById('user-context-name'),
   userContextStatus: document.getElementById('user-context-status'),
-  userContextMessage: document.querySelector('[data-user-action="message"]'),
-  userContextEdit: document.querySelector('[data-user-action="edit"]'),
-  userContextPreferences: document.querySelector('[data-user-action="preferences"]'),
-  userContextSignout: document.querySelector('[data-user-action="signout"]'),
+  userContextProfile: document.getElementById('user-context-profile'),
   userContextSep: document.getElementById('user-context-sep'),
+  userContextMessage: document.getElementById('user-context-message'),
+  userContextEdit: document.getElementById('user-context-edit'),
+  userContextPreferences: document.getElementById('user-context-preferences'),
+  userContextSignout: document.getElementById('user-context-signout'),
   userProfileAvatar: document.getElementById('user-profile-avatar'),
   userProfileName: document.getElementById('user-profile-name'),
   userProfileDot: document.getElementById('user-profile-dot'),
@@ -2962,15 +2963,23 @@ function openUserContextMenu(anchor, userId, usernameHint) {
   const name = user?.username || usernameHint || 'Unknown';
   if (els.userContextName) els.userContextName.textContent = name;
   if (els.userContextStatus) {
-    const status = user?.status ? statusLabelFor(user.status) : 'Tap to see profile';
-    els.userContextStatus.textContent = isSelf ? 'This is you' : status;
+    const email = user?.email || '';
+    els.userContextStatus.textContent = isSelf
+      ? (email ? `This is you · ${email}` : 'This is you')
+      : (email || statusLabelFor(user?.status));
   }
   const toggle = (el, show) => { if (el) el.hidden = !show; };
   toggle(els.userContextMessage, !isSelf);
   toggle(els.userContextEdit, isSelf);
   toggle(els.userContextPreferences, isSelf);
   toggle(els.userContextSignout, isSelf);
-  toggle(els.userContextSep, true);
+  toggle(els.userContextSep, isSelf);
+  if (els.userContextMessage) {
+    els.userContextMessage.textContent = isSelf ? '' : `Message ${name}`;
+  }
+  if (els.userContextProfile) {
+    els.userContextProfile.textContent = `View ${name}'s profile`;
+  }
 
   closeAllMenus();
   menu.classList.add('open');
@@ -3048,7 +3057,7 @@ async function showUserProfile(userId) {
     if (els.userProfileName) els.userProfileName.textContent = u.username || 'User';
     if (els.userProfileDot) els.userProfileDot.className = `user-profile-dot ${u.status || 'offline'}`;
     if (els.userProfileStatusText) els.userProfileStatusText.textContent = statusLabelFor(u.status);
-    if (els.userProfileEmailRow) els.userProfileEmailRow.hidden = !isSelf;
+    if (els.userProfileEmailRow) els.userProfileEmailRow.hidden = false;
     if (els.userProfileEmail) els.userProfileEmail.textContent = u.email || '';
     if (els.userProfileMemberSince) els.userProfileMemberSince.value = formatMemberSince(u.createdAt);
     if (els.userProfileLastSeen) els.userProfileLastSeen.value = formatLastSeen(u.lastSeen, u.status);

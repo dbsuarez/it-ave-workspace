@@ -8,7 +8,7 @@ const { ensureDirectMessageAccess } = require('../security');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, username, avatar_color, status, last_seen, created_at,
+      `SELECT id, username, email, avatar_color, status, last_seen, created_at,
               status_text, status_emoji, dnd_until, account_type
        FROM users
        WHERE id != $1
@@ -29,6 +29,7 @@ router.get('/', authenticateToken, async (req, res) => {
       users: result.rows.map((u) => ({
         id: u.id,
         username: u.username,
+        email: u.email,
         avatarColor: u.avatar_color,
         status: u.status,
         lastSeen: u.last_seen,
@@ -74,13 +75,11 @@ router.get('/:userId', authenticateToken, async (req, res) => {
     }
 
     const u = result.rows[0];
-    const isSelf = Number(u.id) === Number(req.user.userId);
-
     res.json({
       user: {
         id: u.id,
         username: u.username,
-        email: isSelf ? u.email : undefined,
+        email: u.email,
         avatarColor: u.avatar_color,
         status: u.status,
         lastSeen: u.last_seen,

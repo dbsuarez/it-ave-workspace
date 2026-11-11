@@ -653,6 +653,10 @@ body.iav-dev .demo-banner {
 
 .menu.open { display: flex; }
 
+[hidden] { display: none !important; }
+
+[data-user-id] { cursor: pointer; }
+
 .menu-item {
   display: flex;
   align-items: center;
