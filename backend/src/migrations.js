@@ -141,4 +141,7 @@ module.exports = [
 
   // Guests are not part of group messages (see routes/conversations.js)
   "DELETE FROM conversation_members WHERE user_id IN (SELECT id FROM users WHERE account_type = 'guest')",
+
+  // Canvas revisions: every save bumps the number; clients send it back so a stale save is refused
+  'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1',
 ];

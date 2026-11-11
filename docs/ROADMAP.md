@@ -288,6 +288,22 @@ Done since: uploads hardening (A06), security headers and request logging (depen
 Still to do before exposing the server beyond the LAN: TLS and reverse proxy, schema consolidation
 (A09), real-database integration tests and CI.
 
+## Lists and Canvas rework (from `REAGHIDRA/05`), started 2026-11-11
+
+Decisions taken (user: "go with your recommendations"): keep the legacy Wiki beside Canvas 2.0;
+build canvas history; Lists table view only (board only on request); guests read-only unless
+granted; Lists stay channel-scoped until they have access levels.
+
+| Step | Status |
+|---|---|
+| 1. Canvas revisions and 409 conflicts | **Done**: `revision` column, conditional save, client conflict dialog, live updates adopt the revision. Verified against the real database (5 simultaneous saves: 1 wins) and in the Electron client |
+| 2. Section lookup/edit operations, checklist toggle | Not started |
+| 3. Canvas owner level and channel grants | Not started |
+| 4. Lists typed schema with to-do migration | Not started |
+| 5. Select options, subtasks, archive, copy, duplicate, pagination | Not started |
+| 6. Lists access levels, table view | Not started |
+| 7. Richer Canvas blocks and history UI | Not started |
+
 ## Hardening done (2026-11-11)
 
 - Postgres is published on `127.0.0.1:5432` only; the backend reaches it over the Docker network.

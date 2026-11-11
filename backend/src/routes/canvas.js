@@ -28,9 +28,54 @@ function parseContent(value) {
   return value;
 }
 
+// baseRevision is optional so older clients keep working (last write wins for them). When given,
+// it must be a positive integer.
+function parseBaseRevision(value) {
+  if (value === undefined || value === null) return null;
+  const revision = Number(value);
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    const err = new Error('baseRevision must be a positive whole number');
+    err.status = 400;
+    throw err;
+  }
+  return revision;
+}
+
+// One conditional UPDATE: it only applies when baseRevision still matches, so two people saving
+// from the same starting point cannot silently overwrite each other. On a mismatch nothing is
+// written and the caller gets the current canvas back with HTTP 409.
+async function saveCanvasChanges(canvasId, title, content, baseRevision) {
+  const result = await query(
+    `UPDATE canvases
+     SET title = COALESCE($1, title),
+         content = COALESCE($2, content),
+         revision = revision + 1,
+         updated_at = NOW()
+     WHERE id = $3 AND ($4::int IS NULL OR revision = $4)
+     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
+    [title, content, canvasId, baseRevision]
+  );
+  if (result.rows[0]) return { canvas: result.rows[0] };
+  const current = await query(
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision
+     FROM canvases WHERE id = $1`,
+    [canvasId]
+  );
+  return { conflict: current.rows[0] || null };
+}
+
+function conflictResponse(res, current, extras = {}) {
+  if (!current) return res.status(404).json({ error: 'Canvas not found' });
+  return res.status(409).json({
+    error: 'Someone else changed this canvas since you opened it',
+    code: 'revision_conflict',
+    canvas: mapCanvas(current, extras),
+  });
+}
+
 async function getChannelCanvas(channelId) {
   const result = await query(
-    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision
      FROM canvases
      WHERE kind = 'channel' AND channel_id = $1`,
     [channelId]
@@ -41,7 +86,7 @@ async function getDmCanvas(a, b) {
   const low = Math.min(a, b);
   const high = Math.max(a, b);
   const result = await query(
-    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision
      FROM canvases
      WHERE kind = 'dm' AND dm_user_low = $1 AND dm_user_high = $2`,
     [low, high]
@@ -55,7 +100,7 @@ async function getOrCreateChannelCanvas(channelId, userId) {
     `INSERT INTO canvases (kind, channel_id, title, content, created_by)
      VALUES ('channel', $1, $2, '', $3)
      ON CONFLICT (channel_id) WHERE kind = 'channel' DO NOTHING
-     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at`,
+     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
     [channelId, '#' + channelId, userId]
   );
   if (result.rows[0]) return result.rows[0];
@@ -71,7 +116,7 @@ async function getOrCreateDmCanvas(a, b) {
     `INSERT INTO canvases (kind, dm_user_low, dm_user_high, title, content, created_by)
      VALUES ('dm', $1, $2, $3, '', $4)
      ON CONFLICT (dm_user_low, dm_user_high) WHERE kind = 'dm' DO NOTHING
-     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at`,
+     RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
     [low, high, 'DM', low]
   );
   if (result.rows[0]) return result.rows[0];
@@ -91,6 +136,7 @@ function mapCanvas(c, extras = {}) {
     createdBy: c.created_by,
     createdAt: c.created_at,
     updatedAt: c.updated_at,
+    revision: c.revision === undefined ? undefined : Number(c.revision),
     ...extras,
   };
 }
@@ -130,7 +176,7 @@ router.get('/standalone', authenticateToken, async (req, res) => {
   try {
     const result = await query(
       `SELECT c.id, c.kind, c.channel_id, c.dm_user_low, c.dm_user_high, c.title, c.content, c.created_by,
-              c.created_at, c.updated_at,
+              c.created_at, c.updated_at, c.revision,
               (SELECT role FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1) AS my_role
        FROM canvases c
        WHERE c.kind = 'standalone'
@@ -159,7 +205,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const result = await query(
       `INSERT INTO canvases (kind, title, content, created_by)
        VALUES ('standalone', $1, $2, $3)
-       RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at`,
+       RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision`,
       [title, content, req.user.userId]
     );
     res.status(201).json({ canvas: mapCanvas(result.rows[0], { myRole: 'owner' }) });
@@ -202,18 +248,14 @@ router.patch('/:canvasId', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Canvas title must be between 1 and 160 characters' });
     }
     const content = req.body?.content === undefined ? null : parseContent(req.body.content);
-    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
-    const result = await query(
-      `UPDATE canvases
-       SET title = COALESCE($1, title),
-           content = COALESCE($2, content),
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at`,
-      [title, content, canvasId]
-    );
+    const baseRevision = parseBaseRevision(req.body?.baseRevision);
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const saved = await saveCanvasChanges(canvasId, title, content, baseRevision);
+    if (!saved.canvas) return conflictResponse(res, saved.conflict);
+    const result = { rows: [saved.canvas] };
     req.io?.to(`canvas:${canvasId}`).emit('canvas_updated', {
-      canvasId, kind: result.rows[0].kind, content: result.rows[0].content, updatedAt: result.rows[0].updated_at,
+      canvasId, kind: result.rows[0].kind, title: result.rows[0].title, content: result.rows[0].content,
+      revision: Number(result.rows[0].revision), updatedAt: result.rows[0].updated_at,
     });
     res.json({ canvas: mapCanvas(result.rows[0]) });
   } catch (err) {
@@ -418,6 +460,7 @@ router.patch('/share/:token', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Canvas title must be between 1 and 160 characters' });
     }
     const content = req.body?.content === undefined ? null : parseContent(req.body.content);
+    const baseRevision = parseBaseRevision(req.body?.baseRevision);
     const shareResult = await query(
       'SELECT id, canvas_id, role FROM canvas_shares WHERE token = $1',
       [token]
@@ -425,15 +468,13 @@ router.patch('/share/:token', authenticateToken, async (req, res) => {
     const share = shareResult.rows[0];
     if (!share) return res.status(404).json({ error: 'Share link not found' });
     if (share.role !== 'editor') return res.status(403).json({ error: 'This share link is read-only' });
-    const result = await query(
-      `UPDATE canvases
-       SET title = COALESCE($1, title),
-           content = COALESCE($2, content),
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at`,
-      [title, content, share.canvas_id]
-    );
+    const saved = await saveCanvasChanges(share.canvas_id, title, content, baseRevision);
+    if (!saved.canvas) return conflictResponse(res, saved.conflict, { myRole: 'editor' });
+    const result = { rows: [saved.canvas] };
+    req.io?.to(`canvas:${share.canvas_id}`).emit('canvas_updated', {
+      canvasId: share.canvas_id, kind: saved.canvas.kind, title: saved.canvas.title, content: saved.canvas.content,
+      revision: Number(saved.canvas.revision), updatedAt: saved.canvas.updated_at,
+    });
     res.json({ canvas: mapCanvas(result.rows[0], { myRole: 'editor' }) });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });

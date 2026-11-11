@@ -84,6 +84,21 @@ the list's channel.
 Canvas content is limited to 100,000 characters. Every operation requires current
 channel membership.
 
+### Canvas 2.0 (`/api/canvas`)
+Channel canvas (one per channel), DM canvas (one per pair), and standalone canvases with
+collaborators and share links. Reads and writes are gated by role (`ensureCanvasAccess`).
+
+**Revisions (no silent overwrites).** Every canvas has an integer `revision`, starting at 1 and
+increased by every save. `PATCH /api/canvas/:id` and `PATCH /api/canvas/share/:token` accept an
+optional `baseRevision`: the revision the editor was based on. The save is one conditional
+`UPDATE ... WHERE revision = baseRevision`, so of several simultaneous saves from the same
+revision exactly one wins. The rest get **HTTP 409** with `{ code: 'revision_conflict', canvas }`
+(the current version) and nothing is written. A client that omits `baseRevision` still works and
+overwrites (last write wins), which keeps older installs functional. A malformed `baseRevision`
+is a 400. The `canvas_updated` socket event carries `revision`, `title` and `content`.
+The desktop client applies a live update only when the editor has no unsaved edits, and on a 409
+asks "keep my version / use theirs" (copying its own text to the clipboard before discarding it).
+
 ### Moderation
 | Method | Endpoint | Description |
 |--------|----------|-------------|

@@ -371,6 +371,7 @@ CREATE TABLE IF NOT EXISTS canvases (
      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     revision INTEGER NOT NULL DEFAULT 1,
      CHECK (
          (kind = 'channel' AND channel_id IS NOT NULL)
        OR (kind = 'dm' AND dm_user_low IS NOT NULL AND dm_user_high IS NOT NULL)

@@ -1017,22 +1017,18 @@ function connectSocket() {
   state.socket.on('user_status_updated', handleUserStatusUpdated);
   state.socket.on('canvas_updated', (event) => {
     const incomingCanvasId = Number(event.canvasId);
-    const remote = event.content;
     // Standalone canvas manager editor
     const activeId = Number(canvas2StandaloneState.activeId || 0);
     if (activeId && incomingCanvasId === activeId) {
-      const editor = document.getElementById('canvas2-editor');
-      if (editor && document.activeElement !== editor && editor.value !== remote) {
-        editor.value = remote;
-      }
+      applyRemoteCanvasUpdate(canvas2StandaloneState, event, {
+        title: document.getElementById('canvas2-editor-title'),
+        content: document.getElementById('canvas2-editor'),
+      });
       return;
     }
     // Header-anchored channel/DM canvas sheet
     if (canvas2State.activeId && Number(canvas2State.activeId) === incomingCanvasId) {
-      const sheetEditor = els.canvasSheetEditor;
-      if (sheetEditor && document.activeElement !== sheetEditor && sheetEditor.value !== remote) {
-        sheetEditor.value = remote;
-      }
+      applyRemoteCanvasUpdate(canvas2State, event, { title: els.canvasSheetTitle, content: els.canvasSheetEditor });
     }
   });
   state.socket.on('new_group_message', handleNewGroupMessage);
@@ -4477,6 +4473,10 @@ const canvas2State = {
   channelId: null,
   saveTimer: null,
   saving: false,
+  // Revision this editor is based on, and the text as last saved or loaded (to tell unsaved edits apart)
+  revision: null,
+  savedTitle: '',
+  savedContent: '',
 };
 
 async function openCanvas2(kind, extra = {}) {
@@ -4508,6 +4508,9 @@ async function openCanvas2(kind, extra = {}) {
     canvas2State.kind = data.canvas.kind;
     els.canvasSheetTitle.value = data.canvas.title || '';
     els.canvasSheetEditor.value = data.canvas.content || '';
+    canvas2State.revision = data.canvas.revision ?? null;
+    canvas2State.savedTitle = els.canvasSheetTitle.value;
+    canvas2State.savedContent = els.canvasSheetEditor.value;
     if (els.canvasSheetStatus) {
       els.canvasSheetStatus.textContent = 'Saved';
       els.canvasSheetStatus.dataset.state = 'saved';
@@ -4525,17 +4528,28 @@ async function saveCanvas2() {
   const canvasId = canvas2State.activeId;
   if (!canvasId || canvas2State.saving) return;
   canvas2State.saving = true;
+  let retryAfterConflict = false;
   if (els.canvasSheetStatus) {
     els.canvasSheetStatus.textContent = 'Saving…';
     els.canvasSheetStatus.dataset.state = 'saving';
   }
   try {
+    const sent = { title: els.canvasSheetTitle.value, content: els.canvasSheetEditor.value };
     const res = await api(`/api/canvas/${canvasId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ title: els.canvasSheetTitle.value, content: els.canvasSheetEditor.value }),
+      body: JSON.stringify({ ...sent, baseRevision: canvas2State.revision ?? undefined }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not save the canvas');
+    if (res.status === 409 && data.code === 'revision_conflict') {
+      retryAfterConflict = await resolveCanvasConflict(canvas2State, data.canvas, sent, {
+        title: els.canvasSheetTitle, content: els.canvasSheetEditor,
+      });
+    } else {
+      if (!res.ok) throw new Error(data.error || 'Could not save the canvas');
+      canvas2State.revision = data.canvas.revision ?? canvas2State.revision;
+      canvas2State.savedTitle = sent.title;
+      canvas2State.savedContent = sent.content;
+    }
     if (els.canvasSheetStatus) {
       els.canvasSheetStatus.textContent = 'Saved';
       els.canvasSheetStatus.dataset.state = 'saved';
@@ -4550,6 +4564,63 @@ async function saveCanvas2() {
   } finally {
     canvas2State.saving = false;
   }
+  if (retryAfterConflict) await saveCanvas2();
+}
+
+// Shared by both canvas editors. The server refused a save because someone else saved first.
+// Returns true when the caller should save again (the user kept their version, now based on the
+// server's latest revision). Nothing is lost silently: choosing the other version copies yours to
+// the clipboard first.
+async function resolveCanvasConflict(editorState, serverCanvas, mine, fields) {
+  const unsaved = mine.title !== editorState.savedTitle || mine.content !== editorState.savedContent;
+  const theirs = { title: serverCanvas.title || '', content: serverCanvas.content || '' };
+  const applyTheirs = () => {
+    if (fields.title) fields.title.value = theirs.title;
+    if (fields.content) fields.content.value = theirs.content;
+    editorState.revision = serverCanvas.revision ?? null;
+    editorState.savedTitle = theirs.title;
+    editorState.savedContent = theirs.content;
+  };
+  if (!unsaved || (mine.title === theirs.title && mine.content === theirs.content)) {
+    applyTheirs();
+    return false;
+  }
+  const keepMine = await confirmAction({
+    title: 'Someone else changed this canvas',
+    message: 'Keep your version to replace theirs, or use theirs and drop your unsaved changes (your text is copied to the clipboard first).',
+    confirmLabel: 'Keep my version',
+    cancelLabel: 'Use theirs',
+    danger: false,
+  });
+  if (keepMine) {
+    editorState.revision = serverCanvas.revision ?? null;
+    return true;
+  }
+  try { await navigator.clipboard.writeText(mine.content); } catch (_) { /* clipboard is best effort */ }
+  applyTheirs();
+  showToast('Their version is shown. Your text was copied to the clipboard.', 'info');
+  return false;
+}
+
+// A live update from another person. Applied unless the user has unsaved edits in this editor;
+// the revision is only adopted together with the text, so a later save from unsaved edits is
+// checked against the version they were really based on.
+function applyRemoteCanvasUpdate(editorState, event, fields) {
+  const incomingRevision = event.revision === undefined ? null : Number(event.revision);
+  if (incomingRevision !== null && editorState.revision !== null && incomingRevision <= editorState.revision) return;
+  const editor = fields.content;
+  if (!editor) return;
+  const dirty = editor.value !== editorState.savedContent
+    || (fields.title && event.title !== undefined && fields.title.value !== editorState.savedTitle);
+  if (dirty) return;
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  editor.value = event.content ?? '';
+  if (document.activeElement === editor) editor.setSelectionRange(Math.min(start, editor.value.length), Math.min(end, editor.value.length));
+  if (fields.title && event.title !== undefined && document.activeElement !== fields.title) fields.title.value = event.title;
+  editorState.savedContent = editor.value;
+  if (fields.title) editorState.savedTitle = fields.title.value;
+  if (incomingRevision !== null) editorState.revision = incomingRevision;
 }
 
 function debounceCanvas2Save() {
@@ -4575,6 +4646,9 @@ const canvas2StandaloneState = {
   list: [],
   saving: false,
   saveTimer: null,
+  revision: null,
+  savedTitle: '',
+  savedContent: '',
 };
 
 async function loadCanvas2StandaloneList() {
@@ -4645,6 +4719,9 @@ async function openCanvas2Standalone(id) {
     const editor = document.getElementById('canvas2-editor');
     if (title) title.value = canvas.title || '';
     if (editor) editor.value = canvas.content || '';
+    canvas2StandaloneState.revision = canvas.revision ?? null;
+    canvas2StandaloneState.savedTitle = title ? title.value : '';
+    canvas2StandaloneState.savedContent = editor ? editor.value : '';
     showCanvas2EditorPane();
     renderCanvas2StandaloneList();
     setCanvas2StandaloneStatus('Saved');
@@ -4684,19 +4761,28 @@ async function saveCanvas2Standalone() {
   const editor = document.getElementById('canvas2-editor');
   if (!titleEl || !editor) return;
   canvas2StandaloneState.saving = true;
+  let retryAfterConflict = false;
   setCanvas2StandaloneStatus('Saving…');
   try {
+    const sent = { title: titleEl.value, content: editor.value };
     const res = await api(`/api/canvas/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ title: titleEl.value, content: editor.value }),
+      body: JSON.stringify({ ...sent, baseRevision: canvas2StandaloneState.revision ?? undefined }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not save canvas');
-    const updated = data.canvas;
-    const idx = canvas2StandaloneState.list.findIndex((c) => Number(c.id) === Number(id));
-    if (idx !== -1) {
-      canvas2StandaloneState.list[idx] = { ...canvas2StandaloneState.list[idx], title: updated.title, updatedAt: updated.updatedAt };
-      renderCanvas2StandaloneList();
+    if (res.status === 409 && data.code === 'revision_conflict') {
+      retryAfterConflict = await resolveCanvasConflict(canvas2StandaloneState, data.canvas, sent, { title: titleEl, content: editor });
+    } else {
+      if (!res.ok) throw new Error(data.error || 'Could not save canvas');
+      const updated = data.canvas;
+      canvas2StandaloneState.revision = updated.revision ?? canvas2StandaloneState.revision;
+      canvas2StandaloneState.savedTitle = sent.title;
+      canvas2StandaloneState.savedContent = sent.content;
+      const idx = canvas2StandaloneState.list.findIndex((c) => Number(c.id) === Number(id));
+      if (idx !== -1) {
+        canvas2StandaloneState.list[idx] = { ...canvas2StandaloneState.list[idx], title: updated.title, updatedAt: updated.updatedAt };
+        renderCanvas2StandaloneList();
+      }
     }
     setCanvas2StandaloneStatus('Saved');
   } catch (err) {
@@ -4706,6 +4792,7 @@ async function saveCanvas2Standalone() {
   } finally {
     canvas2StandaloneState.saving = false;
   }
+  if (retryAfterConflict) await saveCanvas2Standalone();
 }
 
 function debounceCanvas2StandaloneSave() {

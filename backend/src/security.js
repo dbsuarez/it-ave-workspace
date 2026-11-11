@@ -206,7 +206,7 @@ async function ensureDirectMessageAccess(query, userId, otherUserId) {
 
 async function getCanvasById(query, canvasId) {
   const result = await query(
-    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, created_by, title, content, created_at, updated_at
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, created_by, title, content, created_at, updated_at, revision
      FROM canvases
      WHERE id = $1`,
     [canvasId]

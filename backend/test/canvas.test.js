@@ -62,7 +62,7 @@ const API = () => (sql, params = []) => {
     const userId = params[2];
     const existing = [...canvases.values()].find((c) => c.kind === 'channel' && Number(c.channel_id) === channelId);
     if (existing) return { rows: [] };
-    const canvas = { id: nextCanvasId++, kind: 'channel', channel_id: channelId, dm_user_low: null, dm_user_high: null, title, content: '', created_by: userId, created_at: new Date(), updated_at: new Date() };
+    const canvas = { id: nextCanvasId++, kind: 'channel', channel_id: channelId, dm_user_low: null, dm_user_high: null, title, content: '', created_by: userId, created_at: new Date(), updated_at: new Date(), revision: 1 };
     canvases.set(canvas.id, canvas);
     return { rows: [canvas] };
   }
@@ -73,7 +73,7 @@ const API = () => (sql, params = []) => {
     const userId = params[3];
     const existing = [...canvases.values()].find((c) => c.kind === 'dm' && Number(c.dm_user_low) === low && Number(c.dm_user_high) === high);
     if (existing) return { rows: [] };
-    const canvas = { id: nextCanvasId++, kind: 'dm', channel_id: null, dm_user_low: low, dm_user_high: high, title, content: '', created_by: userId, created_at: new Date(), updated_at: new Date() };
+    const canvas = { id: nextCanvasId++, kind: 'dm', channel_id: null, dm_user_low: low, dm_user_high: high, title, content: '', created_by: userId, created_at: new Date(), updated_at: new Date(), revision: 1 };
     canvases.set(canvas.id, canvas);
     return { rows: [canvas] };
   }
@@ -84,7 +84,7 @@ const API = () => (sql, params = []) => {
     return { rows: mine.map((c) => ({ ...c, my_role: Number(c.created_by) === userId ? 'owner' : collab.get(`${c.id}:${userId}`) })) };
   }
   if (sql.includes('INSERT INTO canvases (kind, title, content, created_by)')) {
-    const canvas = { id: nextCanvasId++, kind: 'standalone', channel_id: null, dm_user_low: null, dm_user_high: null, title: params[0], content: params[1] || '', created_by: params[2], created_at: new Date(), updated_at: new Date() };
+    const canvas = { id: nextCanvasId++, kind: 'standalone', channel_id: null, dm_user_low: null, dm_user_high: null, title: params[0], content: params[1] || '', created_by: params[2], created_at: new Date(), updated_at: new Date(), revision: 1 };
     canvases.set(canvas.id, canvas);
     return { rows: [canvas] };
   }
@@ -96,10 +96,17 @@ const API = () => (sql, params = []) => {
     const id = Number(params[2]);
     const canvas = canvases.get(id);
     if (!canvas) return { rows: [] };
+    // Mirrors "WHERE id = $3 AND ($4::int IS NULL OR revision = $4)"
+    if (params[3] !== null && params[3] !== undefined && Number(params[3]) !== canvas.revision) return { rows: [] };
     if (params[0] !== null && params[0] !== undefined) canvas.title = params[0];
     if (params[1] !== null && params[1] !== undefined) canvas.content = params[1];
+    canvas.revision += 1;
     canvas.updated_at = new Date();
     return { rows: [canvas] };
+  }
+  if (sql.includes('FROM canvases WHERE id = $1')) {
+    const canvas = canvases.get(Number(params[0]));
+    return { rows: canvas ? [canvas] : [] };
   }
   if (sql.includes('DELETE FROM canvases')) {
     canvases.delete(Number(params[0]));
@@ -275,4 +282,82 @@ test('canvas_updated is emitted on PATCH', async () => {
   const evt = emitted.find((e) => e.event === 'canvas_updated');
   assert.ok(evt, 'canvas_updated should be emitted');
   assert.equal(evt.room, `canvas:${canvas.id}`);
+});
+
+test('saving with the current baseRevision works and bumps the revision', async () => {
+  const created = await (await fetch(`${baseUrl}/api/canvas`, {
+    method: 'POST', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Rev', content: 'one' }),
+  })).json();
+  assert.equal(created.canvas.revision, 1);
+  const patch = (body, user = 3) => fetch(`${baseUrl}/api/canvas/${created.canvas.id}`, {
+    method: 'PATCH', headers: { ...authHeader(user), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  emitted.length = 0;
+  const ok = await patch({ content: 'two', baseRevision: 1 });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).canvas.revision, 2);
+  const event = emitted.find((e) => e.event === 'canvas_updated');
+  assert.equal(event.payload.revision, 2, 'the live event carries the new revision');
+  assert.equal(event.payload.content, 'two');
+
+  // A second save from the old starting point is refused and changes nothing
+  const stale = await patch({ content: 'overwrite attempt', baseRevision: 1 });
+  assert.equal(stale.status, 409);
+  const body = await stale.json();
+  assert.equal(body.code, 'revision_conflict');
+  assert.equal(body.canvas.content, 'two', 'the response carries the current version');
+  assert.equal(body.canvas.revision, 2);
+  assert.equal(canvases.get(created.canvas.id).content, 'two', 'nothing was written');
+
+  // Retrying from the revision it was given succeeds
+  const retry = await patch({ content: 'three', baseRevision: 2 });
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).canvas.revision, 3);
+});
+
+test('older clients that send no baseRevision still save (last write wins) and bump the revision', async () => {
+  const created = await (await fetch(`${baseUrl}/api/canvas`, {
+    method: 'POST', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Legacy', content: 'a' }),
+  })).json();
+  const res = await fetch(`${baseUrl}/api/canvas/${created.canvas.id}`, {
+    method: 'PATCH', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: 'b' }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).canvas.revision, 2);
+});
+
+test('a malformed baseRevision is rejected', async () => {
+  const created = await (await fetch(`${baseUrl}/api/canvas`, {
+    method: 'POST', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Bad', content: '' }),
+  })).json();
+  for (const bad of [0, -1, 1.5, 'abc', {}]) {
+    const res = await fetch(`${baseUrl}/api/canvas/${created.canvas.id}`, {
+      method: 'PATCH', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'x', baseRevision: bad }),
+    });
+    assert.equal(res.status, 400, `baseRevision ${JSON.stringify(bad)}`);
+  }
+  assert.equal(canvases.get(created.canvas.id).content, '');
+});
+
+test('share-link edits use the same revision check', async () => {
+  const created = await (await fetch(`${baseUrl}/api/canvas`, {
+    method: 'POST', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Shared rev', content: 'start' }),
+  })).json();
+  const { share } = await (await fetch(`${baseUrl}/api/canvas/${created.canvas.id}/shares`, {
+    method: 'POST', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'editor' }),
+  })).json();
+  const patchShare = (body) => fetch(`${baseUrl}/api/canvas/share/${share.token}`, {
+    method: 'PATCH', headers: { ...authHeader(7), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  assert.equal((await patchShare({ content: 'by link', baseRevision: 1 })).status, 200);
+  const stale = await patchShare({ content: 'late', baseRevision: 1 });
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).canvas.content, 'by link');
 });
