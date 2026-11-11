@@ -20,7 +20,20 @@ function canvasMentionPeople() {
 
 function canvasMentionLookup(username) {
   const wanted = String(username || '').toLowerCase();
-  return canvasMentionPeople().find((person) => String(person.username || '').toLowerCase() === wanted) || null;
+  const person = canvasMentionPeople().find((entry) => String(entry.username || '').toLowerCase() === wanted) || null;
+  if (!person) return null;
+  const mine = typeof state !== 'undefined' && state.user && Number(state.user.id) === Number(person.id);
+  return mine ? { ...person, isSelf: true, status: person.status || 'online' } : person;
+}
+
+// "Message" on a profile card opens a direct message with that person.
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest ? event.target.closest('[data-message-user]') : null;
+    if (!button || typeof openDM !== 'function') return;
+    event.preventDefault();
+    openDM(Number(button.dataset.messageUser));
+  });
 }
 
 const canvasWysiwyg = (() => {
@@ -800,5 +813,12 @@ const canvasWysiwyg = (() => {
     inst.ta.dataset.richActive = '0';
   }
 
-  return { show, hide };
+  // The document for export, whichever mode the canvas is in (the Markdown source is the truth while it is showing).
+  function exportData(which) {
+    const inst = ensure(which);
+    if (!inst.showing) load(inst, inst.ta.value);
+    return { json: inst.editor.getJSON(), html: inst.editor.getHTML() };
+  }
+
+  return { show, hide, exportData };
 })();

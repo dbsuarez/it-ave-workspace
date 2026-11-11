@@ -132,7 +132,7 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
   old clients keep working. Next to other text it shows as a small chip. Alone on its own line it
   becomes a profile card (avatar, name, job title, status, email) so readers know who is meant. The
   details come from the people the app already knows (`canvasMentionLookup` in
-  `features/canvas-wysiwyg.js`); an unknown name stays a plain chip. People set their **job title** in
+  `features/canvas-wysiwyg.js`); the card has a **Message** button that opens a direct message with them; an unknown name stays a plain chip. People set their **job title** in
   Profile.
 - **Moving things.** Hover any block and drag its grip (six dots) to move it, whether it is a paragraph,
   a picture, a table or a callout.
@@ -141,6 +141,26 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
 - **Viewers and guests** get the same page, locked: no toolbar, no editing, links still open.
 - **Rebuilding the bundle.** After changing `editor-src/` or upgrading `@tiptap/*`, run
   `npm run editor` in `frontend/` and commit `src/vendor/canvas-editor.js`.
+
+## Canvas: export
+
+The **Export** menu in the canvas header saves the canvas as a **PDF**, a **Word document (.docx)** or a
+**Markdown** file. Only the desktop app can save files, so the menu is hidden elsewhere.
+
+- The page gathers the content (`features/canvas-export.js`): the editor's document, and each picture
+  fetched with the signed-in request and converted to PNG (at most 1600px wide). The main process builds
+  the file and shows the save dialog (`canvas:export` in `main.js`); the page never chooses the path.
+- **PDF.** `export/pdf-html.js` makes a self-contained page (pictures inlined, strict
+  Content-Security-Policy) which a hidden window with scripts off, no network and its own session prints
+  with Chromium's `printToPDF` (A4). Callouts, tables, checklists, picture size and alignment are kept.
+- **Word.** `export/docx-builder.js` builds a real `.docx` with the `docx` package: heading styles, bold,
+  italic, strikethrough, code, links, bulleted, numbered (each list restarts at 1) and checklist lists
+  with boxes, quotes, code blocks, dividers, tables (header row, alignment, column widths), callouts as
+  shaded boxes and pictures at their saved size and alignment.
+- The title is added on top unless the content already starts with a heading that says the same.
+- `ipc-policy.js` validates every request (format, sizes, picture data) and sanitizes the suggested file
+  name. For automated tests only, the environment variable `IAV_TEST_EXPORT_DIR` makes the app write into
+  that folder and skip the save dialog.
 
 ## Canvas: recently deleted
 

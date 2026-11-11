@@ -37,6 +37,7 @@
     "socket.io-client": "^4.7.2"
   },
   "dependencies": {
+    "docx": "^9.15.3",
     "electron-store": "^8.1.0"
   },
   "build": {

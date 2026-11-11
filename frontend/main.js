@@ -2,7 +2,10 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell, desktopCaptur
 const path = require('path');
 const Store = require('electron-store');
 const { normalizeServerUrl, resolveServerConfig } = require('./server-config');
-const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl } = require('./ipc-policy');
+const fs = require('fs');
+const os = require('os');
+const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl, validateExportRequest, exportFileName, EXPORT_FORMATS } = require('./ipc-policy');
+const { buildPrintHtml } = require('./export/pdf-html');
 
 // Create store for persisting auth token and settings
 const store = new Store();
@@ -253,6 +256,68 @@ handleTrusted('auth:logout', (event) => {
     if (sourceWindow && !sourceWindow.isDestroyed()) sourceWindow.close();
   }, 0);
   return true;
+});
+
+// Prints a self-contained HTML page to PDF in a hidden window with scripts off, no network and no access to
+// the app's session.
+async function printHtmlToPdf(html) {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'itavenue-export-'));
+  const file = path.join(dir, 'canvas.html');
+  await fs.promises.writeFile(file, html, 'utf8');
+  const exportSession = session.fromPartition(`export-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  exportSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !/^(file|data):/i.test(details.url) }));
+  const win = new BrowserWindow({
+    show: false,
+    width: 900,
+    height: 1200,
+    webPreferences: { session: exportSession, sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false },
+  });
+  try {
+    await win.loadFile(file);
+    return await win.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true });
+  } finally {
+    win.destroy();
+    fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// Canvas export. The renderer sends the content; the user chooses the file in a save dialog (or, for
+// automated tests only, IAV_TEST_EXPORT_DIR in the environment names a folder and no dialog is shown).
+handleTrusted('canvas:export', async (event, request) => {
+  const problem = validateExportRequest(request);
+  if (problem) throw new Error(problem);
+  const fileName = exportFileName(request.title, request.format);
+  let target;
+  const testDir = process.env.IAV_TEST_EXPORT_DIR;
+  if (testDir) {
+    target = path.join(testDir, fileName);
+  } else {
+    const parent = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    const chosen = await dialog.showSaveDialog(parent, {
+      title: `Save as ${EXPORT_FORMATS[request.format]}`,
+      defaultPath: path.join(app.getPath('documents'), fileName),
+      filters: [{ name: EXPORT_FORMATS[request.format], extensions: [request.format] }],
+    });
+    if (chosen.canceled || !chosen.filePath) return { canceled: true };
+    target = chosen.filePath;
+  }
+  let data;
+  if (request.format === 'md') {
+    data = Buffer.from(request.markdown, 'utf8');
+  } else if (request.format === 'docx') {
+    const { buildDocx } = require('./export/docx-builder');
+    const images = {};
+    for (const [id, picture] of Object.entries(request.images || {})) {
+      images[id] = { data: Buffer.from(picture.base64, 'base64'), width: picture.width, height: picture.height };
+    }
+    data = await buildDocx({ title: request.title, doc: request.doc, images });
+  } else {
+    const html = buildPrintHtml({ title: request.title, bodyHtml: request.html });
+    if (testDir) await fs.promises.writeFile(`${target}.html`, html, 'utf8');
+    data = await printHtmlToPdf(html);
+  }
+  await fs.promises.writeFile(target, data);
+  return { path: target };
 });
 
 handleTrusted('dialog:openFile', async () => {

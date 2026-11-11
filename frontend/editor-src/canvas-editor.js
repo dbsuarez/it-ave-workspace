@@ -319,6 +319,18 @@ function mentionDom(username) {
     avatar.textContent = initial;
     const body = document.createElement('span');
     body.className = 'cw-mention-body';
+
+    // name with a presence dot, then job title (or role), status and email
+    const nameRow = document.createElement('span');
+    nameRow.className = 'cw-mention-namerow';
+    const name = document.createElement('span');
+    name.className = 'cw-mention-name';
+    name.textContent = person.username || username;
+    const presence = document.createElement('span');
+    presence.className = `cw-mention-presence${person.status === 'online' ? ' online' : ''}`;
+    presence.title = person.status ? person.status[0].toUpperCase() + person.status.slice(1) : '';
+    nameRow.append(name, presence);
+    body.appendChild(nameRow);
     const line = (className, text) => {
       if (!text) return;
       const el = document.createElement('span');
@@ -326,12 +338,20 @@ function mentionDom(username) {
       el.textContent = text;
       body.appendChild(el);
     };
-    line('cw-mention-name', `@${person.username || username}`);
     const role = person.accountType === 'guest' ? 'Guest' : person.isSuperadmin ? 'Superadmin' : '';
     line('cw-mention-title', [person.jobTitle, role].filter(Boolean).join(' · '));
-    const status = [person.statusEmoji, person.statusText].filter(Boolean).join(' ');
-    line(`cw-mention-status${person.status === 'online' ? ' online' : ''}`, status || (person.status ? person.status[0].toUpperCase() + person.status.slice(1) : ''));
+    line('cw-mention-status', [person.statusEmoji, person.statusText].filter(Boolean).join(' '));
     line('cw-mention-email', person.email);
+
+    // "Message" opens a direct message with them (the app handles the click)
+    if (person.id !== undefined && !person.isSelf) {
+      const message = document.createElement('button');
+      message.type = 'button';
+      message.className = 'cw-mention-msg';
+      message.setAttribute('data-message-user', String(person.id));
+      message.textContent = '+ Message';
+      body.appendChild(message);
+    }
     card.append(avatar, body);
     root.appendChild(card);
   }
@@ -364,6 +384,7 @@ const Mention = Node.create({
       return {
         dom,
         ignoreMutation: () => true,
+        stopEvent: (event) => Boolean(event.target && event.target.closest && event.target.closest('.cw-mention-msg')),
         update: (next) => {
           if (next.type !== node.type) return false;
           if (next.attrs.username !== name) return false;

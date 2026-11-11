@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl } = require('../ipc-policy');
+const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl, validateExportRequest, exportFileName } = require('../ipc-policy');
 
 test('only the keys the app uses may be stored', () => {
   for (const key of ['authToken', 'user', 'preferences:7', 'preferences:123456']) {
@@ -66,4 +66,37 @@ test('path traversal in a file URL does not escape the src folder', () => {
   const base = pathToFileURL(path.join(appDir, 'src')).href;
   assert.equal(isTrustedFrameUrl(`${base}/../main.js`, appDir), false);
   assert.equal(isTrustedFrameUrl(`${base}/%2e%2e/main.js`, appDir), false);
+});
+
+test('export requests are checked for shape and size', () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  assert.equal(validateExportRequest({ format: 'md', title: 'Plan', markdown: '# Hi' }), null);
+  assert.equal(validateExportRequest({ format: 'pdf', title: 'Plan', html: '<p>x</p>' }), null);
+  assert.equal(validateExportRequest({ format: 'docx', title: 'Plan', doc: { type: 'doc', content: [] }, images: { 7: { base64: png, width: 1, height: 1 } } }), null);
+  assert.equal(validateExportRequest({ format: 'docx', title: 'Plan', doc: { type: 'doc' } }), null, 'pictures are optional');
+  for (const bad of [
+    null, 'md', [], { format: 'exe', title: 'x', markdown: '' }, { format: 'md', title: 5, markdown: '' },
+    { format: 'md', title: 'x'.repeat(201), markdown: '' }, { format: 'md', title: 'x', markdown: 5 },
+    { format: 'md', title: 'x', markdown: 'y'.repeat(2 * 1024 * 1024 + 1) },
+    { format: 'pdf', title: 'x', html: '' }, { format: 'pdf', title: 'x' },
+    { format: 'docx', title: 'x', doc: 'text' }, { format: 'docx', title: 'x', doc: [] },
+    { format: 'docx', title: 'x', doc: { type: 'doc' }, images: [] },
+    { format: 'docx', title: 'x', doc: { type: 'doc' }, images: { abc: { base64: png, width: 1, height: 1 } } },
+    { format: 'docx', title: 'x', doc: { type: 'doc' }, images: { 1: { base64: '***', width: 1, height: 1 } } },
+    { format: 'docx', title: 'x', doc: { type: 'doc' }, images: { 1: { base64: png, width: 0, height: 1 } } },
+    { format: 'docx', title: 'x', doc: { type: 'doc' }, images: { 1: { base64: png, width: 1.5, height: 1 } } },
+    { format: 'docx', title: 'x', doc: { type: 'doc' }, images: { 1: { base64: png, width: 99999, height: 1 } } },
+  ]) {
+    assert.ok(validateExportRequest(bad), JSON.stringify(bad).slice(0, 80));
+  }
+});
+
+test('the suggested file name is safe', () => {
+  assert.equal(exportFileName('Quarterly plan', 'pdf'), 'Quarterly plan.pdf');
+  assert.equal(exportFileName('a/b\\c:d*e?f"g<h>i|j', 'docx'), 'a b c d e f g h i j.docx');
+  assert.equal(exportFileName('', 'md'), 'Canvas.md');
+  assert.equal(exportFileName('   ', 'md'), 'Canvas.md');
+  assert.equal(exportFileName('..\\..\\evil', 'pdf'), 'evil.pdf');
+  assert.equal(exportFileName('x'.repeat(200), 'pdf').length, 80 + '.pdf'.length);
+  assert.ok(!/[\\/]/.test(exportFileName('../../etc/passwd', 'md')));
 });

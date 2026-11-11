@@ -6212,13 +6212,13 @@ h4.cv-h { font-size: 15px; }
 
 .cw-mention-solo .cw-mention-known .cw-mention-card {
   display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 280px;
+  align-items: stretch;
+  gap: 18px;
+  min-width: 340px;
   max-width: 100%;
-  padding: 12px 16px;
+  padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
@@ -6228,27 +6228,55 @@ h4.cv-h { font-size: 15px; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 104px;
+  height: 104px;
+  border-radius: 14px;
   color: #fff;
-  font-size: 22px;
+  font-size: 44px;
   font-weight: 800;
 }
 
 .cw-mention-body {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
-.cw-mention-name { font-size: 16px; font-weight: 800; color: var(--text); }
-.cw-mention-title { font-size: 13px; color: var(--text); }
+.cw-mention-namerow { display: inline-flex; align-items: center; gap: 8px; }
+.cw-mention-name { font-size: 17px; font-weight: 800; color: var(--text); }
+.cw-mention-presence { width: 9px; height: 9px; border-radius: 50%; background: #9ca3af; }
+.cw-mention-presence.online { background: #22c55e; }
+.cw-mention-title { font-size: 14px; color: var(--text); }
 .cw-mention-status { font-size: 12px; color: var(--text-muted); }
-.cw-mention-status::before { content: "\25CF "; color: var(--text-muted); }
-.cw-mention-status.online::before { color: #22c55e; }
 .cw-mention-email { font-size: 12px; color: var(--purple); overflow-wrap: anywhere; }
+
+.cw-mention-msg {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cw-mention-msg:hover { border-color: var(--purple); color: var(--purple); }
 
 .cw-editor .ProseMirror-selectednode .cw-mention-chip,
 .cw-editor .ProseMirror-selectednode .cw-mention-card { outline: 2px solid var(--purple); }
+
+/* the Export menu in the canvas header opens to the left so it stays inside the window */
+.cw-menu-right {
+  left: auto;
+  right: 0;
+}
+
+.cw-export-wrap .cw-menu-toggle[aria-expanded="true"] {
+  border-color: var(--purple);
+}

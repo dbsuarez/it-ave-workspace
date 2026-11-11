@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setServerUrl: (url) => ipcRenderer.invoke('config:setServer', url),
   resetServerUrl: () => ipcRenderer.invoke('config:resetServer'),
 
+  // Canvas export: PDF, Word or Markdown. The main process asks where to save it.
+  exportCanvas: (request) => ipcRenderer.invoke('canvas:export', request),
+
   // Clipboard: copy an image (passed as a data: URL) to the system clipboard
   copyImageToClipboard: (dataUrl) => ipcRenderer.invoke('clipboard:copyImage', dataUrl),
 });

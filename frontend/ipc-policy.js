@@ -41,6 +41,62 @@ function validateStoreWrite(key, value) {
   return size <= limit ? null : 'Value is too large';
 }
 
+// ---- canvas export (PDF, Word, Markdown) ----
+const EXPORT_FORMATS = { pdf: 'PDF document', docx: 'Word document', md: 'Markdown file' };
+const MAX_EXPORT_MARKDOWN = 2 * 1024 * 1024;
+const MAX_EXPORT_HTML = 60 * 1024 * 1024;
+const MAX_EXPORT_DOC_JSON = 20 * 1024 * 1024;
+const MAX_EXPORT_IMAGE_CHARS = 14 * 1024 * 1024; // base64 characters per picture
+const MAX_EXPORT_IMAGES_CHARS = 60 * 1024 * 1024;
+const MAX_EXPORT_IMAGES = 100;
+
+// null when the request is acceptable, otherwise a short reason. The renderer is only trusted to ask, not to
+// choose where the file goes: the user picks that in a save dialog.
+function validateExportRequest(request) {
+  if (!isPlainObject(request)) return 'Invalid export request';
+  if (!Object.prototype.hasOwnProperty.call(EXPORT_FORMATS, request.format)) return 'Unsupported export format';
+  if (typeof request.title !== 'string' || request.title.length > 200) return 'Invalid canvas title';
+  if (request.format === 'md') {
+    return typeof request.markdown === 'string' && request.markdown.length <= MAX_EXPORT_MARKDOWN ? null : 'The canvas text is too large to export';
+  }
+  if (request.format === 'pdf') {
+    return typeof request.html === 'string' && request.html.length > 0 && request.html.length <= MAX_EXPORT_HTML ? null : 'The canvas is too large to export as PDF';
+  }
+  if (!isPlainObject(request.doc)) return 'Invalid canvas document';
+  try {
+    if (JSON.stringify(request.doc).length > MAX_EXPORT_DOC_JSON) return 'The canvas is too large to export';
+  } catch (err) {
+    return 'Invalid canvas document';
+  }
+  const images = request.images === undefined ? {} : request.images;
+  if (!isPlainObject(images)) return 'Invalid pictures';
+  const keys = Object.keys(images);
+  if (keys.length > MAX_EXPORT_IMAGES) return 'Too many pictures to export';
+  let total = 0;
+  for (const key of keys) {
+    const picture = images[key];
+    if (!/^\d{1,10}$/.test(key) || !isPlainObject(picture)) return 'Invalid picture';
+    if (typeof picture.base64 !== 'string' || picture.base64.length === 0 || picture.base64.length > MAX_EXPORT_IMAGE_CHARS) return 'A picture is too large to export';
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(picture.base64.slice(0, 64))) return 'Invalid picture data';
+    for (const dimension of [picture.width, picture.height]) {
+      if (!Number.isInteger(dimension) || dimension < 1 || dimension > 20000) return 'Invalid picture size';
+    }
+    total += picture.base64.length;
+  }
+  return total <= MAX_EXPORT_IMAGES_CHARS ? null : 'The pictures are too large to export';
+}
+
+// A safe file name for the save dialog's suggestion.
+function exportFileName(title, format) {
+  const cleaned = String(title || '')
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[.\s]+/, '')
+    .slice(0, 80)
+    .trim();
+  return `${cleaned || 'Canvas'}.${format}`;
+}
+
 // True only for a page loaded from this app's own src folder.
 function isTrustedFrameUrl(frameUrl, appDir) {
   try {
@@ -56,6 +112,9 @@ function isTrustedFrameUrl(frameUrl, appDir) {
 }
 
 module.exports = {
+  EXPORT_FORMATS,
+  validateExportRequest,
+  exportFileName,
   isAllowedStoreKey,
   validateStoreWrite,
   isTrustedFrameUrl,

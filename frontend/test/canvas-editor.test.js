@@ -243,11 +243,13 @@ test('a mention alone on its line becomes a profile card, with details from the 
     assert.equal(solo.length, 1, 'only the line with just a mention');
     const card = solo[0].querySelector('.cw-mention-card');
     assert.ok(card, 'the solo mention has a card');
-    assert.match(card.textContent, /@ann/);
+    assert.match(card.textContent, /ann/);
     assert.match(card.textContent, /IT Manager/);
     assert.match(card.textContent, /In a meeting/);
     assert.match(card.textContent, /ann@itavenue\.ph/);
     assert.equal(card.querySelector('.cw-mention-avatar').style.background, 'rgb(18, 52, 86)');
+    assert.ok(card.querySelector('.cw-mention-presence.online'), 'a green presence dot for someone online');
+    assert.equal(card.querySelector('[data-message-user]'), null, 'no Message button without an id');
     // inline mentions are chips; an unknown person has no card at all
     const inline = dom.querySelectorAll('p:not(.cw-mention-solo) .cw-mention');
     assert.equal(inline.length, 2);
