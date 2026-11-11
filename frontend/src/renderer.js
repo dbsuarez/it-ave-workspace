@@ -190,6 +190,7 @@ async function init() {
     loadChannels();
     loadUsers();
     loadModerationAccess();
+    loadActivity();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
   } else {
@@ -376,7 +377,7 @@ function setupEventListeners() {
   on('btn-huddle-leave', 'click', () => cleanupHuddle());
   on('btn-huddle-mute', 'click', toggleHuddleMute);
   on('huddle-channel-select', 'change', renderHuddleView);
-  on('btn-refresh-activity', 'click', () => renderActivity());
+  on('btn-refresh-activity', 'click', () => { renderActivity(); loadActivity({ markSeen: true }); });
   on('lists-channel-select', 'change', () => loadLists());
   on('btn-new-list', 'click', openNewListForm);
   on('btn-cancel-new-list', 'click', closeNewListForm);
@@ -423,6 +424,8 @@ function setupEventListeners() {
   on('file-picker', 'change', handleFilePick);
   on('btn-dm-attach', 'click', () => els.dmFilePicker?.click());
   on('dm-file-picker', 'change', handleDmFilePick);
+
+  setupActivityFeatures();
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
@@ -844,6 +847,8 @@ function connectSocket() {
     }
   });
 
+  state.socket.on('activity', handleActivityEvent);
+
   state.socket.on('message_reactions_updated', (event) => {
     const channelId = Number(event.channelId);
     const messages = state.messages[channelId] || [];
@@ -1115,12 +1120,7 @@ function renderSidebar() {
 
   // renderSidebar rebuilds the whole nav, so re-render the DM list too
   renderDmList();
-  const badge = document.getElementById('activity-badge');
-  if (badge) {
-    const total = state.channels.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-    badge.hidden = total === 0;
-    badge.textContent = total > 99 ? '99+' : String(total);
-  }
+  updateActivityBadge();
 }
 
 async function openChannel(channelId) {
@@ -1584,7 +1584,7 @@ function renderMessageEl(msg, allowReply = false) {
         <span class="message-reply-author">${escapeHtml(replyPreview.username || 'Original message')}</span>
         <span class="message-reply-content">${escapeHtml(replyPreview.content || 'Attachment')}</span>
       </button>` : ''}
-      <div class="message-text">${escapeHtml(msg.content)}</div>
+      <div class="message-text">${formatMessageText(msg.content)}</div>
       ${attachmentsHtml ? `<div class="attachments">${attachmentsHtml}</div>` : ''}
       <div class="message-actions">
         ${allowReply ? `<button class="message-reaction-action" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="Add reaction" title="Add reaction">Add reaction</button>` : ''}
@@ -2064,6 +2064,7 @@ async function setSection(section) {
     await loadCanvases();
   } else if (section === 'activity') {
     renderActivity();
+    await loadActivity({ markSeen: true });
   } else if (section === 'huddle') {
     renderHuddleView();
   } else if (section === 'moderation') {
@@ -2722,16 +2723,8 @@ function renderActivity() {
     }
   }
 
-  const badge = document.getElementById('activity-badge');
-  const total = state.channels.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-  if (badge) {
-    if (total > 0) {
-      badge.hidden = false;
-      badge.textContent = total > 99 ? '99+' : String(total);
-    } else {
-      badge.hidden = true;
-    }
-  }
+  updateActivityBadge();
+  if (state.section === 'activity') renderActivityFeed();
 }
 
 function closeAllMenus() {

@@ -6,6 +6,53 @@ const {
   ensureCanPostToChannel,
   ensureDirectMessageAccess,
 } = require('../security');
+const { findMentionedUsers } = require('../mentions');
+
+// Record @mentions for a new channel message and push activity events to the
+// people it concerns. Never throws: a notification problem must not fail a send.
+async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
+  try {
+    const channel = await query('SELECT name FROM channels WHERE id = $1', [messageData.channelId]);
+    const base = {
+      messageId: messageData.id,
+      channelId: messageData.channelId,
+      channelName: channel.rows[0]?.name || '',
+      actorId: messageData.userId,
+      actorUsername: messageData.username,
+      actorAvatarColor: messageData.avatarColor,
+      preview: String(messageData.content || '').slice(0, 200),
+      emoji: null,
+      createdAt: messageData.createdAt,
+    };
+    const notified = new Set();
+
+    if (String(messageData.content || '').includes('@')) {
+      const members = await query(
+        `SELECT u.id, u.username FROM channel_members cm
+         JOIN users u ON u.id = cm.user_id
+         WHERE cm.channel_id = $1`,
+        [messageData.channelId]
+      );
+      const mentioned = findMentionedUsers(messageData.content, members.rows)
+        .filter((user) => Number(user.id) !== Number(messageData.userId));
+      for (const user of mentioned) {
+        await query(
+          'INSERT INTO message_mentions (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [messageData.id, user.id]
+        );
+        notified.add(Number(user.id));
+        io.to(`user_${user.id}`).emit('activity', { ...base, type: 'mention' });
+      }
+    }
+
+    if (parentAuthorId && Number(parentAuthorId) !== Number(messageData.userId)
+      && !notified.has(Number(parentAuthorId))) {
+      io.to(`user_${parentAuthorId}`).emit('activity', { ...base, type: 'reply' });
+    }
+  } catch (err) {
+    console.error('Message activity notification error:', err);
+  }
+}
 
 const MAX_HUDDLE_PARTICIPANTS = 6;
 const huddleJoinLocks = new Map();
@@ -261,9 +308,10 @@ module.exports = (io, socket) => {
       await ensureCanPostToChannel(query, currentUserId, channelId);
 
       let replyToMessage = null;
+      let parentAuthorId = null;
       if (replyTo) {
         const parentResult = await query(
-          `SELECT m.id, m.content, u.username
+          `SELECT m.id, m.content, m.user_id, u.username
            FROM messages m
            JOIN users u ON u.id = m.user_id
            WHERE m.id = $1 AND m.channel_id = $2`,
@@ -274,6 +322,7 @@ module.exports = (io, socket) => {
           return;
         }
         const parent = parentResult.rows[0];
+        parentAuthorId = parent.user_id;
         replyToMessage = {
           id: parent.id,
           username: parent.username,
@@ -344,6 +393,7 @@ module.exports = (io, socket) => {
 
       io.to(`channel_${channelId}`).emit('new_message', messageData);
       socket.emit('message_sent', { messageId: message.id, clientMessageId, message: messageData });
+      await notifyMessageActivity(io, query, messageData, parentAuthorId);
     } catch (err) {
       console.error('Send message error:', err);
       socket.emit('message_error', { error: err.message || 'Failed to send message', clientMessageId });

@@ -464,13 +464,14 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
     }
 
     const messageCheck = await query(
-      'SELECT channel_id FROM messages WHERE id = $1',
+      'SELECT channel_id, user_id, content FROM messages WHERE id = $1',
       [messageId]
     );
     if (messageCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Message not found' });
     }
     const channelId = messageCheck.rows[0].channel_id;
+    const messageAuthorId = messageCheck.rows[0].user_id;
     await ensureChannelMembership(query, req.user.userId, channelId);
 
     // Tell everyone in the channel about the new reaction state for this message.
@@ -512,7 +513,32 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
         'INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)',
         [messageId, req.user.userId, emoji]
       );
-      res.status(201).json({ message: 'Reaction added', reactions: await broadcastReactions() });
+      const reactions = await broadcastReactions();
+      if (messageAuthorId && Number(messageAuthorId) !== Number(req.user.userId)) {
+        try {
+          const context = await query(
+            `SELECT c.name AS channel_name, u.username, u.avatar_color
+             FROM channels c CROSS JOIN users u
+             WHERE c.id = $1 AND u.id = $2`,
+            [channelId, req.user.userId]
+          );
+          req.io?.to(`user_${messageAuthorId}`).emit('activity', {
+            type: 'reaction',
+            messageId: Number(messageId),
+            channelId: Number(channelId),
+            channelName: context.rows[0]?.channel_name || '',
+            actorId: req.user.userId,
+            actorUsername: context.rows[0]?.username || '',
+            actorAvatarColor: context.rows[0]?.avatar_color || null,
+            preview: String(messageCheck.rows[0].content || '').slice(0, 200),
+            emoji,
+            createdAt: new Date().toISOString(),
+          });
+        } catch (activityErr) {
+          console.error('Reaction activity notification error:', activityErr);
+        }
+      }
+      res.status(201).json({ message: 'Reaction added', reactions });
     }
   } catch (err) {
     console.error('Add reaction error:', err);

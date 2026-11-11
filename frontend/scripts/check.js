@@ -5,7 +5,11 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.join(__dirname, '..');
-const scripts = ['main.js', 'preload.js', 'src/renderer.js', 'src/login.js'];
+const featureDir = path.join(root, 'src', 'features');
+const featureScripts = fs.existsSync(featureDir)
+  ? fs.readdirSync(featureDir).filter((name) => name.endsWith('.js')).sort().map((name) => `src/features/${name}`)
+  : [];
+const scripts = ['main.js', 'preload.js', 'src/renderer.js', 'src/login.js', ...featureScripts];
 const pages = ['src/index.html', 'src/login.html'];
 const styles = ['src/styles.css'];
 const problems = [];
@@ -24,6 +28,23 @@ for (const file of scripts) {
   }
   if (file.startsWith('src/') && /(^|[^.\w])prompt\s*\(/.test(code)) {
     problems.push(`${file}: window.prompt() is not supported in Electron; use askText()`);
+  }
+}
+
+// The page scripts are classic scripts that share one global scope, so a name
+// declared at the top level of two of them silently overrides or crashes.
+const pageScripts = ['src/renderer.js', ...featureScripts];
+const declaredIn = new Map();
+for (const file of pageScripts) {
+  const code = fs.readFileSync(path.join(root, file), 'utf8');
+  for (const match of code.matchAll(/^(?:async\s+)?(?:function\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+    const name = match[1];
+    if (declaredIn.has(name) && declaredIn.get(name) !== file) {
+      problems.push(`${file}: top-level "${name}" is also declared in ${declaredIn.get(name)}`);
+    } else if (declaredIn.has(name)) {
+      problems.push(`${file}: top-level "${name}" is declared twice`);
+    }
+    declaredIn.set(name, file);
   }
 }
 

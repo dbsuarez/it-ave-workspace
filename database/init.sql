@@ -221,3 +221,14 @@ WHERE NOT EXISTS (SELECT 1 FROM channels WHERE name = 'dev');
 INSERT INTO channels (name, topic, created_by)
 SELECT 'announcements', 'Official company announcements', NULL
 WHERE NOT EXISTS (SELECT 1 FROM channels WHERE name = 'announcements');
+
+-- Mentions and the activity feed (also applied by backend/src/migrations.js)
+CREATE TABLE IF NOT EXISTS message_mentions (
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  PRIMARY KEY (message_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_message_mentions_user ON message_mentions(user_id, created_at DESC);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_seen_at TIMESTAMP WITH TIME ZONE;
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to ON messages(reply_to) WHERE reply_to IS NOT NULL;

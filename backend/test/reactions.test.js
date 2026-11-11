@@ -29,7 +29,12 @@ require.cache[dbPath] = {
     query: async (sql, params = []) => {
       queryCalls.push({ sql, params });
       if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
-      if (sql.includes('SELECT channel_id FROM messages')) return { rows: [{ channel_id: 7 }] };
+      if (sql.includes('FROM messages WHERE id = $1')) {
+        return { rows: [{ channel_id: 7, user_id: 2, content: 'original message' }] };
+      }
+      if (sql.includes('FROM channels c CROSS JOIN users u')) {
+        return { rows: [{ channel_name: 'general', username: 'alice', avatar_color: '#123456' }] };
+      }
       if (sql.includes('SELECT 1 FROM channel_members')) {
         return params[0] === 7 && params[1] === 1 ? { rows: [{}] } : { rows: [] };
       }
@@ -135,7 +140,7 @@ test('reaction changes are broadcast to the channel with current counts and user
   emitted.length = 0;
 
   await react('🚀');
-  assert.deepEqual(emitted.at(-1), {
+  assert.deepEqual(emitted.find((entry) => entry.event === 'message_reactions_updated'), {
     room: 'channel_7',
     event: 'message_reactions_updated',
     payload: {
@@ -146,6 +151,42 @@ test('reaction changes are broadcast to the channel with current counts and user
   });
 
   await react('🚀');
-  assert.equal(emitted.length, 2);
-  assert.deepEqual(emitted.at(-1).payload.reactions, []);
+  const updates = emitted.filter((entry) => entry.event === 'message_reactions_updated');
+  assert.equal(updates.length, 2);
+  assert.deepEqual(updates.at(-1).payload.reactions, []);
+});
+
+test('adding a reaction notifies the message author, removing it does not', async () => {
+  reactions.clear();
+  emitted.length = 0;
+
+  await react('👏');
+  const added = emitted.filter((entry) => entry.event === 'activity');
+  assert.equal(added.length, 1);
+  assert.equal(added[0].room, 'user_2');
+  assert.deepEqual(
+    {
+      type: added[0].payload.type,
+      messageId: added[0].payload.messageId,
+      channelId: added[0].payload.channelId,
+      channelName: added[0].payload.channelName,
+      actorId: added[0].payload.actorId,
+      actorUsername: added[0].payload.actorUsername,
+      emoji: added[0].payload.emoji,
+      preview: added[0].payload.preview,
+    },
+    {
+      type: 'reaction',
+      messageId: 5,
+      channelId: 7,
+      channelName: 'general',
+      actorId: 1,
+      actorUsername: 'alice',
+      emoji: '👏',
+      preview: 'original message',
+    }
+  );
+
+  await react('👏');
+  assert.equal(emitted.filter((entry) => entry.event === 'activity').length, 1);
 });

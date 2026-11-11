@@ -165,6 +165,35 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
   }
 });
 
+// List the members of a channel (used for @mention suggestions)
+router.get('/:channelId/members', authenticateToken, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    await ensureChannelMembership(query, req.user.userId, channelId);
+    const result = await query(
+      `SELECT u.id, u.username, u.avatar_color, u.status, cm.role
+       FROM channel_members cm
+       JOIN users u ON u.id = cm.user_id
+       WHERE cm.channel_id = $1
+       ORDER BY LOWER(u.username)`,
+      [channelId]
+    );
+    res.json({
+      members: result.rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        avatarColor: row.avatar_color,
+        status: row.status,
+        role: row.role,
+      })),
+    });
+  } catch (err) {
+    console.error('Get channel members error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Server error' });
+  }
+});
+
 // Mark a channel as read for the current user (clears the unread badge)
 router.post('/:channelId/read', authenticateToken, async (req, res) => {
   try {

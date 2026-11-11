@@ -15,6 +15,8 @@ const searchRoutes = require('./src/routes/search');
 const listsRoutes = require('./src/routes/lists');
 const canvasesRoutes = require('./src/routes/canvases');
 const moderationRoutes = require('./src/routes/moderation');
+const activityRoutes = require('./src/routes/activity');
+const migrations = require('./src/migrations');
 const chatSockets = require('./src/sockets/chat');
 
 const app = express();
@@ -55,6 +57,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/lists', listsRoutes);
 app.use('/api/canvases', canvasesRoutes);
 app.use('/api/moderation', moderationRoutes);
+app.use('/api/activity', activityRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -174,6 +177,7 @@ db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT N
     )
   `))
   .then(() => db.query('CREATE INDEX IF NOT EXISTS idx_channel_canvases_channel_id ON channel_canvases(channel_id)'))
+  .then(() => migrations.reduce((chain, sql) => chain.then(() => db.query(sql)), Promise.resolve()))
   .then(() => {
     server.listen(PORT, () => {
       console.log(`IT Avenue Workspace backend running on port ${PORT}`);
