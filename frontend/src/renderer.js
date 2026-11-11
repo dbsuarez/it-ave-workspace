@@ -196,6 +196,7 @@ async function init() {
     loadSaved();
     loadReminders();
     loadSidebarLayout();
+    loadUserGroups();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
   } else {
@@ -437,6 +438,7 @@ function setupEventListeners() {
   setupAdminFeatures();
   setupWorkspaceFeatures();
   setupHuddleVideoFeatures();
+  setupIntegrationFeatures();
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
@@ -860,6 +862,7 @@ function connectSocket() {
   });
 
   state.socket.on('activity', handleActivityEvent);
+  state.socket.on('user_groups_updated', handleUserGroupsUpdated);
   state.socket.on('scheduled_message_sent', handleScheduledDelivered);
   state.socket.on('scheduled_message_failed', handleScheduledFailed);
   state.socket.on('channel_links_updated', handleChannelLinksUpdated);
@@ -2231,6 +2234,7 @@ async function loadModerationChannel(channelId) {
       <div class="moderation-card"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
         <div class="moderation-row"><span>${escapeHtml(entry.actorUsername || 'former user')} · ${escapeHtml(entry.action)}${entry.targetUsername ? ` · ${escapeHtml(entry.targetUsername)}` : ''} ${entry.details ? ` ${escapeHtml(JSON.stringify(entry.details))}` : ''}</span><time>${escapeHtml(new Date(entry.createdAt).toLocaleString())}</time></div>
       `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
+    await loadChannelWebhooks(channelId);
   } catch (err) {
     console.error('Load channel moderation error:', err);
     dataContainer.innerHTML = `<div class="empty-state"><h2>Could not load moderation data</h2><p>${escapeHtml(err.message || 'Please try again.')}</p><button class="btn" data-action="refresh-channel">Try again</button></div>`;

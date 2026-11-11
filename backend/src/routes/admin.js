@@ -92,6 +92,7 @@ router.get('/users', async (req, res) => {
               (SELECT COUNT(*)::int FROM channel_members cm WHERE cm.user_id = u.id) AS channel_count,
               (SELECT COUNT(*)::int FROM channel_members cm WHERE cm.user_id = u.id AND cm.role = 'moderator') AS moderator_count
        FROM users u
+       WHERE u.account_type <> 'bot'
        ORDER BY LOWER(u.username)`
     );
     res.json({

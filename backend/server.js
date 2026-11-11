@@ -24,6 +24,8 @@ const reminderRoutes = require('./src/routes/reminders');
 const adminRoutes = require('./src/routes/admin');
 const scheduledRoutes = require('./src/routes/scheduled');
 const channelLinkRoutes = require('./src/routes/channelLinks');
+const userGroupRoutes = require('./src/routes/userGroups');
+const webhookRoutes = require('./src/routes/webhooks');
 const migrations = require('./src/migrations');
 const chatSockets = require('./src/sockets/chat');
 
@@ -74,6 +76,9 @@ app.use('/api/saved', savedRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/scheduled', scheduledRoutes);
+app.use('/api/user-groups', userGroupRoutes);
+app.use('/api/webhooks', webhookRoutes.manage);
+app.use('/api/hooks', webhookRoutes.receive);
 
 // Health check
 app.get('/api/health', (req, res) => {

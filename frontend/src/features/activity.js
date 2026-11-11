@@ -9,6 +9,7 @@
 function knownUsernames() {
   const names = (state.users || []).map((user) => user.username);
   if (state.user?.username) names.push(state.user.username);
+  names.push(...userGroupHandles());
   return names;
 }
 
@@ -73,7 +74,7 @@ function renderMentionPicker() {
       aria-selected="${index === mentionPicker.index}" data-mention-index="${index}">
       <span class="avatar-mini" style="background:${escapeHtml(member.avatarColor || '#A855F7')};">${escapeHtml(member.username.charAt(0).toUpperCase())}</span>
       <span class="mention-option-name">${escapeHtml(member.username)}</span>
-      ${member.role === 'moderator' ? '<span class="mention-option-role">moderator</span>' : ''}
+      ${member.role === 'moderator' || member.isGroup ? `<span class="mention-option-role">${escapeHtml(member.role)}</span>` : ''}
     </div>`).join('');
   popup.hidden = false;
 }
@@ -92,7 +93,9 @@ async function updateMentionPicker() {
   if (requestId !== mentionPicker.requestId) return;
 
   const term = match[2].toLowerCase();
-  const others = members.filter((member) => Number(member.id) !== Number(state.user.id));
+  const others = members
+    .filter((member) => Number(member.id) !== Number(state.user.id))
+    .concat(groupMentionCandidates());
   const starts = others.filter((member) => member.username.toLowerCase().startsWith(term));
   const contains = others.filter((member) => !starts.includes(member)
     && member.username.toLowerCase().includes(term));

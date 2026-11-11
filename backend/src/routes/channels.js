@@ -179,7 +179,7 @@ router.get('/:channelId/members', authenticateToken, async (req, res) => {
       `SELECT u.id, u.username, u.avatar_color, u.status, cm.role
        FROM channel_members cm
        JOIN users u ON u.id = cm.user_id
-       WHERE cm.channel_id = $1
+       WHERE cm.channel_id = $1 AND u.account_type <> 'bot'
        ORDER BY LOWER(u.username)`,
       [channelId]
     );

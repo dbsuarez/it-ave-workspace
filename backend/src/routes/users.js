@@ -12,6 +12,7 @@ router.get('/', authenticateToken, async (req, res) => {
               status_text, status_emoji, dnd_until, account_type
        FROM users
        WHERE id != $1
+         AND account_type <> 'bot'
          AND (
            NOT EXISTS (SELECT 1 FROM users me WHERE me.id = $1 AND me.account_type = 'guest')
            OR EXISTS (

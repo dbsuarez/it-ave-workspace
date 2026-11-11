@@ -334,3 +334,27 @@ CREATE TABLE IF NOT EXISTS channel_links (
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );
 CREATE INDEX IF NOT EXISTS idx_channel_links_channel ON channel_links(channel_id, created_at);
+
+-- User groups and incoming webhooks
+CREATE TABLE IF NOT EXISTS user_groups (
+     id SERIAL PRIMARY KEY,
+     handle VARCHAR(31) NOT NULL UNIQUE,
+     name VARCHAR(80) NOT NULL,
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );
+CREATE TABLE IF NOT EXISTS user_group_members (
+     group_id INTEGER NOT NULL REFERENCES user_groups(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     PRIMARY KEY (group_id, user_id)
+   );
+CREATE TABLE IF NOT EXISTS webhooks (
+     id SERIAL PRIMARY KEY,
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     name VARCHAR(40) NOT NULL,
+     token_hash VARCHAR(64) NOT NULL UNIQUE,
+     bot_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     last_used_at TIMESTAMP WITH TIME ZONE
+   );

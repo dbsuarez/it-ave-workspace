@@ -48,7 +48,24 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
          WHERE cm.channel_id = $1`,
         [messageData.channelId]
       );
-      const mentioned = findMentionedUsers(messageData.content, members.rows)
+      const mentionedById = new Map();
+      findMentionedUsers(messageData.content, members.rows)
+        .forEach((user) => mentionedById.set(Number(user.id), user));
+
+      const groups = await query('SELECT id, handle AS username FROM user_groups');
+      const mentionedGroups = findMentionedUsers(messageData.content, groups.rows);
+      if (mentionedGroups.length) {
+        const groupMembers = await query(
+          `SELECT DISTINCT ugm.user_id AS id
+           FROM user_group_members ugm
+           JOIN channel_members cm ON cm.user_id = ugm.user_id AND cm.channel_id = $2
+           WHERE ugm.group_id = ANY($1::int[])`,
+          [mentionedGroups.map((group) => group.id), messageData.channelId]
+        );
+        groupMembers.rows.forEach((user) => mentionedById.set(Number(user.id), user));
+      }
+
+      const mentioned = [...mentionedById.values()]
         .filter((user) => Number(user.id) !== Number(messageData.userId));
       for (const user of mentioned) {
         await query(

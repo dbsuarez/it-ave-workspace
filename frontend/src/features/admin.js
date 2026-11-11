@@ -139,7 +139,9 @@ function renderWorkspaceAdmin() {
       ${admin.lastCode ? `<p class="admin-invite-code">New code: <code id="admin-last-code">${escapeHtml(admin.lastCode)}</code> <button class="btn" type="button" data-admin-action="copy-code">Copy</button><br><small>Share it now. It is shown only once and works for one sign-up.</small></p>` : ''}
     </form>
     <div class="moderation-card"><h2>Invitations</h2><div class="moderation-list">${invitationRows || '<p>No invitations yet.</p>'}</div></div>
-    <div class="moderation-card"><h2>Workspace members</h2><div class="moderation-list">${userRows}</div></div>`;
+    <div class="moderation-card"><h2>Workspace members</h2><div class="moderation-list">${userRows}</div></div>
+    ${userGroupsAdminHtml()}`;
+  renderUserGroupsAdmin();
 }
 
 async function handleAdminClick(event) {
