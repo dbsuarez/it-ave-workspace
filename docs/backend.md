@@ -136,6 +136,18 @@ someone else, or after a minute, is a new entry. A failure to record history nev
 | GET | `/api/canvas/:id/revisions/:revision` | One version with its text (viewer access) |
 | POST | `/api/canvas/:id/revisions/:revision/restore` | Make it current as a NEW version, optional `baseRevision` (editor access). A restore always gets its own entry, so the version it replaces can be restored again |
 
+**People and the org chart.** `backend/src/routes/people.js`:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/people` | The directory (members only, no guests or bots); each person carries `managerId`, so it is also the org chart. Email, phone and location are blank when the person hides them |
+| GET | `/api/people/:id` | One employee page (about, sections, links, contact) plus `manager`, `reports` and `canSetManager` |
+| PUT | `/api/people/me` | Customize my own page: `jobTitle`, `department`, `location`, `phone`, `about`, `sections` (max 8), `links` (max 8, http/https only) and `hide` (email, phone, location); a partial update changes only what is sent |
+| PUT | `/api/people/:id/manager` | Superadmin: `{ managerId }` or `{ managerId: null }`; refuses themselves, loops and non-members |
+
+Guests get 403 on all of it. Columns: `users.department`, `location`, `manager_id` (set to null when the manager
+account is removed) and `profile` (JSONB: phone, about, sections, links, hide).
+
 **Notifications.** A save that adds an `@name` to a canvas, a comment that mentions someone, and a reply to
 someone's comment each notify the person (only if they can read the canvas, never the actor):
 `backend/src/canvasMentions.js` stores a row in `canvas_mentions` (source `content`, `comment` or `reply`)

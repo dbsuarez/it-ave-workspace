@@ -154,6 +154,13 @@ module.exports = [
    )`,
   'CREATE INDEX IF NOT EXISTS idx_canvas_mentions_user ON canvas_mentions(user_id, created_at DESC)',
 
+  // Employee pages and the org chart: where someone works, who they report to, and their own page content
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(100) NOT NULL DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(100) NOT NULL DEFAULT ''",
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL',
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}'::jsonb",
+  'CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id) WHERE manager_id IS NOT NULL',
+
   // Profile photo: the stored file name and when it last changed (the client uses that as a cache key)
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_file VARCHAR(255)',
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMP WITH TIME ZONE',

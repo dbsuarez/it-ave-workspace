@@ -317,6 +317,7 @@ function mentionDom(username) {
     avatar.className = 'cw-mention-avatar';
     avatar.style.background = color;
     avatar.textContent = initial;
+    if (person.id !== undefined) avatar.setAttribute('data-profile-user', String(person.id));
     // a profile photo replaces the initial once it has been fetched (the app provides canvasUserPhoto)
     if (person.photoVersion && typeof canvasUserPhoto === 'function') {
       Promise.resolve(canvasUserPhoto(person)).then((url) => {
@@ -336,6 +337,7 @@ function mentionDom(username) {
     const name = document.createElement('span');
     name.className = 'cw-mention-name';
     name.textContent = person.username || username;
+    if (person.id !== undefined) name.setAttribute('data-profile-user', String(person.id));
     const presence = document.createElement('span');
     presence.className = `cw-mention-presence${person.status === 'online' ? ' online' : ''}`;
     presence.title = person.status ? person.status[0].toUpperCase() + person.status.slice(1) : '';
@@ -401,7 +403,7 @@ const Mention = Node.create({
       return {
         dom,
         ignoreMutation: () => true,
-        stopEvent: (event) => Boolean(event.target && event.target.closest && event.target.closest('.cw-mention-actions')),
+        stopEvent: (event) => Boolean(event.target && event.target.closest && event.target.closest('.cw-mention-actions, [data-profile-user]')),
         update: (next) => {
           if (next.type !== node.type) return false;
           if (next.attrs.username !== name) return false;

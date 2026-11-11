@@ -2332,13 +2332,14 @@ const SECTIONS = {
   lists:    { pane: null,       view: 'lists' },
   canvases: { pane: null,       view: 'canvases' },
   canvas2:  { pane: null,       view: 'canvas2' },
+  people:   { pane: null,       view: 'people' },
   huddle:   { pane: null,       view: 'huddle' },
   moderation: { pane: null,     view: 'moderation' },
   later:    { pane: null,       view: 'later' },
 };
 
 // Sections reached from the rail's More menu rather than their own rail buttons.
-const MORE_SECTIONS = ['lists', 'canvas2', 'canvases'];
+const MORE_SECTIONS = ['lists', 'people', 'canvases'];
 
 function updateRail(section) {
   document.querySelectorAll('.rail-item[data-rail]').forEach((btn) => {
@@ -2423,6 +2424,12 @@ async function setSection(section) {
     showPane(null);
     showView('canvas2');
     await loadCanvas2StandaloneList();
+  } else if (section === 'people') {
+    showPane(null);
+    showView('people');
+    peopleState.pageId = null;
+    peopleState.page = null;
+    await loadPeople(true);
   } else if (section === 'activity') {
     renderActivity();
     await loadActivity({ markSeen: true });
@@ -4724,10 +4731,7 @@ function renderCanvas2StandaloneList() {
   if (!listEl) return;
   listEl.innerHTML = '';
   if (canvas2StandaloneState.list.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'canvas2-list-empty';
-    empty.textContent = 'No personal canvases yet.';
-    listEl.appendChild(empty);
+    listEl.innerHTML = emptyRecordMarkup('No canvases yet', 'Create one with the + button.', 'compact');
     return;
   }
   for (const canvas of canvas2StandaloneState.list) {

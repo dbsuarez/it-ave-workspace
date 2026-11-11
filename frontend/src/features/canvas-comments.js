@@ -55,8 +55,8 @@ function ccRender() {
   anchor.querySelector('span').textContent = ccState.anchor;
   if (ccState.loading) { list.innerHTML = '<p class="cc-empty">Loading…</p>'; return; }
   if (!shown.length) {
-    const none = ccState.filter === 'resolved' ? 'No resolved threads.' : ccState.filter === 'all' ? 'No comments yet.' : 'No open comments.';
-    list.innerHTML = `<p class="cc-empty">${none}${canEdit && ccState.filter !== 'resolved' ? ' Write the first one above.' : ''}</p>`;
+    const none = ccState.filter === 'resolved' ? 'No resolved threads' : ccState.filter === 'all' ? 'No comments yet' : 'No open comments';
+    list.innerHTML = emptyRecordMarkup(none, canEdit && ccState.filter !== 'resolved' ? 'Write the first one above.' : 'Resolved threads show here.', 'compact');
     return;
   }
   list.innerHTML = shown.map(({ root, replies }) => `

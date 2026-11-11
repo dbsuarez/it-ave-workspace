@@ -142,6 +142,24 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
 - **Rebuilding the bundle.** After changing `editor-src/` or upgrading `@tiptap/*`, run
   `npm run editor` in `frontend/` and commit `src/vendor/canvas-editor.js`.
 
+## People: directory, org chart and employee pages
+
+**People** (under More) has a **Directory** (search by name, title, department or location; filter by
+department) and an **Org chart** (a tree you can collapse, with search that keeps the managers above a
+match). Click anyone, or the name or picture on a mention card, to open their **employee page**
+(`features/people.js`, `features/org-chart.js`).
+
+- **A page** shows what that person chose to share: about, their own titled sections (up to 8), links
+  (up to 8), contact details, who they report to and their direct reports. Others get **Message** and
+  **Huddle** buttons.
+- **Customizing your own page:** *Edit my page* sets job title, department, location, phone, about, sections
+  and links, and switches to hide your email, phone and location from other people (you always see your own).
+- **Reporting lines** are kept by the Superadmin, either on a person's page or in the chart's *Edit reporting
+  lines* mode. A loop (A reports to B who reports to A) is refused; a missing manager never hides anyone.
+- Guests cannot browse the directory. Photos and avatar color come from Profile.
+
+The Canvas button now sits on the rail; Lists, People and Wiki are under More.
+
 ## Notifications and sounds
 
 Notifications follow the account's settings (Preferences): mentions, direct and group messages, replies,

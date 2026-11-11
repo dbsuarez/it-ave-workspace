@@ -1,0 +1,408 @@
+// IT Avenue Workspace - People: the directory, the org chart, and each employee's own page.
+//
+// An employee page shows what that person chose to share (about, their own titled sections, links, and
+// whichever of email / phone / location they left visible), who they report to and who reports to them.
+// People edit their own page; the Superadmin sets reporting lines (on a page, or in the chart's edit mode).
+// Needs org-chart.js. Loaded before renderer.js; renderer.js calls loadPeople() when the section opens.
+
+const peopleState = {
+  list: [], loaded: false, error: '', tab: 'directory', query: '', department: '',
+  pageId: null, page: null, editLines: false, collapsed: new Set(),
+};
+
+const escapeText = (value) => escapeHtml(String(value === undefined || value === null ? '' : value));
+
+function peopleAvatar(person, size = 'md') {
+  const initial = escapeText((person.username || '?').charAt(0).toUpperCase());
+  const color = /^#[0-9a-fA-F]{6}$/.test(person.avatarColor || '') ? person.avatarColor : '#6B21A8';
+  return `<span class="pp-avatar pp-avatar-${size}" style="background:${color}" data-photo-id="${Number(person.id)}" data-photo-version="${Number(person.photoVersion) || ''}">${initial}</span>`;
+}
+
+// Fetch and show photos on every avatar placeholder in a container.
+function paintPeoplePhotos(container) {
+  container.querySelectorAll('.pp-avatar[data-photo-version]').forEach((el) => {
+    const version = Number(el.dataset.photoVersion);
+    if (!version) return;
+    paintAvatar(el, { id: Number(el.dataset.photoId), photoVersion: version });
+  });
+}
+
+function presenceDot(person) {
+  return `<span class="pp-dot${person.status === 'online' ? ' online' : ''}" title="${escapeText(person.status || '')}"></span>`;
+}
+
+function personLine(person) {
+  return [person.jobTitle, person.department].filter(Boolean).join(' · ');
+}
+
+async function loadPeople(force = false) {
+  if (peopleState.loaded && !force) { renderPeople(); return; }
+  try {
+    const res = await api('/api/people');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load people');
+    peopleState.list = data.people;
+    peopleState.error = '';
+  } catch (err) {
+    peopleState.list = [];
+    peopleState.error = err.message || 'Could not load people';
+  }
+  peopleState.loaded = true;
+  renderPeople();
+}
+
+// ---- header and body ---------------------------------------------------------------------------
+
+function renderPeople() {
+  const title = document.getElementById('people-title');
+  const sub = document.getElementById('people-sub');
+  const actions = document.getElementById('people-actions');
+  if (!title || !actions) return;
+  if (peopleState.pageId !== null) {
+    title.textContent = peopleState.page ? peopleState.page.person.username : 'Person';
+    sub.textContent = 'Employee page';
+    actions.innerHTML = '<button type="button" class="btn" data-people-back>← People</button>';
+    renderPersonPage();
+    return;
+  }
+  title.textContent = 'People';
+  sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : 'Everyone in the workspace.';
+  const departments = Array.from(new Set(peopleState.list.map((p) => p.department).filter(Boolean))).sort();
+  actions.innerHTML = `
+    <div class="pp-tabs" role="tablist">
+      <button type="button" class="pp-tab${peopleState.tab === 'directory' ? ' active' : ''}" data-people-tab="directory" role="tab">Directory</button>
+      <button type="button" class="pp-tab${peopleState.tab === 'chart' ? ' active' : ''}" data-people-tab="chart" role="tab">Org chart</button>
+    </div>
+    <input type="search" id="people-search" class="pp-search" placeholder="Search name, title, department…" value="${escapeText(peopleState.query)}" aria-label="Search people">
+    ${peopleState.tab === 'directory' && departments.length ? `<select id="people-department" class="pp-select" aria-label="Department">
+      <option value="">All departments</option>${departments.map((d) => `<option value="${escapeText(d)}"${d === peopleState.department ? ' selected' : ''}>${escapeText(d)}</option>`).join('')}</select>` : ''}
+    ${peopleState.tab === 'chart' && state.moderation && state.moderation.isSuperadmin
+      ? `<button type="button" class="btn${peopleState.editLines ? ' primary' : ''}" data-people-edit-lines>${peopleState.editLines ? 'Done editing' : 'Edit reporting lines'}</button>` : ''}`;
+  renderPeopleBody();
+}
+
+function renderPeopleBody() {
+  const body = document.getElementById('people-body');
+  if (!body) return;
+  if (peopleState.error) {
+    body.innerHTML = emptyRecordMarkup('People are not available', peopleState.error);
+    return;
+  }
+  body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : 'people-directory-body'}`;
+  if (peopleState.tab === 'chart') renderOrgChart(body); else renderDirectory(body);
+  paintPeoplePhotos(body);
+}
+
+function matchesPeopleQuery(person, query) {
+  const q = query.trim().toLowerCase();
+  return !q || [person.username, person.jobTitle, person.department, person.location].some((v) => String(v || '').toLowerCase().includes(q));
+}
+
+function renderDirectory(body) {
+  const people = peopleState.list
+    .filter((p) => matchesPeopleQuery(p, peopleState.query))
+    .filter((p) => !peopleState.department || p.department === peopleState.department);
+  if (!people.length) {
+    body.innerHTML = emptyRecordMarkup(peopleState.list.length ? 'No one matches' : 'No people yet', peopleState.list.length ? 'Try a different search.' : 'Workspace members will appear here.');
+    return;
+  }
+  body.innerHTML = `<div class="pp-grid">${people.map((p) => `
+    <button type="button" class="pp-card" data-person="${p.id}">
+      ${peopleAvatar(p, 'lg')}
+      <span class="pp-card-body">
+        <span class="pp-card-name">${escapeText(p.username)} ${presenceDot(p)}</span>
+        <span class="pp-card-title">${escapeText(p.jobTitle) || '<span class="pp-muted">No title yet</span>'}</span>
+        ${p.department ? `<span class="pp-card-meta">${escapeText(p.department)}</span>` : ''}
+        ${p.location ? `<span class="pp-card-meta">${escapeText(p.location)}</span>` : ''}
+      </span>
+    </button>`).join('')}</div>`;
+}
+
+// ---- org chart ---------------------------------------------------------------------------------
+
+function orgNodeHtml(node, editable, everyone) {
+  const p = node.person;
+  const size = orgTeamSize(node);
+  const collapsed = peopleState.collapsed.has(p.id);
+  const card = `
+    <div class="org-card${node.matched ? ' matched' : ''}">
+      <button type="button" class="org-card-main" data-person="${p.id}">
+        ${peopleAvatar(p, 'md')}
+        <span class="org-card-text">
+          <strong>${escapeText(p.username)}</strong>
+          <span>${escapeText(p.jobTitle) || ''}</span>
+          ${p.department ? `<em>${escapeText(p.department)}</em>` : ''}
+        </span>
+      </button>
+      ${editable ? `<select class="org-manager-select" data-org-manager="${p.id}" aria-label="Reports to">
+        <option value="">No manager</option>${everyone.filter((o) => o.id !== p.id).map((o) => `<option value="${o.id}"${o.id === p.managerId ? ' selected' : ''}>${escapeText(o.username)}</option>`).join('')}</select>` : ''}
+      ${node.children.length ? `<button type="button" class="org-toggle" data-org-toggle="${p.id}" title="${collapsed ? 'Show' : 'Hide'} the team" aria-expanded="${!collapsed}">${collapsed ? '+' : '−'} ${size}</button>` : ''}
+    </div>`;
+  const kids = node.children.length && !collapsed
+    ? `<ul class="org-children">${node.children.map((child) => orgNodeHtml(child, editable, everyone)).join('')}</ul>` : '';
+  return `<li class="org-node">${card}${kids}</li>`;
+}
+
+function renderOrgChart(body) {
+  if (!peopleState.list.length) {
+    body.innerHTML = emptyRecordMarkup('No people yet', 'Workspace members will appear here.');
+    return;
+  }
+  const editable = Boolean(peopleState.editLines && state.moderation && state.moderation.isSuperadmin);
+  const tree = filterOrgTree(buildOrgTree(peopleState.list), peopleState.query);
+  if (!tree.length) {
+    body.innerHTML = emptyRecordMarkup('No one matches', 'Try a different search.');
+    return;
+  }
+  const hint = editable ? '<p class="pp-hint">Choose who each person reports to. Changes save immediately.</p>'
+    : (peopleState.list.every((p) => !p.managerId) ? '<p class="pp-hint">No reporting lines are set yet.' + (state.moderation && state.moderation.isSuperadmin ? ' Use "Edit reporting lines" to set them.' : ' The Superadmin sets them.') + '</p>' : '');
+  body.innerHTML = `${hint}<div class="org-scroll"><ul class="org-roots">${tree.map((node) => orgNodeHtml(node, editable, peopleState.list)).join('')}</ul></div>`;
+}
+
+async function setPersonManager(personId, managerId) {
+  try {
+    const res = await api(`/api/people/${personId}/manager`, { method: 'PUT', body: JSON.stringify({ managerId }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not change the reporting line');
+    const person = peopleState.list.find((p) => p.id === personId);
+    if (person) person.managerId = data.managerId;
+    return true;
+  } catch (err) {
+    showToast(err.message || 'Could not change the reporting line.', 'error');
+    return false;
+  }
+}
+
+// ---- an employee's page ------------------------------------------------------------------------
+
+async function openPersonPage(id) {
+  if (state.section !== 'people') await setSection('people');
+  peopleState.pageId = Number(id);
+  peopleState.page = null;
+  renderPeople();
+  try {
+    const res = await api(`/api/people/${id}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not open that page');
+    if (peopleState.pageId !== Number(id)) return;
+    peopleState.page = data;
+    renderPeople();
+  } catch (err) {
+    showToast(err.message || 'Could not open that page.', 'error');
+    peopleState.pageId = null;
+    renderPeople();
+  }
+}
+
+function contactRow(label, value, href) {
+  if (!value) return '';
+  return `<div class="pp-row"><span>${label}</span>${href ? `<a href="${escapeText(href)}">${escapeText(value)}</a>` : `<strong>${escapeText(value)}</strong>`}</div>`;
+}
+
+function renderPersonPage() {
+  const body = document.getElementById('people-body');
+  if (!body) return;
+  body.className = 'people-body people-page-body';
+  if (!peopleState.page) { body.innerHTML = '<p class="pp-muted">Loading…</p>'; return; }
+  const { person, manager, reports, canSetManager } = peopleState.page;
+  const mine = Number(person.id) === Number(state.user.id);
+  const color = /^#[0-9a-fA-F]{6}$/.test(person.avatarColor || '') ? person.avatarColor : '#6B21A8';
+  const empty = !person.about && !person.sections.length && !person.links.length;
+  const personCard = (p) => `<button type="button" class="pp-mini" data-person="${p.id}">${peopleAvatar(p, 'sm')}<span><strong>${escapeText(p.username)}</strong><em>${escapeText(personLine(p))}</em></span></button>`;
+  body.innerHTML = `
+    <div class="pp-cover" style="background:${color}"></div>
+    <div class="pp-hero">
+      ${peopleAvatar(person, 'xl')}
+      <div class="pp-hero-text">
+        <h2>${escapeText(person.username)} ${presenceDot(person)}</h2>
+        <p>${escapeText(personLine(person)) || '<span class="pp-muted">No title yet</span>'}</p>
+        <p class="pp-muted">${[person.location, [person.statusEmoji, person.statusText].filter(Boolean).join(' ')].filter(Boolean).map(escapeText).join(' · ')}</p>
+      </div>
+      <div class="pp-hero-actions">
+        ${mine ? '<button type="button" class="btn primary" data-edit-page>Edit my page</button>'
+    : `<button type="button" class="btn" data-page-message="${person.id}">+ Message</button><button type="button" class="btn" data-page-huddle="${person.id}">+ Huddle</button>`}
+      </div>
+    </div>
+    <div class="pp-columns">
+      <div class="pp-main">
+        ${person.about ? `<section class="pp-section"><h3>About</h3><p class="pp-text">${escapeText(person.about)}</p></section>` : ''}
+        ${person.sections.map((s) => `<section class="pp-section"><h3>${escapeText(s.title)}</h3><p class="pp-text">${escapeText(s.body)}</p></section>`).join('')}
+        ${empty ? emptyRecordMarkup(mine ? 'Your page is empty' : `${person.username} has not added anything yet`, mine ? 'Use "Edit my page" to add an about text, sections and links.' : 'Their title and contact details show on the right.', 'compact') : ''}
+      </div>
+      <aside class="pp-side">
+        <section class="pp-section">
+          <h3>Contact</h3>
+          ${contactRow('Email', person.email, person.email ? `mailto:${person.email}` : '')}
+          ${contactRow('Phone', person.phone)}
+          ${contactRow('Location', person.location)}
+          ${contactRow('Department', person.department)}
+          ${contactRow('Member since', person.memberSince ? new Date(person.memberSince).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '')}
+        </section>
+        ${person.links.length ? `<section class="pp-section"><h3>Links</h3>${person.links.map((l) => `<a class="pp-link" href="${escapeText(l.url)}" target="_blank" rel="noopener noreferrer">${escapeText(l.label)}</a>`).join('')}</section>` : ''}
+        <section class="pp-section">
+          <h3>Reports to</h3>
+          ${manager ? personCard(manager) : '<p class="pp-muted">No manager set</p>'}
+          ${canSetManager ? `<div class="pp-manager-edit"><select id="page-manager" aria-label="Reports to"><option value="">No manager</option>${peopleState.list.filter((p) => p.id !== person.id).map((p) => `<option value="${p.id}"${manager && manager.id === p.id ? ' selected' : ''}>${escapeText(p.username)}</option>`).join('')}</select><button type="button" class="btn" data-page-set-manager="${person.id}">Save</button></div>` : ''}
+        </section>
+        <section class="pp-section">
+          <h3>Direct reports${reports.length ? ` (${reports.length})` : ''}</h3>
+          ${reports.length ? reports.map(personCard).join('') : '<p class="pp-muted">No direct reports</p>'}
+        </section>
+      </aside>
+    </div>`;
+  paintPeoplePhotos(body);
+}
+
+// ---- editing my own page ----------------------------------------------------------------------
+
+function sectionEditorRow(section = { title: '', body: '' }) {
+  return `<div class="pp-edit-section">
+    <input type="text" maxlength="60" placeholder="Section title (for example Ask me about)" value="${escapeText(section.title)}" data-edit-section-title>
+    <textarea maxlength="1500" rows="3" placeholder="Write something" data-edit-section-body>${escapeText(section.body)}</textarea>
+    <button type="button" class="btn" data-edit-remove>Remove section</button>
+  </div>`;
+}
+
+function linkEditorRow(link = { label: '', url: '' }) {
+  return `<div class="pp-edit-link">
+    <input type="text" maxlength="40" placeholder="Label" value="${escapeText(link.label)}" data-edit-link-label>
+    <input type="text" maxlength="300" placeholder="https://…" value="${escapeText(link.url)}" data-edit-link-url>
+    <button type="button" class="btn" data-edit-remove>Remove</button>
+  </div>`;
+}
+
+function openPageEditor() {
+  const modal = document.getElementById('people-editor-modal');
+  const page = peopleState.page;
+  if (!modal || !page) return;
+  const p = page.person;
+  const hide = p.hide || {};
+  modal.innerHTML = `
+    <div class="modal-header"><h3>Edit my page</h3>
+      <button class="modal-close" id="btn-close-people-editor" type="button" aria-label="Close"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <form id="people-editor-form">
+      <div class="modal-body pp-editor-body">
+        <p class="form-note">Your photo and avatar color are in Profile. Everything here is shown to other employees on your page.</p>
+        <div class="form-group"><label for="pe-title">Job title</label><input id="pe-title" type="text" maxlength="100" value="${escapeText(p.jobTitle)}"></div>
+        <div class="pp-edit-pair">
+          <div class="form-group"><label for="pe-department">Department</label><input id="pe-department" type="text" maxlength="100" value="${escapeText(p.department)}"></div>
+          <div class="form-group"><label for="pe-location">Location</label><input id="pe-location" type="text" maxlength="100" value="${escapeText(p.location)}"></div>
+        </div>
+        <div class="form-group"><label for="pe-phone">Phone</label><input id="pe-phone" type="text" maxlength="40" value="${escapeText(p.phone)}"></div>
+        <div class="form-group"><label for="pe-about">About me</label><textarea id="pe-about" rows="4" maxlength="1500">${escapeText(p.about)}</textarea></div>
+        <h4 class="modal-section-title">My sections</h4>
+        <div id="pe-sections">${p.sections.map((s) => sectionEditorRow(s)).join('')}</div>
+        <button type="button" class="btn" id="btn-pe-add-section">+ Add a section</button>
+        <h4 class="modal-section-title">My links</h4>
+        <div id="pe-links">${p.links.map((l) => linkEditorRow(l)).join('')}</div>
+        <button type="button" class="btn" id="btn-pe-add-link">+ Add a link</button>
+        <h4 class="modal-section-title">Hide from others</h4>
+        <label class="preference-toggle"><input type="checkbox" id="pe-hide-email"${hide.email ? ' checked' : ''}><span>Hide my email</span></label>
+        <label class="preference-toggle"><input type="checkbox" id="pe-hide-phone"${hide.phone ? ' checked' : ''}><span>Hide my phone</span></label>
+        <label class="preference-toggle"><input type="checkbox" id="pe-hide-location"${hide.location ? ' checked' : ''}><span>Hide my location</span></label>
+      </div>
+      <div class="modal-footer"><button class="btn" type="button" id="btn-cancel-people-editor">Cancel</button><button class="btn primary" type="submit">Save my page</button></div>
+    </form>`;
+  openSettingsModal(modal);
+}
+
+async function savePageEditor(event) {
+  event.preventDefault();
+  const modal = document.getElementById('people-editor-modal');
+  const value = (id) => modal.querySelector(`#${id}`).value;
+  const sections = Array.from(modal.querySelectorAll('.pp-edit-section')).map((row) => ({
+    title: row.querySelector('[data-edit-section-title]').value, body: row.querySelector('[data-edit-section-body]').value,
+  })).filter((s) => s.title.trim() || s.body.trim());
+  const links = Array.from(modal.querySelectorAll('.pp-edit-link')).map((row) => ({
+    label: row.querySelector('[data-edit-link-label]').value, url: row.querySelector('[data-edit-link-url]').value,
+  })).filter((l) => l.label.trim() || l.url.trim());
+  const body = {
+    jobTitle: value('pe-title'), department: value('pe-department'), location: value('pe-location'), phone: value('pe-phone'),
+    about: value('pe-about'), sections, links,
+    hide: { email: modal.querySelector('#pe-hide-email').checked, phone: modal.querySelector('#pe-hide-phone').checked, location: modal.querySelector('#pe-hide-location').checked },
+  };
+  try {
+    const res = await api('/api/people/me', { method: 'PUT', body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not save your page');
+    state.user = { ...state.user, jobTitle: data.person.jobTitle };
+    await electronAPI.storeSet('user', state.user);
+    closeSettingsModal();
+    showToast('Your page was saved.', 'success');
+    peopleState.loaded = false;
+    await loadPeople(true);
+    await openPersonPage(state.user.id);
+  } catch (err) {
+    showToast(err.message || 'Could not save your page.', 'error');
+  }
+}
+
+// ---- events ------------------------------------------------------------------------------------
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', async (event) => {
+    const t = event.target;
+    if (!t.closest) return;
+    const tab = t.closest('[data-people-tab]');
+    if (tab) { peopleState.tab = tab.dataset.peopleTab; renderPeople(); return; }
+    const toggle = t.closest('[data-org-toggle]');
+    if (toggle) {
+      const id = Number(toggle.dataset.orgToggle);
+      if (peopleState.collapsed.has(id)) peopleState.collapsed.delete(id); else peopleState.collapsed.add(id);
+      renderPeopleBody();
+      return;
+    }
+    if (t.closest('[data-people-edit-lines]')) { peopleState.editLines = !peopleState.editLines; renderPeople(); return; }
+    if (t.closest('.org-manager-select')) return;
+    const person = t.closest('[data-person]');
+    if (person) { openPersonPage(Number(person.dataset.person)); return; }
+    const profile = t.closest('[data-profile-user]');
+    if (profile) { openPersonPage(Number(profile.dataset.profileUser)); return; }
+    if (t.closest('[data-people-back]')) { peopleState.pageId = null; peopleState.page = null; renderPeople(); return; }
+    if (t.closest('[data-edit-page]')) { openPageEditor(); return; }
+    const message = t.closest('[data-page-message]');
+    if (message) { openDM(Number(message.dataset.pageMessage)); return; }
+    const huddle = t.closest('[data-page-huddle]');
+    if (huddle) { startDirectHuddle(Number(huddle.dataset.pageHuddle)); return; }
+    const setManager = t.closest('[data-page-set-manager]');
+    if (setManager) {
+      const value = document.getElementById('page-manager').value;
+      const ok = await setPersonManager(Number(setManager.dataset.pageSetManager), value === '' ? null : Number(value));
+      if (ok) { showToast('Reporting line saved.', 'success'); openPersonPage(Number(setManager.dataset.pageSetManager)); }
+      return;
+    }
+    // the page editor
+    if (t.closest('#btn-close-people-editor, #btn-cancel-people-editor')) { closeSettingsModal(); return; }
+    if (t.closest('#btn-pe-add-section')) {
+      if (document.querySelectorAll('#pe-sections .pp-edit-section').length >= 8) { showToast('A page can have at most 8 sections.', 'error'); return; }
+      document.getElementById('pe-sections').insertAdjacentHTML('beforeend', sectionEditorRow());
+      return;
+    }
+    if (t.closest('#btn-pe-add-link')) {
+      if (document.querySelectorAll('#pe-links .pp-edit-link').length >= 8) { showToast('A page can have at most 8 links.', 'error'); return; }
+      document.getElementById('pe-links').insertAdjacentHTML('beforeend', linkEditorRow());
+      return;
+    }
+    const remove = t.closest('[data-edit-remove]');
+    if (remove) remove.parentElement.remove();
+  });
+
+  document.addEventListener('input', (event) => {
+    if (event.target.id === 'people-search') { peopleState.query = event.target.value; renderPeopleBody(); }
+  });
+
+  document.addEventListener('change', async (event) => {
+    if (event.target.id === 'people-department') { peopleState.department = event.target.value; renderPeopleBody(); return; }
+    const select = event.target.closest ? event.target.closest('[data-org-manager]') : null;
+    if (select) {
+      const id = Number(select.dataset.orgManager);
+      const ok = await setPersonManager(id, select.value === '' ? null : Number(select.value));
+      if (!ok) { const person = peopleState.list.find((p) => p.id === id); select.value = person && person.managerId ? String(person.managerId) : ''; }
+      else renderPeopleBody();
+    }
+  });
+
+  document.addEventListener('submit', (event) => {
+    if (event.target.id === 'people-editor-form') savePageEditor(event);
+  });
+}

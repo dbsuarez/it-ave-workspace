@@ -243,10 +243,7 @@ Priority order, by user-visible value:
 
 ### Requested, not started (2026-11-12)
 
-- **Org chart** - a maker and a viewer, so employees can see who reports to whom. Needs a reporting-line
-  field on profiles (manager), a chart view, and an editor for whoever may change it.
-- **Employee page** - a dedicated page for each employee, which they can customize for other employees to
-  view (the profile card is the starting point: job title, photo, status, email).
+- ~~Org chart and employee pages~~ - done (People, under More).
 - Notifications while the app is closed (today they work while it is open or in the background).
 
 Read receipts currently cover the latest message in each channel. They do not provide a

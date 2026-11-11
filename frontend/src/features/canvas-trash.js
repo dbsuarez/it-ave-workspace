@@ -24,7 +24,7 @@ const canvasTrash = (() => {
       if (!res.ok) throw new Error(data.error || 'Could not load deleted canvases');
       const head = `<div class="canvas2-trash-head"><button type="button" class="btn" id="btn-canvas2-trash-back">← Back</button><strong>Recently deleted</strong></div>`;
       if (!data.canvases.length) {
-        trash.innerHTML = `${head}<p class="canvas2-list-empty">Nothing here. Canvases you delete stay for ${data.retentionDays} days.</p>`;
+        trash.innerHTML = head + emptyRecordMarkup('Nothing deleted', `Canvases you delete stay here for ${data.retentionDays} days.`, 'compact');
         return;
       }
       trash.innerHTML = head + data.canvases.map((c) => `
