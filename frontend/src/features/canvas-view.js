@@ -87,6 +87,7 @@ async function cvwShow(which, mode) {
     container.hidden = true;
     editor.hidden = false;
     if (button) { button.textContent = 'Read'; button.title = 'Show the finished canvas'; }
+    if (typeof canvasEditorSync === 'function') canvasEditorSync();
     editor.focus({ preventScroll: true });
     return;
   }

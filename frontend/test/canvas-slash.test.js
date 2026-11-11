@@ -124,3 +124,21 @@ test('image: the uploaded picture becomes its own block', () => {
   assert.equal(r.selectStart, r.value.length, 'cursor lands after the picture');
   assert.equal(insertImageBlock('', 0, 1, 'we](ird)[.png').value, '![we  ird](file:1)\n', 'brackets in a name cannot break the syntax');
 });
+
+const { CANVAS_TEMPLATES } = require('../src/features/canvas-slash');
+
+test('templates are well formed Markdown starters', () => {
+  assert.ok(CANVAS_TEMPLATES.length >= 4);
+  const ids = new Set();
+  for (const tpl of CANVAS_TEMPLATES) {
+    assert.ok(!ids.has(tpl.id), 'unique id');
+    ids.add(tpl.id);
+    assert.match(tpl.content, /^# \S/, `${tpl.id} starts with a heading`);
+    assert.ok(tpl.content.endsWith('\n'));
+    assert.ok(tpl.content.length < 2000);
+    assert.ok(!/<script|javascript:/i.test(tpl.content));
+  }
+  // a table template has a header separator row, which the reading view needs
+  const withTable = CANVAS_TEMPLATES.filter((tpl) => tpl.content.includes('| --- |'));
+  assert.ok(withTable.length >= 1);
+});

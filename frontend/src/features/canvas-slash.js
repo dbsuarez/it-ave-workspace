@@ -175,6 +175,30 @@ function wrapSelection(value, start, end, kind) {
   };
 }
 
+// Starter canvases offered on an empty canvas. Plain Markdown, so everything stays editable.
+const CANVAS_TEMPLATES = [
+  {
+    id: 'meeting', label: 'Meeting notes', hint: 'Agenda, notes, action items',
+    content: '# Meeting notes\n\n**Date:** (today)\n\n**Attendees:** (names)\n\n## Agenda\n\n- First topic\n- Second topic\n\n## Notes\n\nWrite what was discussed here.\n\n## Action items\n\n- [ ] Who does what, by when\n',
+  },
+  {
+    id: 'project', label: 'Project plan', hint: 'Goal, milestones, tasks, risks',
+    content: '# Project plan\n\n> [!info] Goal\n> One sentence on what done looks like.\n\n## Milestones\n\n| Milestone | Owner | Due |\n| --- | --- | --- |\n| First milestone | (name) | (date) |\n\n## Tasks\n\n- [ ] First task\n- [ ] Second task\n\n## Risks\n\n> [!warning] What could go wrong, and what is the plan?\n',
+  },
+  {
+    id: 'actions', label: 'Action items', hint: 'A simple to-do checklist',
+    content: '# Action items\n\n- [ ] First item\n- [ ] Second item\n- [ ] Third item\n',
+  },
+  {
+    id: 'incident', label: 'Incident report', hint: 'Impact, timeline, cause, follow-ups',
+    content: '# Incident report\n\n> [!danger] Summary\n> What happened, in one or two sentences.\n\n## Impact\n\nWho or what was affected, and for how long.\n\n## Timeline\n\n| Time | Event |\n| --- | --- |\n| (time) | First sign of the problem |\n| (time) | Fixed |\n\n## Root cause\n\nWhy it happened.\n\n## Follow-ups\n\n- [ ] Prevent it from happening again\n',
+  },
+  {
+    id: 'faq', label: 'Channel FAQ', hint: 'Common questions and answers',
+    content: '# Frequently asked questions\n\n## What is this channel for?\n\nAnswer here.\n\n## Who do I ask for help?\n\nAnswer here.\n\n## Where do I find the documents?\n\nAnswer here.\n',
+  },
+];
+
 // ---------------------------------------------------------------------------------------------
 // DOM layer
 // ---------------------------------------------------------------------------------------------
@@ -511,6 +535,43 @@ function attachCanvasToolbar(textarea, modeButton, getCanvasId) {
   sync();
 }
 
+// An empty canvas in Edit mode offers the templates above. Picking one fills the canvas (autosave does the rest).
+function attachCanvasTemplates(textarea) {
+  if (!textarea || textarea.dataset.templatesAttached) return;
+  textarea.dataset.templatesAttached = '1';
+  const strip = document.createElement('div');
+  strip.className = 'canvas-templates';
+  strip.hidden = true;
+  strip.innerHTML = `<span class="canvas-templates-title">Start from a template</span>${CANVAS_TEMPLATES.map((tpl) => `
+    <button type="button" class="canvas-template" data-template="${tpl.id}"><strong>${tpl.label}</strong><span>${tpl.hint}</span></button>`).join('')}`;
+  textarea.parentNode.insertBefore(strip, textarea);
+
+  const sync = () => {
+    strip.hidden = textarea.hidden || textarea.readOnly || textarea.value.trim() !== '';
+  };
+  strip.addEventListener('mousedown', (event) => { if (event.target.closest('button')) event.preventDefault(); });
+  strip.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-template]');
+    const tpl = button && CANVAS_TEMPLATES.find((t) => t.id === button.dataset.template);
+    if (!tpl || textarea.value.trim() !== '') return;
+    textarea.value = tpl.content;
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.focus();
+    textarea.setSelectionRange(tpl.content.length, tpl.content.length);
+  });
+  textarea.addEventListener('input', sync);
+  new MutationObserver(sync).observe(textarea, { attributes: true, attributeFilter: ['hidden', 'readonly'] });
+  canvasTemplateSyncs.push(sync);
+  sync();
+}
+
+const canvasTemplateSyncs = [];
+
+// canvas-view.js calls this after it loads a canvas into an editor or switches to Edit.
+function canvasEditorSync() {
+  canvasTemplateSyncs.forEach((sync) => sync());
+}
+
 if (typeof document !== 'undefined') {
   // Scripts load at the end of <body>, so both editors already exist.
   const sheet = document.getElementById('canvas-sheet-editor');
@@ -522,11 +583,13 @@ if (typeof document !== 'undefined') {
   attachCanvasSlash(standalone, standaloneId);
   attachCanvasToolbar(sheet, document.getElementById('btn-canvas-sheet-mode'), sheetId);
   attachCanvasToolbar(standalone, document.getElementById('btn-canvas2-mode'), standaloneId);
+  attachCanvasTemplates(sheet);
+  attachCanvasTemplates(standalone);
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SLASH_ITEMS, filterSlashItems, slashTrigger, parseSlashLine, applySlashItem, continueList, wrapSelection, lineAt,
-    toolbarAction, TOOLBAR_BUTTONS, insertImageBlock,
+    toolbarAction, TOOLBAR_BUTTONS, insertImageBlock, CANVAS_TEMPLATES,
   };
 }
