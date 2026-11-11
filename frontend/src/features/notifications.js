@@ -18,6 +18,7 @@ const NOTIFICATION_LABELS = [
   ['reactions', 'Reactions to your messages'],
   ['channelMessages', 'Every new message in my channels'],
   ['desktop', 'Show a desktop notification when the app is in the background'],
+  ['sound', 'Play a sound for notifications and incoming calls'],
 ];
 
 const DND_CHOICES = [
@@ -33,7 +34,7 @@ function userSettings() {
     state.settings = {
       notifications: {
         mentions: true, directMessages: true, replies: true, reactions: true,
-        channelMessages: false, desktop: true,
+        channelMessages: false, desktop: true, sound: true,
       },
       dndUntil: null,
       statusText: '',
@@ -50,7 +51,7 @@ function isDndActive() {
 
 // Single entry point for anything that wants the user's attention.
 // Returns true when a notification was actually shown.
-function notifyUser(kind, text, payload) {
+function notifyUser(kind, text, payload, options = {}) {
   const settings = userSettings();
   const key = NOTIFICATION_KINDS[kind];
   state.notificationLog = state.notificationLog || [];
@@ -63,9 +64,11 @@ function notifyUser(kind, text, payload) {
 
   showToast(text);
   entry.shown = true;
+  if (options.sound !== false) entry.sound = playNotificationSound(kind);
   if (settings.notifications.desktop && !document.hasFocus() && typeof Notification === 'function') {
     try {
-      const notification = new Notification('IT Avenue Workspace', { body: text, silent: false });
+      // silent: the app plays its own sound (above), so the system does not add a second one
+      const notification = new Notification('IT Avenue Workspace', { body: text, silent: true });
       notification.onclick = () => {
         window.focus();
         if ((payload?.channelId && payload?.messageId) || payload?.canvasId) openActivityItem(payload);
@@ -113,6 +116,7 @@ function fillNotificationSettingsForm() {
         <input type="checkbox" data-notification-pref="${key}"${settings.notifications[key] ? ' checked' : ''}>
         <span>${label}</span>
       </label>`).join('')}
+    ${soundPreferencesMarkup()}
     <div class="form-group notification-pause">
       <label for="notification-dnd">Pause notifications</label>
       <select id="notification-dnd">

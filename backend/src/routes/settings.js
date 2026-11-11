@@ -12,6 +12,7 @@ const NOTIFICATION_DEFAULTS = Object.freeze({
   reactions: true,
   channelMessages: false,
   desktop: true,
+  sound: true,
 });
 const MAX_DND_MINUTES = 7 * 24 * 60;
 

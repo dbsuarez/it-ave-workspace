@@ -136,6 +136,24 @@ someone else, or after a minute, is a new entry. A failure to record history nev
 | GET | `/api/canvas/:id/revisions/:revision` | One version with its text (viewer access) |
 | POST | `/api/canvas/:id/revisions/:revision/restore` | Make it current as a NEW version, optional `baseRevision` (editor access). A restore always gets its own entry, so the version it replaces can be restored again |
 
+**Notifications.** A save that adds an `@name` to a canvas, a comment that mentions someone, and a reply to
+someone's comment each notify the person (only if they can read the canvas, never the actor):
+`backend/src/canvasMentions.js` stores a row in `canvas_mentions` (source `content`, `comment` or `reply`)
+and emits `canvas_activity` to `user_<id>`. `GET /api/activity` merges these into the feed (as
+`canvas_mention` items; they count as Mentions, replies as Replies) and drops them when the canvas is
+deleted or access is lost. Only mentions *added* by an edit notify, so autosave never repeats one.
+
+**Profile photos and job title.** `PUT /api/users/me/photo` (multipart `file`, PNG or JPEG, 2 MB), `DELETE
+/api/users/me/photo`, `GET /api/users/:id/photo` (signed-in; guests only for people they share a channel
+with; `ETag` and a one-day private cache). The user list and `GET /api/auth/me` return `photoVersion` (a
+number that changes when the photo does, or null) and `jobTitle`; `PATCH /api/auth/me` accepts `jobTitle`
+(100 characters).
+
+**One-to-one huddles.** `huddle:join` accepts a channel id or `{ withUserId }`; a direct call is keyed
+`dm:<low>-<high>`, holds two people and is authorized with the same rules as direct messages. The first
+person in emits `huddle:invite` to the other (`huddle:invite-cancelled` when they leave first). The
+notification settings gained `sound` (default true).
+
 **Trash.** Deleting a *personal* canvas sets `deleted_at` instead of removing it, for
 `CANVAS_TRASH_DAYS` (default 7). A deleted canvas does not exist for any other endpoint (404), its
 collaborators lose access, and its comments, history and pictures are kept. `backend/src/canvasTrash.js`

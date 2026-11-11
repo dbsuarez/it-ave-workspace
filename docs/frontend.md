@@ -142,6 +142,38 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
 - **Rebuilding the bundle.** After changing `editor-src/` or upgrading `@tiptap/*`, run
   `npm run editor` in `frontend/` and commit `src/vendor/canvas-editor.js`.
 
+## Notifications and sounds
+
+Notifications follow the account's settings (Preferences): mentions, direct and group messages, replies,
+reactions, every channel message (off by default), desktop notifications when the app is in the
+background, and Do Not Disturb. Each one is a toast, an entry in Activity, an unread badge and, in the
+background, a system notification. Canvas @mentions, comments that mention you and replies to your
+comments arrive the same way (`canvas_activity` socket event, Activity feed, `canvas_mentions` table).
+
+**Sounds** (`features/notification-sound.js`) are made with the Web Audio API, so there are no sound
+files. A different sound plays for a message, a mention, a reply, a reaction, a reminder and an incoming
+call (a ring that repeats until answered, declined, cancelled or 60 seconds pass). The default is **Chime**
+at 70 percent and it plays out of the box. In Preferences each person can choose another style (Bell,
+Marimba, Pop, Soft, Digital), set the volume and play a sample before saving; the choice is kept on that
+computer (`preferences:<id>`). The account setting "Play a sound for notifications and incoming calls"
+turns sounds off, and Do Not Disturb silences them. The system notification is sent silent so the
+app's own sound is not doubled. A burst of messages makes one sound (0.7 s gap).
+
+## One-to-one huddles
+
+The **Huddle** button on a profile card (or answering a call) starts a huddle between two people:
+the same audio, camera and screen share as a channel huddle, with the call keyed to the pair
+(`dm:<low>-<high>`). The first person in rings the other: a banner with **Join** and **Decline**, a
+toast, a system notification and a repeating ring (`features/direct-huddle.js`). Hanging up before an
+answer, declining, or 60 seconds stops the ringing. Guests can only call people they share a channel with.
+
+## Profile photos
+
+Profile has an **Upload photo** button. The picture is cropped to a square and shrunk to 256 px in the
+app, then uploaded (PNG or JPEG, 2 MB at most). Photos are fetched with the signed-in request and cached
+as blob URLs per person and version (`features/profile-photo.js`); they show on your avatar, in Profile and
+on mention cards, and are included in PDF and Word exports of a card.
+
 ## Canvas: export
 
 The **Export** menu in the canvas header saves the canvas as a **PDF**, a **Word document (.docx)** or a

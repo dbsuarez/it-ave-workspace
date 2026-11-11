@@ -247,7 +247,6 @@ Priority order, by user-visible value:
   field on profiles (manager), a chart view, and an editor for whoever may change it.
 - **Employee page** - a dedicated page for each employee, which they can customize for other employees to
   view (the profile card is the starting point: job title, photo, status, email).
-- Direct (one-to-one) huddles, so the profile card can offer a **Huddle** button as well as **Message**.
 - Notifications while the app is closed (today they work while it is open or in the background).
 
 Read receipts currently cover the latest message in each channel. They do not provide a

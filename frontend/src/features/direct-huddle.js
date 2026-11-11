@@ -11,6 +11,7 @@ let incomingHuddle = null;
 let incomingHuddleTimer = null;
 
 function hideHuddleInvite() {
+  stopRinging();
   clearTimeout(incomingHuddleTimer);
   incomingHuddleTimer = null;
   incomingHuddle = null;
@@ -56,7 +57,8 @@ function handleHuddleInvite(invite) {
   clearTimeout(incomingHuddleTimer);
   incomingHuddleTimer = setTimeout(hideHuddleInvite, HUDDLE_RING_SECONDS * 1000);
   // a toast, and a desktop notification when the app is in the background (not while Do Not Disturb is on)
-  notifyUser('dm', `${invite.from.username} is calling you on a huddle`);
+  notifyUser('dm', `${invite.from.username} is calling you on a huddle`, undefined, { sound: false });
+  startRinging(); // the ring (not a message chime) plays until answered, declined, cancelled or timed out
 }
 
 // The caller hung up before anyone answered.

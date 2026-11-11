@@ -6351,3 +6351,15 @@ h4.cv-h { font-size: 15px; }
 .cw-editor .ProseMirror th > p > .cw-image {
   margin: 2px 0;
 }
+
+/* Notification sound choices in Preferences */
+.sound-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sound-volume-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--purple);
+}

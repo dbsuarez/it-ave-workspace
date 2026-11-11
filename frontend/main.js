@@ -7,6 +7,9 @@ const os = require('os');
 const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl, validateExportRequest, exportFileName, EXPORT_FORMATS } = require('./ipc-policy');
 const { buildPrintHtml } = require('./export/pdf-html');
 
+// Notification sounds and calls must be able to play without a click first.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // Create store for persisting auth token and settings
 const store = new Store();
 

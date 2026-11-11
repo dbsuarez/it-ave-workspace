@@ -126,6 +126,8 @@ let state = {
   preferences: {
     theme: 'light',
     enterToSend: true,
+    soundTheme: 'chime',   // the default notification sound
+    soundVolume: 70,
   },
   huddle: {
     channelId: null,
@@ -649,6 +651,8 @@ async function loadPreferences() {
     state.preferences = {
       theme: saved.theme === 'dark' ? 'dark' : 'light',
       enterToSend: typeof saved.enterToSend === 'boolean' ? saved.enterToSend : true,
+      soundTheme: soundThemeId(saved.soundTheme),
+      soundVolume: soundVolumePercent(saved.soundVolume === undefined ? DEFAULT_SOUND_VOLUME : saved.soundVolume),
     };
   }
   applyPreferences();
@@ -663,6 +667,8 @@ async function savePreferences(event) {
   state.preferences = {
     theme: document.getElementById('preference-theme').value === 'dark' ? 'dark' : 'light',
     enterToSend: document.getElementById('preference-enter-to-send').checked,
+    soundTheme: soundThemeId(document.getElementById('sound-theme')?.value),
+    soundVolume: soundVolumePercent(document.getElementById('sound-volume')?.value),
   };
   try {
     await electronAPI.storeSet(preferenceStorageKey(), state.preferences);

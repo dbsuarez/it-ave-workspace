@@ -279,6 +279,7 @@ function handleReminderDue({ reminder }) {
   if (index === -1) later.reminders.push(reminder); else later.reminders[index] = reminder;
   later.dueUnseen = (later.dueUnseen || 0) + 1;
   showToast(`Reminder: ${reminderSentence(reminder)}`);
+  if (typeof playNotificationSound === 'function') playNotificationSound('reminder');
   if (!document.hasFocus() && typeof Notification === 'function') {
     try { new Notification('Reminder', { body: reminderSentence(reminder) }); } catch (err) { /* ignore */ }
   }
