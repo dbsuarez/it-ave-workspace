@@ -115,7 +115,7 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
 - **Pictures.** `/image` or the Image button uploads to the canvas; so does pasting a picture or
   dropping an image file onto the page. The page fetches each picture with the signed-in request and
   shows it from a blob URL. There is never a public URL. Click a picture to select it: a bar offers
-  size presets (25, 50, 75 percent, full), left, centre or right alignment, a description (alt text),
+  size presets (25, 50, 75 percent, full), left, center or right alignment, a description (alt text),
   Replace and Delete, and a corner handle resizes it by dragging. Size and alignment are saved in
   the standard Markdown image title, for example `![name](file:7 "50% center")`.
 - **Tables.** With the cursor in a table a bar offers insert row above or below, insert column left

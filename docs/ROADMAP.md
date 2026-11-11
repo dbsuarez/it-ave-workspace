@@ -162,7 +162,7 @@ Verified working:
 
 Fixed during this pass:
 
-- Empty states in Notes, Files, and Activity were not vertically centred: the CSS targeted
+- Empty states in Notes, Files, and Activity were not vertically centered: the CSS targeted
   `.view-notes` / `.view-files` / `.view-activity` classes that do not exist (the views use IDs).
 - `window.prompt()` is not supported in Electron, so reporting a message, applying a timeout, and
   moderator attachment deletion silently did nothing. They now use an in-app text dialog

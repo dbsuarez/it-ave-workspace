@@ -122,7 +122,7 @@ const canvasWysiwyg = (() => {
     inst.imageBar.hidden = true;
     inst.imageBar.innerHTML = [
       ['width', '25', 'S', 'Small (25%)'], ['width', '50', 'M', 'Medium (50%)'], ['width', '75', 'L', 'Large (75%)'], ['width', '100', 'Full', 'Full width'],
-      ['sep'], ['align', 'left', '\u21E4', 'Align left'], ['align', 'center', '\u2194', 'Centre'], ['align', 'right', '\u21E5', 'Align right'],
+      ['sep'], ['align', 'left', '\u21E4', 'Align left'], ['align', 'center', '\u2194', 'Center'], ['align', 'right', '\u21E5', 'Align right'],
       ['sep'], ['action', 'alt', 'Description', 'Describe the picture'], ['action', 'replace', 'Replace', 'Replace with another picture'], ['action', 'delete', 'Delete', 'Remove the picture'],
     ].map(([kind, value, label, title]) => (kind === 'sep'
       ? '<span class="canvas-toolbar-sep" aria-hidden="true"></span>'
@@ -134,7 +134,7 @@ const canvasWysiwyg = (() => {
       ['rowBefore', '\u2191 Row', 'Insert a row above'], ['rowAfter', '\u2193 Row', 'Insert a row below'], ['rowDelete', '\u2212 Row', 'Delete this row'],
       ['sep'], ['colBefore', '\u2190 Col', 'Insert a column to the left'], ['colAfter', '\u2192 Col', 'Insert a column to the right'], ['colDelete', '\u2212 Col', 'Delete this column'],
       ['sep'], ['header', 'Header row', 'Turn the header row on or off'],
-      ['sep'], ['alignLeft', '\u21E4', 'Align this column left'], ['alignCenter', '\u2194', 'Centre this column'], ['alignRight', '\u21E5', 'Align this column right'],
+      ['sep'], ['alignLeft', '\u21E4', 'Align this column left'], ['alignCenter', '\u2194', 'Center this column'], ['alignRight', '\u21E5', 'Align this column right'],
       ['sep'], ['tableDelete', 'Delete table', 'Delete the whole table'],
     ].map(([id, label, title]) => (id === 'sep'
       ? '<span class="canvas-toolbar-sep" aria-hidden="true"></span>'
