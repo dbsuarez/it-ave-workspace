@@ -564,6 +564,7 @@ function setupEventListeners() {
 
   setupActivityFeatures();
   setupNotificationFeatures();
+  setupProfilePhoto();
   setupGroupFeatures();
   setupLaterFeatures();
   setupAdminFeatures();
@@ -597,7 +598,9 @@ function showApp() {
   if (els.userAvatar) {
     els.userAvatar.textContent = state.user.username.charAt(0).toUpperCase();
     els.userAvatar.parentElement.style.backgroundColor = state.user.avatarColor || '';
+    paintOwnAvatar();
   }
+  refreshOwnProfile();
   loadPreferences().catch((err) => console.error('Load preferences error:', err));
 }
 
@@ -616,6 +619,7 @@ function openProfileModal() {
   document.getElementById('profile-username').value = state.user.username || '';
   document.getElementById('profile-avatar-color').value = state.user.avatarColor || '#6b21a8';
   document.getElementById('profile-job-title').value = state.user.jobTitle || '';
+  paintProfilePhotoPreview();
   openSettingsModal(els.profileModal);
 }
 

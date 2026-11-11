@@ -514,6 +514,10 @@ CREATE TABLE IF NOT EXISTS canvas_mentions (
 );
 CREATE INDEX IF NOT EXISTS idx_canvas_mentions_user ON canvas_mentions(user_id, created_at DESC);
 
+-- Profile photo; mirrors backend/src/migrations.js.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_file VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMP WITH TIME ZONE;
+
 -- Job title on profiles; mirrors backend/src/migrations.js.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) NOT NULL DEFAULT '';
 

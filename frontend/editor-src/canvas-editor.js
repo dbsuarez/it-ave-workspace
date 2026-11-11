@@ -317,6 +317,16 @@ function mentionDom(username) {
     avatar.className = 'cw-mention-avatar';
     avatar.style.background = color;
     avatar.textContent = initial;
+    // a profile photo replaces the initial once it has been fetched (the app provides canvasUserPhoto)
+    if (person.photoVersion && typeof canvasUserPhoto === 'function') {
+      Promise.resolve(canvasUserPhoto(person)).then((url) => {
+        if (!url) return;
+        avatar.style.backgroundImage = `url("${url}")`;
+        avatar.style.backgroundSize = 'cover';
+        avatar.style.backgroundPosition = 'center';
+        avatar.textContent = '';
+      }).catch(() => {});
+    }
     const body = document.createElement('span');
     body.className = 'cw-mention-body';
 

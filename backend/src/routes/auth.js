@@ -218,7 +218,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at, job_title FROM users WHERE id = $1',
+      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at, job_title, photo_file, photo_updated_at FROM users WHERE id = $1',
       [req.user.userId]
     );
 
@@ -238,6 +238,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         lastSeen: user.last_seen,
         createdAt: user.created_at,
         jobTitle: user.job_title || '',
+        photoVersion: user.photo_file && user.photo_updated_at ? new Date(user.photo_updated_at).getTime() : null,
       },
     });
   } catch (err) {

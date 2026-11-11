@@ -154,6 +154,10 @@ module.exports = [
    )`,
   'CREATE INDEX IF NOT EXISTS idx_canvas_mentions_user ON canvas_mentions(user_id, created_at DESC)',
 
+  // Profile photo: the stored file name and when it last changed (the client uses that as a cache key)
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_file VARCHAR(255)',
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMP WITH TIME ZONE',
+
   // Job title shown on profile cards (for example when someone is mentioned in a canvas)
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) NOT NULL DEFAULT ''",
 

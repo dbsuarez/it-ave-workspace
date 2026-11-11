@@ -638,6 +638,17 @@
       <form id="profile-form">
         <div class="modal-body">
           <div class="form-group">
+            <label>Photo</label>
+            <div class="profile-photo-row">
+              <span class="profile-photo-preview" id="profile-photo-preview" aria-hidden="true"></span>
+              <div class="profile-photo-actions">
+                <button class="btn" type="button" id="btn-profile-photo">Upload photo</button>
+                <button class="btn" type="button" id="btn-profile-photo-remove">Remove</button>
+                <input id="profile-photo-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
             <label for="profile-username">Username</label>
             <input id="profile-username" type="text" minlength="2" maxlength="50" required>
           </div>
@@ -1032,6 +1043,7 @@
   <script src="features/canvas-wysiwyg.js"></script>
   <script src="features/export-prepare.js"></script>
   <script src="features/canvas-export.js"></script>
+  <script src="features/profile-photo.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

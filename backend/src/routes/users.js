@@ -1,15 +1,117 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
+const config = require('../config');
 const { ensureDirectMessageAccess } = require('../security');
+const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
+
+// ---- profile photos -----------------------------------------------------------------------------
+// One small picture per person (PNG or JPEG, 2 MB at most; the app crops and shrinks it first). It is
+// stored in the uploads folder under a name made only from the user's id, and served to signed-in people
+// who may see that user (everyone, except that guests only see people they share a channel with).
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+const PHOTO_EXTENSIONS = new Set(['png', 'jpg', 'jpeg']);
+
+const photoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(config.UPLOAD_DIR, { recursive: true });
+      cb(null, config.UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+      const ext = (/\.([A-Za-z0-9]+)$/.exec(file.originalname || '') || [])[1].toLowerCase();
+      cb(null, `avatar-${req.user.userId}-${Date.now()}.${ext}`);
+    },
+  }),
+  limits: { fileSize: MAX_PHOTO_BYTES },
+  fileFilter: (req, file, cb) => {
+    const ext = (/\.([A-Za-z0-9]+)$/.exec(file.originalname || '') || [])[1];
+    if (!ext || !PHOTO_EXTENSIONS.has(ext.toLowerCase())) return cb(new Error('A profile photo must be a PNG or JPEG picture'));
+    cb(null, true);
+  },
+});
+
+const photoVersion = (row) => (row.photo_file && row.photo_updated_at ? new Date(row.photo_updated_at).getTime() : null);
+const removeStoredPhoto = (name) => (name ? fs.promises.unlink(path.join(config.UPLOAD_DIR, name)).catch(() => {}) : Promise.resolve());
+
+router.put('/me/photo', authenticateToken, (req, res) => {
+  photoUpload.single('file')(req, res, async (err) => {
+    const discard = () => (req.file ? fs.promises.unlink(req.file.path).catch(() => {}) : Promise.resolve());
+    if (err) {
+      const tooBig = err.code === 'LIMIT_FILE_SIZE';
+      return res.status(400).json({ error: tooBig ? 'A profile photo can be at most 2MB' : (err.message || 'Invalid upload') });
+    }
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No picture uploaded' });
+      const problem = await checkUploadedFile(req.file.path, req.file.originalname);
+      if (problem) { await discard(); return res.status(400).json({ error: problem }); }
+      const previous = (await query('SELECT photo_file FROM users WHERE id = $1', [req.user.userId])).rows[0];
+      const saved = await query(
+        'UPDATE users SET photo_file = $1, photo_updated_at = NOW() WHERE id = $2 RETURNING photo_file, photo_updated_at',
+        [req.file.filename, req.user.userId]
+      );
+      if (previous && previous.photo_file && previous.photo_file !== req.file.filename) await removeStoredPhoto(previous.photo_file);
+      res.json({ photoVersion: photoVersion(saved.rows[0]) });
+    } catch (uploadErr) {
+      await discard();
+      console.error('Profile photo upload error:', uploadErr);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+});
+
+router.delete('/me/photo', authenticateToken, async (req, res) => {
+  try {
+    const previous = (await query('SELECT photo_file FROM users WHERE id = $1', [req.user.userId])).rows[0];
+    await query('UPDATE users SET photo_file = NULL, photo_updated_at = NULL WHERE id = $1', [req.user.userId]);
+    if (previous) await removeStoredPhoto(previous.photo_file);
+    res.json({ photoVersion: null });
+  } catch (err) {
+    console.error('Remove profile photo error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/:userId/photo', authenticateToken, async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isSafeInteger(userId) || userId < 1) return res.status(400).json({ error: 'A valid user ID is required' });
+    const found = await query(
+      `SELECT u.photo_file, u.photo_updated_at FROM users u
+       WHERE u.id = $2 AND u.photo_file IS NOT NULL AND (
+         u.id = $1
+         OR NOT EXISTS (SELECT 1 FROM users me WHERE me.id = $1 AND me.account_type = 'guest')
+         OR EXISTS (SELECT 1 FROM channel_members a JOIN channel_members b ON a.channel_id = b.channel_id
+                    WHERE a.user_id = $1 AND b.user_id = u.id))`,
+      [req.user.userId, userId]
+    );
+    const row = found.rows[0];
+    if (!row) return res.status(404).json({ error: 'No photo' });
+    const file = path.join(config.UPLOAD_DIR, row.photo_file);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'No photo' });
+    const etag = `"${photoVersion(row)}"`;
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', mimeForFilename(row.photo_file));
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    fs.createReadStream(file).pipe(res);
+  } catch (err) {
+    console.error('Get profile photo error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Get all users (for DM list, etc.)
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(
       `SELECT id, username, email, avatar_color, status, last_seen, created_at,
-              status_text, status_emoji, dnd_until, account_type, job_title
+              status_text, status_emoji, dnd_until, account_type, job_title, photo_file, photo_updated_at
        FROM users
        WHERE id != $1
          AND account_type <> 'bot'
@@ -38,6 +140,7 @@ router.get('/', authenticateToken, async (req, res) => {
         statusEmoji: u.status_emoji || '',
         accountType: u.account_type || 'member',
         jobTitle: u.job_title || '',
+        photoVersion: photoVersion(u),
         dndUntil: u.dnd_until && new Date(u.dnd_until) > new Date() ? u.dnd_until : null,
       })),
     });

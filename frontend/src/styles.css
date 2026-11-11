@@ -6280,3 +6280,36 @@ h4.cv-h { font-size: 15px; }
 .cw-export-wrap .cw-menu-toggle[aria-expanded="true"] {
   border-color: var(--purple);
 }
+
+/* Profile photo */
+.profile-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile-photo-preview {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
+  background-size: cover;
+  background-position: center;
+}
+
+.profile-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-photo-actions .btn[hidden] { display: none; }
+
+#user-avatar.has-photo,
+.has-photo { background-repeat: no-repeat; }
