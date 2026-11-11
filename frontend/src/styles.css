@@ -4402,3 +4402,285 @@ body.theme-dark .huddle-btn.media.active {
   resize: none;
   outline: none;
 }
+
+/* Canvas 2.0 view (full-screen personal canvas manager) */
+.view-canvas2 {
+  display: none;
+  grid-template-columns: 300px 1fr;
+  flex-direction: row;
+}
+
+.view-canvas2.active {
+  display: grid;
+}
+
+.canvas2-list-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--muted-bg);
+  border-right: 1px solid var(--border);
+  min-height: 0;
+}
+
+.canvas2-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.canvas2-list-header h2 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.canvas2-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.canvas2-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.canvas2-list-item:hover {
+  background: var(--surface);
+}
+
+.canvas2-list-item.active {
+  background: var(--purple-soft, rgba(124, 58, 237, 0.16));
+}
+
+.canvas2-list-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas2-list-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.canvas2-editor-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.canvas2-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.canvas2-editor-header input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 800;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.canvas2-editor-header input[type="text"]:focus {
+  outline: 1px solid var(--purple);
+  background: var(--muted-bg);
+}
+
+.canvas2-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.canvas2-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 56px;
+  text-align: right;
+}
+
+.canvas2-editor {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  background: var(--surface);
+  padding: 18px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.canvas2-empty-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 48px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.canvas2-empty-pane h2 {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.canvas2-empty-pane p {
+  max-width: 520px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.canvas2-share-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 4px;
+}
+
+.canvas2-share-section h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.canvas2-share-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvas2-share-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--muted-bg);
+}
+
+.canvas2-share-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.canvas2-share-row-role {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.canvas2-share-row-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.canvas2-share-row-remove:hover {
+  color: var(--danger);
+  background: rgba(224, 82, 99, 0.08);
+}
+
+.canvas2-share-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.canvas2-share-add input,
+.canvas2-share-add select {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.canvas2-share-link-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.canvas2-share-link-actions select {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.canvas2-share-link-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.canvas2-share-link-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--muted-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.canvas2-share-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 8px 0 0;
+}

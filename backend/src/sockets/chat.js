@@ -183,6 +183,25 @@ module.exports = (io, socket) => {
     }
   });
 
+  socket.on('join_canvas', async (canvasId) => {
+    if (!currentUserId) return;
+    try {
+      const { query } = require('../db');
+      const { ensureCanvasAccess } = require('../security');
+      await ensureCanvasAccess(query, currentUserId, canvasId, 'viewer');
+      socket.join(`canvas:${canvasId}`);
+      socket.emit('joined_canvas', { canvasId });
+    } catch (err) {
+      socket.emit('canvas_error', { canvasId, error: err.message || 'Canvas access denied' });
+    }
+  });
+
+  socket.on('leave_canvas', (canvasId) => {
+    if (!currentUserId) return;
+    socket.leave(`canvas:${canvasId}`);
+    socket.emit('left_canvas', { canvasId });
+  });
+
   // Leave a channel room
   socket.on('leave_channel', (channelId) => {
     if (!currentUserId) return;

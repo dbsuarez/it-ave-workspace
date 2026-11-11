@@ -1006,6 +1006,26 @@ function connectSocket() {
     }
   });
   state.socket.on('user_status_updated', handleUserStatusUpdated);
+  state.socket.on('canvas_updated', (event) => {
+    const incomingCanvasId = Number(event.canvasId);
+    const remote = event.content;
+    // Standalone canvas manager editor
+    const activeId = Number(canvas2StandaloneState.activeId || 0);
+    if (activeId && incomingCanvasId === activeId) {
+      const editor = document.getElementById('canvas2-editor');
+      if (editor && document.activeElement !== editor && editor.value !== remote) {
+        editor.value = remote;
+      }
+      return;
+    }
+    // Header-anchored channel/DM canvas sheet
+    if (canvas2State.activeId && Number(canvas2State.activeId) === incomingCanvasId) {
+      const sheetEditor = els.canvasSheetEditor;
+      if (sheetEditor && document.activeElement !== sheetEditor && sheetEditor.value !== remote) {
+        sheetEditor.value = remote;
+      }
+    }
+  });
   state.socket.on('new_group_message', handleNewGroupMessage);
   state.socket.on('conversation_updated', handleConversationUpdated);
   state.socket.on('conversation_removed', handleConversationRemoved);
@@ -2276,6 +2296,7 @@ const SECTIONS = {
   notes:    { pane: null,       view: 'notes' },
   lists:    { pane: null,       view: 'lists' },
   canvases: { pane: null,       view: 'canvases' },
+  canvas2:  { pane: null,       view: 'canvas2' },
   huddle:   { pane: null,       view: 'huddle' },
   moderation: { pane: null,     view: 'moderation' },
   later:    { pane: null,       view: 'later' },
@@ -2349,6 +2370,10 @@ async function setSection(section) {
   } else if (section === 'canvases') {
     populateCanvasChannelSelect();
     await loadCanvases();
+  } else if (section === 'canvas2') {
+    showPane(null);
+    showView('canvas2');
+    await loadCanvas2StandaloneList();
   } else if (section === 'activity') {
     renderActivity();
     await loadActivity({ markSeen: true });
@@ -4460,6 +4485,7 @@ async function openCanvas2(kind, extra = {}) {
       els.canvasSheetStatus.dataset.state = 'saved';
     }
     sheet.setAttribute('aria-hidden', 'false');
+    if (state.socket) state.socket.emit('join_canvas', data.canvas.id);
     els.canvasSheetEditor.focus({ preventScroll: true });
   } catch (err) {
     console.error('Open canvas error:', err);
@@ -4507,10 +4533,368 @@ function closeCanvas2() {
   clearTimeout(canvas2State.saveTimer);
   const sheet = els.canvasSheet;
   if (!sheet) return;
+  if (canvas2State.activeId && state.socket) state.socket.emit('leave_canvas', canvas2State.activeId);
   sheet.setAttribute('aria-hidden', 'true');
   saveCanvas2();
   canvas2State.activeId = null;
 }
+
+// ============================================================
+// Canvas 2.0 — Personal (standalone) canvas manager
+// ============================================================
+const canvas2StandaloneState = {
+  activeId: null,
+  list: [],
+  saving: false,
+  saveTimer: null,
+};
+
+async function loadCanvas2StandaloneList() {
+  try {
+    const res = await api('/api/canvas/standalone');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load canvases');
+    canvas2StandaloneState.list = data.canvases || [];
+    renderCanvas2StandaloneList();
+    const activeStillExists = canvas2StandaloneState.activeId
+      && canvas2StandaloneState.list.some((c) => Number(c.id) === Number(canvas2StandaloneState.activeId));
+    if (activeStillExists) return;
+    if (canvas2StandaloneState.list.length > 0) {
+      await openCanvas2Standalone(canvas2StandaloneState.list[0].id);
+    } else {
+      showCanvas2Empty();
+    }
+  } catch (err) {
+    console.error('Load standalone canvases error:', err);
+    showToast(err.message || 'Could not load standalone canvases.', 'error');
+  }
+}
+
+function renderCanvas2StandaloneList() {
+  const listEl = document.getElementById('canvas2-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  if (canvas2StandaloneState.list.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'canvas2-list-empty';
+    empty.textContent = 'No personal canvases yet.';
+    listEl.appendChild(empty);
+    return;
+  }
+  for (const canvas of canvas2StandaloneState.list) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'canvas2-list-item';
+    if (Number(canvas2StandaloneState.activeId) === Number(canvas.id)) btn.classList.add('active');
+    btn.dataset.canvas2Id = String(canvas.id);
+    btn.innerHTML = `<div class="canvas2-list-item-title">${escapeHtml(canvas.title || 'Untitled canvas')}</div>
+      <div class="canvas2-list-item-meta">${escapeHtml(canvas.myRole === 'owner' ? 'Private' : canvas.myRole === 'editor' ? 'Editor' : 'Viewer')} · ${shortTime(canvas.updatedAt)}</div>`;
+    listEl.appendChild(btn);
+  }
+}
+
+function showCanvas2Empty() {
+  const empty = document.getElementById('canvas2-empty-pane');
+  const pane = document.getElementById('canvas2-editor-pane');
+  if (empty) empty.hidden = false;
+  if (pane) pane.hidden = true;
+}
+function showCanvas2EditorPane() {
+  const empty = document.getElementById('canvas2-empty-pane');
+  const pane = document.getElementById('canvas2-editor-pane');
+  if (empty) empty.hidden = true;
+  if (pane) pane.hidden = false;
+}
+
+async function openCanvas2Standalone(id) {
+  try {
+    const res = await api(`/api/canvas/${id}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load canvas');
+    const { canvas } = data;
+    canvas2StandaloneState.activeId = canvas.id;
+    const title = document.getElementById('canvas2-editor-title');
+    const editor = document.getElementById('canvas2-editor');
+    if (title) title.value = canvas.title || '';
+    if (editor) editor.value = canvas.content || '';
+    showCanvas2EditorPane();
+    renderCanvas2StandaloneList();
+    setCanvas2StandaloneStatus('Saved');
+    if (state.socket) state.socket.emit('join_canvas', canvas.id);
+  } catch (err) {
+    console.error('Open standalone canvas error:', err);
+    showToast(err.message || 'Could not open the canvas.', 'error');
+  }
+}
+
+async function createCanvas2Standalone() {
+  try {
+    const res = await api('/api/canvas', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Untitled canvas', content: '' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not create canvas');
+    canvas2StandaloneState.list = [data.canvas, ...canvas2StandaloneState.list];
+    renderCanvas2StandaloneList();
+    await openCanvas2Standalone(data.canvas.id);
+  } catch (err) {
+    console.error('Create standalone canvas error:', err);
+    showToast(err.message || 'Could not create canvas.', 'error');
+  }
+}
+
+function setCanvas2StandaloneStatus(text) {
+  const el = document.getElementById('canvas2-status');
+  if (el) el.textContent = text;
+}
+
+async function saveCanvas2Standalone() {
+  const id = canvas2StandaloneState.activeId;
+  if (!id || canvas2StandaloneState.saving) return;
+  const titleEl = document.getElementById('canvas2-editor-title');
+  const editor = document.getElementById('canvas2-editor');
+  if (!titleEl || !editor) return;
+  canvas2StandaloneState.saving = true;
+  setCanvas2StandaloneStatus('Saving…');
+  try {
+    const res = await api(`/api/canvas/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: titleEl.value, content: editor.value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not save canvas');
+    const updated = data.canvas;
+    const idx = canvas2StandaloneState.list.findIndex((c) => Number(c.id) === Number(id));
+    if (idx !== -1) {
+      canvas2StandaloneState.list[idx] = { ...canvas2StandaloneState.list[idx], title: updated.title, updatedAt: updated.updatedAt };
+      renderCanvas2StandaloneList();
+    }
+    setCanvas2StandaloneStatus('Saved');
+  } catch (err) {
+    console.error('Save standalone canvas error:', err);
+    setCanvas2StandaloneStatus('Error');
+    showToast(err.message || 'Could not save the canvas.', 'error');
+  } finally {
+    canvas2StandaloneState.saving = false;
+  }
+}
+
+function debounceCanvas2StandaloneSave() {
+  clearTimeout(canvas2StandaloneState.saveTimer);
+  canvas2StandaloneState.saveTimer = setTimeout(saveCanvas2Standalone, 800);
+}
+
+async function deleteCanvas2Standalone() {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  const current = canvas2StandaloneState.list.find((c) => Number(c.id) === Number(id));
+  const ok = await confirmAction({
+    title: 'Delete this canvas?',
+    message: `"${current?.title || 'Untitled canvas'}" will be permanently deleted. This cannot be undone.`,
+    confirmLabel: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const res = await api(`/api/canvas/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not delete the canvas');
+    canvas2StandaloneState.list = canvas2StandaloneState.list.filter((c) => Number(c.id) !== Number(id));
+    canvas2StandaloneState.activeId = null;
+    renderCanvas2StandaloneList();
+    if (canvas2StandaloneState.list.length > 0) {
+      await openCanvas2Standalone(canvas2StandaloneState.list[0].id);
+    } else {
+      showCanvas2Empty();
+    }
+    showToast('Canvas deleted.', 'success');
+  } catch (err) {
+    console.error('Delete standalone canvas error:', err);
+    showToast(err.message || 'Could not delete the canvas.', 'error');
+  }
+}
+
+// ============================================================
+// Canvas 2.0 — Share / collaborators
+// ============================================================
+const canvas2ShareState = {
+  lastShare: null,
+};
+
+async function openCanvas2ShareModal() {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  const modal = document.getElementById('canvas2-share-modal');
+  if (!modal) return;
+  // Reset link row
+  const linkRow = document.getElementById('canvas2-share-link-row');
+  if (linkRow) linkRow.hidden = true;
+  canvas2ShareState.lastShare = null;
+  // Load collaborators
+  try {
+    const res = await api(`/api/canvas/${id}/collaborators`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load collaborators');
+    renderCanvas2ShareCollaborators(data.collaborators || []);
+  } catch (err) {
+    console.error('Load collaborators error:', err);
+    showToast(err.message || 'Could not load collaborators.', 'error');
+  }
+  openSettingsModal(modal);
+}
+
+function renderCanvas2ShareCollaborators(collaborators) {
+  const list = document.getElementById('canvas2-share-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!collaborators || collaborators.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'canvas2-share-row canvas2-share-row-empty';
+    empty.textContent = 'No collaborators yet.';
+    list.appendChild(empty);
+    return;
+  }
+  for (const collab of collaborators) {
+    const row = document.createElement('li');
+    row.className = 'canvas2-share-row';
+    row.innerHTML = `<span class="canvas2-share-row-name">${escapeHtml(collab.username)}</span><span class="canvas2-share-row-role">${collab.role}</span><button class="canvas2-share-row-remove" type="button" data-canvas2-remove-collab="${collab.id}">Remove</button>`;
+    list.appendChild(row);
+  }
+}
+
+async function addCanvas2ShareCollaborator(username, role) {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  try {
+    const res = await api(`/api/canvas/${id}/collaborators`, {
+      method: 'POST',
+      body: JSON.stringify({ username: username.trim().toLowerCase(), role }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not add collaborator');
+    const listRes = await api(`/api/canvas/${id}/collaborators`);
+    const listData = await listRes.json();
+    renderCanvas2ShareCollaborators(listData.collaborators || []);
+    showToast('Collaborator added.', 'success');
+  } catch (err) {
+    console.error('Add collaborator error:', err);
+    showToast(err.message || 'Could not add collaborator.', 'error');
+  }
+}
+
+async function removeCanvas2ShareCollaborator(userId) {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  try {
+    const res = await api(`/api/canvas/${id}/collaborators/${userId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not remove collaborator');
+    const listRes = await api(`/api/canvas/${id}/collaborators`);
+    const listData = await listRes.json();
+    renderCanvas2ShareCollaborators(listData.collaborators || []);
+    showToast('Collaborator removed.', 'success');
+  } catch (err) {
+    console.error('Remove collaborator error:', err);
+    showToast(err.message || 'Could not remove collaborator.', 'error');
+  }
+}
+
+async function createCanvas2ShareLink(role) {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  try {
+    const res = await api(`/api/canvas/${id}/shares`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not create share link');
+    canvas2ShareState.lastShare = data.share;
+    const linkInput = document.getElementById('canvas2-share-link');
+    const copyBtn = document.getElementById('btn-canvas2-copy-link');
+    const revokeBtn = document.getElementById('btn-canvas2-revoke-link');
+    const linkRow = document.getElementById('canvas2-share-link-row');
+    const shareUrl = `${window.location.origin}${window.location.pathname}#canvas-share=${data.share.token}`;
+    if (linkInput) linkInput.value = shareUrl;
+    if (linkRow) linkRow.hidden = false;
+    if (copyBtn) copyBtn.hidden = false;
+    if (revokeBtn) revokeBtn.hidden = false;
+    showToast('Share link created.', 'success');
+  } catch (err) {
+    console.error('Create share link error:', err);
+    showToast(err.message || 'Could not create share link.', 'error');
+  }
+}
+
+async function revokeCanvas2ShareLink() {
+  const id = canvas2StandaloneState.activeId;
+  const shareId = canvas2ShareState.lastShare?.id;
+  if (!id || !shareId) return;
+  try {
+    const res = await api(`/api/canvas/${id}/shares/${shareId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not revoke share link');
+    canvas2ShareState.lastShare = null;
+    const linkRow = document.getElementById('canvas2-share-link-row');
+    if (linkRow) linkRow.hidden = true;
+    showToast('Share link revoked.', 'success');
+  } catch (err) {
+    console.error('Revoke share link error:', err);
+    showToast(err.message || 'Could not revoke share link.', 'error');
+  }
+}
+
+async function copyCanvas2ShareLink() {
+  const input = document.getElementById('canvas2-share-link');
+  if (!input) return;
+  try {
+    await window.electronAPI?.appCommand?.('copy') || navigator.clipboard.writeText(input.value);
+    input.select();
+    showToast('Share link copied to clipboard.', 'success');
+  } catch {
+    try { await navigator.clipboard.writeText(input.value); showToast('Share link copied.', 'success'); }
+    catch { showToast('Could not copy link.', 'error'); }
+  }
+}
+
+async function openCanvas2SharedToken(token) {
+  showPane(null);
+  showView('canvas2');
+  updateRail('canvas2');
+  try {
+    const res = await api(`/api/canvas/share/${token}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Share link did not open.');
+    // Navigate into the standalone canvas UI, restricted to the share role
+    const { canvas } = data;
+    canvas2StandaloneState.activeId = canvas.id;
+    showCanvas2EditorPane();
+    const title = document.getElementById('canvas2-editor-title');
+    const editor = document.getElementById('canvas2-editor');
+    if (title) title.value = canvas.title || '';
+    if (editor) editor.value = canvas.content || '';
+    setCanvas2StandaloneStatus(data.canvas.myRole === 'viewer' ? 'Read-only' : 'Saved');
+    if (data.canvas.myRole === 'viewer') {
+      if (editor) editor.readOnly = true;
+      if (title) title.readOnly = true;
+    } else {
+      if (editor) editor.readOnly = false;
+      if (title) title.readOnly = false;
+      if (state.socket) state.socket.emit('join_canvas', canvas.id);
+    }
+    renderCanvas2StandaloneList();
+  } catch (err) {
+    console.error('Open share token error:', err);
+    showToast(err.message || 'Share link did not open.', 'error');
+  }
+}
+
+// If the URL has a share token, jump straight into it on load
+window.addEventListener('load', () => {
+  const match = window.location.hash.match(/^#canvas-share=(.+)$/);
+  if (match && match[1]) openCanvas2SharedToken(match[1]);
+});
 
 document.addEventListener('click', (event) => {
   const channelBtn = event.target.closest('#btn-channel-canvas');
@@ -4534,7 +4918,85 @@ document.addEventListener('click', (event) => {
     closeCanvas2();
     return;
   }
+  const newStandalone = event.target.closest('#btn-canvas2-new, #btn-canvas2-new-empty');
+  if (newStandalone) {
+    event.preventDefault();
+    event.stopPropagation();
+    createCanvas2Standalone();
+    return;
+  }
+  const listItem = event.target.closest('.canvas2-list-item');
+  if (listItem) {
+    event.preventDefault();
+    event.stopPropagation();
+    openCanvas2Standalone(listItem.dataset.canvas2Id);
+    return;
+  }
+  const deleteStandalone = event.target.closest('#btn-canvas2-delete');
+  if (deleteStandalone) {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteCanvas2Standalone();
+    return;
+  }
+  const shareStandalone = event.target.closest('#btn-canvas2-share');
+  if (shareStandalone) {
+    event.preventDefault();
+    event.stopPropagation();
+    openCanvas2ShareModal();
+    return;
+  }
+  const closeShareModal = event.target.closest('#btn-close-canvas2-share');
+  if (closeShareModal) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeSettingsModal();
+    return;
+  }
+  const removeCollab = event.target.closest('[data-canvas2-remove-collab]');
+  if (removeCollab) {
+    event.preventDefault();
+    event.stopPropagation();
+    removeCanvas2ShareCollaborator(removeCollab.dataset.canvas2RemoveCollab);
+    return;
+  }
+  const createShareLink = event.target.closest('#btn-canvas2-create-link');
+  if (createShareLink) {
+    event.preventDefault();
+    event.stopPropagation();
+    const roleSel = document.getElementById('canvas2-share-link-role');
+    createCanvas2ShareLink(roleSel?.value || 'editor');
+    return;
+  }
+  const revokeShareLink = event.target.closest('#btn-canvas2-revoke-link');
+  if (revokeShareLink) {
+    event.preventDefault();
+    event.stopPropagation();
+    revokeCanvas2ShareLink();
+    return;
+  }
+  const copyShareLink = event.target.closest('#btn-canvas2-copy-link');
+  if (copyShareLink) {
+    event.preventDefault();
+    event.stopPropagation();
+    copyCanvas2ShareLink();
+    return;
+  }
 });
+
+document.getElementById('canvas2-share-add-form')?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = document.getElementById('canvas2-share-username');
+  const roleSel = document.getElementById('canvas2-share-role');
+  const username = input?.value.trim();
+  const role = roleSel?.value || 'editor';
+  if (!username) return;
+  addCanvas2ShareCollaborator(username, role);
+  if (input) input.value = '';
+});
+
+document.getElementById('canvas2-editor-title')?.addEventListener('input', debounceCanvas2StandaloneSave);
+document.getElementById('canvas2-editor')?.addEventListener('input', debounceCanvas2StandaloneSave);
 
 document.addEventListener('input', (event) => {
   if (event.target === els.canvasSheetEditor || event.target === els.canvasSheetTitle) {

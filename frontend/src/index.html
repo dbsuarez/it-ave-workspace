@@ -149,6 +149,10 @@
         </button>
         <button class="rail-item" data-rail="canvases">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
+          <span>Wiki</span>
+        </button>
+        <button class="rail-item" data-rail="canvas2">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M4 15h10"/><path d="M4 11h12"/><path d="M4 7h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
           <span>Canvas</span>
         </button>
         <button class="rail-item" data-rail="huddle">
@@ -389,12 +393,12 @@
         <div class="view" id="view-canvases">
           <div class="channel-header canvas-header">
             <div class="channel-info">
-              <h1>Canvas</h1>
+              <h1>Wiki</h1>
               <p>Shared Markdown documents for your channels.</p>
             </div>
             <div class="channel-actions">
-              <select id="canvas-channel-select" aria-label="Canvas channel"></select>
-              <button class="btn primary" id="btn-new-canvas">New canvas</button>
+              <select id="canvas-channel-select" aria-label="Wiki channel"></select>
+              <button class="btn primary" id="btn-new-canvas">New page</button>
             </div>
           </div>
           <div class="canvas-workspace">
@@ -423,6 +427,39 @@
               </div>
             </form>
           </div>
+        </div>
+
+        <!-- Canvas 2.0 View -->
+        <div class="view view-canvas2" id="view-canvas2">
+          <aside class="canvas2-list-pane" aria-label="Personal canvases">
+            <header class="canvas2-list-header">
+              <h2>Personal canvases</h2>
+              <button class="icon-btn" id="btn-canvas2-new" type="button" title="New personal canvas" aria-label="New personal canvas">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </header>
+            <div class="canvas2-list" id="canvas2-list" aria-live="polite"></div>
+          </aside>
+          <section class="canvas2-editor-pane" id="canvas2-editor-pane" hidden>
+            <header class="canvas2-editor-header">
+              <input id="canvas2-editor-title" type="text" maxlength="160" placeholder="Untitled canvas" aria-label="Canvas title">
+              <div class="canvas2-editor-actions">
+                <span class="canvas2-status" id="canvas2-status" aria-live="polite">Saved</span>
+                <button class="icon-btn" id="btn-canvas2-share" type="button" title="Collaborators and share link" aria-label="Collaborators and share link">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                </button>
+                <button class="icon-btn" id="btn-canvas2-delete" type="button" title="Delete canvas" aria-label="Delete canvas">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.5 14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+              </div>
+            </header>
+            <textarea class="canvas2-editor" id="canvas2-editor" placeholder="Write something…" aria-label="Canvas content"></textarea>
+          </section>
+          <section class="canvas2-empty-pane" id="canvas2-empty-pane">
+            <h2>Write, share, collaborate.</h2>
+            <p>Personal canvases live with only you until you add collaborators or share a link. Each channel and DM also has its own shared canvas — open it from the header.</p>
+            <button class="btn primary" id="btn-canvas2-new-empty" type="button">New canvas</button>
+          </section>
         </div>
 
         <!-- Huddle View -->
@@ -829,6 +866,44 @@
       </div>
     </div>
 
+    <div class="modal canvas2-share-modal" id="canvas2-share-modal" role="dialog" aria-label="Share canvas">
+      <div class="modal-header">
+        <h3>Share canvas</h3>
+        <button class="modal-close" id="btn-close-canvas2-share" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+      </div>
+      <div class="modal-body canvas2-share-body">
+        <div class="canvas2-share-section">
+          <h4>Collaborators</h4>
+          <ul class="canvas2-share-list" id="canvas2-share-list" aria-live="polite"></ul>
+          <form class="canvas2-share-add" id="canvas2-share-add-form" autocomplete="off">
+            <input id="canvas2-share-username" type="text" placeholder="Username to add" aria-label="Username to add as collaborator" autocomplete="off" required>
+            <select id="canvas2-share-role" aria-label="Collaborator role">
+              <option value="editor">Editor</option>
+              <option value="viewer">Viewer</option>
+            </select>
+            <button class="btn primary" type="submit">Add</button>
+          </form>
+        </div>
+        <div class="canvas2-share-section">
+          <h4>Share link</h4>
+          <div class="canvas2-share-link-actions">
+            <select id="canvas2-share-link-role" aria-label="Share link role">
+              <option value="editor">Can edit</option>
+              <option value="viewer">Can view</option>
+            </select>
+            <button class="btn primary" id="btn-canvas2-create-link" type="button">Create share link</button>
+          </div>
+          <div class="canvas2-share-link-row" id="canvas2-share-link-row" hidden>
+            <input id="canvas2-share-link" type="text" readonly aria-label="Share link">
+            <button class="btn" id="btn-canvas2-copy-link" type="button">Copy link</button>
+            <button class="btn danger" id="btn-canvas2-revoke-link" type="button" hidden>Revoke link</button>
+          </div>
+          <p class="canvas2-share-note">Anyone with the link can access this canvas with these permissions. The link works for any signed-in user, including people without a collaborator entry.</p>
+        </div>
+      </div>
+    </div>
     <div class="modal image-viewer-modal" id="image-viewer-modal" role="dialog" aria-label="Image viewer" aria-modal="true">
       <div class="image-viewer-body">
         <button class="image-viewer-close icon-btn" id="btn-close-image-viewer" type="button" aria-label="Close viewer" title="Close">
