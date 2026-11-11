@@ -7,8 +7,8 @@
 // renderer before any handler is attached.
 
 // Configuration
-const API_BASE = 'http://127.0.0.1:3001'; // Change to your deployed URL
-const SOCKET_URL = 'http://127.0.0.1:3001';
+const API_BASE = window.electronAPI?.apiBase || 'http://127.0.0.1:3001';
+const SOCKET_URL = window.electronAPI?.socketUrl || 'http://127.0.0.1:3001';
 const REACTION_EMOJI = {
   Smileys: [
     ['😀', 'grinning'], ['😃', 'smiley'], ['😄', 'smile'], ['😁', 'grin'], ['😆', 'laughing'],

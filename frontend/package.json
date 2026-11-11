@@ -14,7 +14,10 @@
     "prepack": "npm run check",
     "pack": "electron-builder --dir",
     "predist": "npm run check",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "android:init": "cd android-capacitor && npm install && npx cap init",
+    "android:open": "cd android-capacitor && npx cap open android",
+    "android:sync": "cd android-capacitor && npx cap sync"
   },
   "devDependencies": {
     "@fontsource/lato": "^5.3.0",

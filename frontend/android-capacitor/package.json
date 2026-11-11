@@ -1,0 +1,26 @@
+{
+  "name": "itavenue-android",
+  "displayName": "IT Avenue Workspace",
+  "version": "1.0.0",
+  "description": "IT Avenue Workspace - Team chat desktop client for Android",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'Build the web app first: cd .. && npm run dist'",
+    "sync": "npx cap sync",
+    "open:android": "npx cap open android",
+    "build:android": "npx cap sync && npx cap open android"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/cli": "^6.0.0"
+  },
+  "dependencies": {
+    "@capacitor/camera": "^6.0.0",
+    "@capacitor/device": "^6.0.0",
+    "@capacitor/dialog": "^6.0.0",
+    "@capacitor/file": "^6.0.0",
+    "@capacitor/network": "^6.0.0",
+    "@capacitor/geolocation": "^6.0.0"
+  }
+}

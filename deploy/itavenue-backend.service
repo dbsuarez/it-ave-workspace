@@ -1,0 +1,29 @@
+# IT Avenue Workspace Backend - systemd service
+# Install: sudo cp itavenue-backend.service /etc/systemd/system/
+# Then: sudo systemctl daemon-reload && sudo systemctl enable --now itavenue-backend
+
+[Unit]
+Description=IT Avenue Workspace Backend
+After=network.target postgresql.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=itavenue
+Group=itavenue
+WorkingDirectory=/opt/itavenue/backend
+EnvironmentFile=/opt/itavenue/backend/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+StartLimitBurst=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/itavenue/backend/uploads
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
