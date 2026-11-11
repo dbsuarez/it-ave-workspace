@@ -37,6 +37,7 @@ services:
       UPLOAD_DIR: ${UPLOAD_DIR}
       WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-}
       TRUST_PROXY: ${TRUST_PROXY:-}
+      LOG_REQUESTS: ${LOG_REQUESTS:-true}
     ports:
       - "3001:3001"
     volumes:

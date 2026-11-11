@@ -7,6 +7,7 @@ const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { ensureFileAccess } = require('../security');
+const { mimeForFilename } = require('../uploadContent');
 
 // List files shared in channels the user is a member of, and any direct
 // messages between the user and others. Newest first.
@@ -79,7 +80,9 @@ router.get('/:id/download', authenticateToken, async (req, res) => {
     }
 
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(f.original_name)}"`);
-    res.setHeader('Content-Type', f.mime_type || 'application/octet-stream');
+    // Never echo a client-supplied type: derive it from the file name (older rows stored the client's).
+    res.setHeader('Content-Type', mimeForFilename(f.original_name));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     fs.createReadStream(filePath).pipe(res);
   } catch (err) {
     console.error('Download file error:', err);

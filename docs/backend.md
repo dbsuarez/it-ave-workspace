@@ -168,6 +168,15 @@ Two background runners start with the server and check every 15 seconds: reminde
   Existing shorter passwords still work for signing in.
 - **Behind a reverse proxy** set `TRUST_PROXY` (number of proxies, e.g. `1`) so limits see each
   person's real address; leave it empty when clients connect directly.
+- **Uploads (A06):** the client's file name and MIME type are only claims. The extension must be
+  on the allow-list, the stored and served type is derived from it (`src/uploadContent.js`), the
+  first bytes must match the extension for signed formats (png, jpg, gif, bmp, pdf, zip and Office
+  files, gz, 7z, rar), and anything that looks like a Windows, Linux or macOS program is refused
+  whatever its name. Rejected uploads are deleted. Downloads are attachments with `nosniff`.
+- **Response headers and logs** (`src/httpHardening.js`): `nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, a deny-everything CSP, and HSTS only over TLS. One access-log
+  line per request (method, path without query string, status, time, address); health checks and
+  bodies are not logged. Silence with `LOG_REQUESTS=false`.
 - **Guests are kept out of group messages** (cannot be added, cannot send); converting a member to
   a guest removes them from their groups.
 

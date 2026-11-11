@@ -30,6 +30,7 @@ const webhookRoutes = require('./src/routes/webhooks');
 const migrations = require('./src/migrations');
 const { parseTrustProxy } = require('./src/rateLimit');
 const chatSockets = require('./src/sockets/chat');
+const { securityHeaders, requestLogger } = require('./src/httpHardening');
 
 const app = express();
 
@@ -54,6 +55,8 @@ app.use(cors({
   origin: true,
   credentials: true,
 }));
+app.use(securityHeaders);
+if (config.LOG_REQUESTS) app.use(requestLogger());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

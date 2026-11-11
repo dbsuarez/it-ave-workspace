@@ -9,3 +9,5 @@ Thumbs.db
 coverage/
 dist/
 build/
+# Local backups (copy them off this machine; never commit)
+backups/

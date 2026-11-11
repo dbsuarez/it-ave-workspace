@@ -5,6 +5,7 @@ const fs = require('fs');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
+const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
 const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel } = require('../security');
 
 const emojiSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -57,18 +58,25 @@ router.post('/upload', authenticateToken, (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
+      const contentError = await checkUploadedFile(req.file.path, req.file.originalname);
+      if (contentError) {
+        await fs.promises.unlink(req.file.path).catch(() => {});
+        return res.status(400).json({ error: contentError });
+      }
+      const storedMime = mimeForFilename(req.file.originalname);
+
       const result = await query(
         `INSERT INTO files (message_id, filename, original_name, size, mime_type, uploaded_by) 
          VALUES ($1, $2, $3, $4, $5, $6) 
          RETURNING id`,
-        [null, req.file.filename, req.file.originalname, req.file.size, req.file.mimetype, req.user.userId]
+        [null, req.file.filename, req.file.originalname, req.file.size, storedMime, req.user.userId]
       );
 
       res.json({
         fileId: result.rows[0].id,
         filename: req.file.originalname,
         size: req.file.size,
-        mimeType: req.file.mimetype,
+        mimeType: storedMime,
       });
     } catch (uploadErr) {
       console.error('Upload error:', uploadErr);

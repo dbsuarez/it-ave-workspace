@@ -63,10 +63,8 @@ function getUploadValidationError(file, maxFileSizeMb = 25) {
     return `File exceeds the ${maxFileSizeMb}MB limit`;
   }
 
-  const hasAllowedMime = isMimeAllowed(file.mimetype || '');
-  const hasAllowedExtension = isExtensionAllowed(file.originalname);
-
-  if (!hasAllowedMime && !hasAllowedExtension) {
+  // The client-supplied MIME type is only a claim, so the allow-listed extension decides.
+  if (!isExtensionAllowed(file.originalname)) {
     return 'Unsupported file type';
   }
 

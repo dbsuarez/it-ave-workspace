@@ -59,6 +59,8 @@ module.exports = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   SUPERADMIN_USERNAME: process.env.SUPERADMIN_USERNAME || '',
   TRUST_PROXY: process.env.TRUST_PROXY || '',
+  // One access-log line per request (no bodies, no query strings). Set LOG_REQUESTS=false to silence.
+  LOG_REQUESTS: String(process.env.LOG_REQUESTS || 'true').toLowerCase() !== 'false',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   MAX_FILE_SIZE_MB: parseInt(process.env.MAX_FILE_SIZE_MB || '25', 10),
   UPLOAD_DIR: process.env.UPLOAD_DIR || '/app/uploads',

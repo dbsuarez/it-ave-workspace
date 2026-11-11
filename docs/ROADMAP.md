@@ -274,7 +274,7 @@ code, and was verified live against PostgreSQL and in the Electron app (dev and 
 | A03 Electron store bridge | Fixed: key allowlist, value checks, trusted-page check on every IPC (`frontend/ipc-policy.js`) |
 | A04 attachment re-linking | Fixed: atomic one-time claim (`src/attachments.js`); race verified live |
 | A05 throttling, password length | Fixed: limits on sign-in, sign-up, invitation lookup, password change; minimum 8 |
-| A06 upload type trust | **Open** (extension-or-MIME check, no content check or `nosniff` header) |
+| A06 upload type trust | **Fixed**: extension must be allow-listed, stored type derived server-side, leading bytes checked, programs refused, `nosniff` on downloads |
 | A07 CORS reflects origin | **Open**, low priority; JWT remains the boundary |
 | A08 loopback server address | Fixed: server address setting on the sign-in window; saved per user |
 | A09 schema in several places | **Open** (`server.js`, `migrations.js`, `init.sql`) |
@@ -282,9 +282,11 @@ code, and was verified live against PostgreSQL and in the Electron app (dev and 
 Found while checking: guests could be put in group messages, bypassing "guests only reach people in
 their channels". Fixed, with a startup cleanup of any existing guest memberships.
 
-Still to do before exposing the server beyond the LAN: TLS and reverse proxy, request logging and
-`helmet`, backups, uploads hardening (A06), schema consolidation (A09), real-database integration
-tests and CI.
+Done since: uploads hardening (A06), security headers and request logging (dependency-free, in
+`src/httpHardening.js`), and backup/restore steps with a verified restore (`docs/BACKUP.md`).
+
+Still to do before exposing the server beyond the LAN: TLS and reverse proxy, schema consolidation
+(A09), real-database integration tests and CI.
 
 ## Hardening done (2026-11-11)
 
