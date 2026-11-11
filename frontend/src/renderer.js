@@ -436,6 +436,7 @@ function setupEventListeners() {
   setupLaterFeatures();
   setupAdminFeatures();
   setupWorkspaceFeatures();
+  setupHuddleVideoFeatures();
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
@@ -801,7 +802,10 @@ function connectSocket() {
     state.huddle.participants.set(participant.peerId, participant);
     renderHuddleParticipants();
     updateHuddleConnectedStatus();
+    // Tell the newcomer whether this client's camera or screen is on.
+    setTimeout(announceHuddleVideoState, 1500);
   });
+  state.socket.on('huddle:media-state', handleHuddleMediaState);
   state.socket.on('huddle:participant-left', ({ peerId }) => {
     removeHuddlePeer(peerId);
   });
@@ -2445,6 +2449,7 @@ function renderHuddleView() {
     muteButton.setAttribute('aria-pressed', String(state.huddle.muted));
   }
   if (leaveButton) leaveButton.disabled = !joined && !state.huddle.joining;
+  updateHuddleVideoControls();
   setHuddleStatus(state.huddle.status, state.huddle.statusType);
   renderHuddleParticipants();
 }
@@ -2573,6 +2578,7 @@ async function createHuddlePeer(participant, createOffer = false) {
   const peer = { connection, participant, audio: null, pendingCandidates: [] };
   state.huddle.peers.set(participant.peerId, peer);
   state.huddle.localStream.getTracks().forEach((track) => connection.addTrack(track, state.huddle.localStream));
+  attachHuddleVideo(peer, createOffer);
 
   connection.onicecandidate = ({ candidate }) => {
     if (candidate && state.socket?.connected) {
@@ -2583,6 +2589,10 @@ async function createHuddlePeer(participant, createOffer = false) {
     }
   };
   connection.ontrack = (event) => {
+    if (event.track.kind === 'video') {
+      handleRemoteHuddleVideo(peer, event.track);
+      return;
+    }
     const stream = event.streams[0];
     if (!stream) return;
     if (!peer.audio) {
@@ -2634,6 +2644,7 @@ async function handleHuddleSignal(message) {
       await connection.addIceCandidate(new RTCIceCandidate(candidate));
     }
     if (message.signal.description.type === 'offer') {
+      await prepareHuddleVideoAnswer(peer);
       const answer = await connection.createAnswer();
       await connection.setLocalDescription(answer);
       state.socket.emit('huddle:signal', {
@@ -2660,6 +2671,7 @@ function removeHuddlePeer(peerId) {
     state.huddle.peers.delete(peerId);
   }
   state.huddle.participants.delete(peerId);
+  removeHuddleVideo(peerId);
   renderHuddleParticipants();
   updateHuddleConnectedStatus();
 }
@@ -2686,6 +2698,7 @@ function cleanupHuddle(notifyServer = true) {
   });
   state.huddle.localStream?.getTracks().forEach((track) => track.stop());
   state.huddle.localStream = null;
+  stopLocalHuddleVideo();
   state.huddle.peers.clear();
   state.huddle.participants.clear();
   state.huddle.channelId = null;

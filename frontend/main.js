@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell, desktopCapturer } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 
@@ -101,11 +101,28 @@ function createLoginWindow() {
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const isMainApp = webContents === mainWindow?.webContents;
-    const requestsAudioOnly = details?.isMainFrame
+    // Huddles use the microphone and, when the user turns it on, the camera.
+    const requestsMicOrCamera = permission === 'media'
+      && details?.isMainFrame
       && Array.isArray(details.mediaTypes)
-      && details.mediaTypes.includes('audio')
-      && !details.mediaTypes.includes('video');
-    callback(isMainApp && permission === 'media' && requestsAudioOnly);
+      && details.mediaTypes.length > 0
+      && details.mediaTypes.every((type) => type === 'audio' || type === 'video');
+    callback(isMainApp && (requestsMicOrCamera || permission === 'display-capture'));
+  });
+
+  // Screen sharing in a huddle shares the primary screen of this computer.
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    const fromMainApp = mainWindow && request.frame === mainWindow.webContents.mainFrame;
+    if (!fromMainApp) {
+      callback({});
+      return;
+    }
+    desktopCapturer.getSources({ types: ['screen'] })
+      .then((sources) => callback(sources.length ? { video: sources[0] } : {}))
+      .catch((err) => {
+        console.error('Screen capture source error:', err);
+        callback({});
+      });
   });
 
   // Check if we have a stored token

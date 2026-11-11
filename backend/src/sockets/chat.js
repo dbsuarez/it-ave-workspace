@@ -302,6 +302,13 @@ module.exports = (io, socket) => {
     }
   });
 
+  // Whether this participant's camera or screen share is on, relayed to the call.
+  socket.on('huddle:media-state', ({ video } = {}) => {
+    if (!currentUserId || !huddleChannelId) return;
+    const mode = video === 'camera' || video === 'screen' ? video : null;
+    socket.to(`huddle_${huddleChannelId}`).emit('huddle:media-state', { peerId: socket.id, video: mode });
+  });
+
   socket.on('huddle:leave', leaveHuddle);
 
   // Send a message to a channel
