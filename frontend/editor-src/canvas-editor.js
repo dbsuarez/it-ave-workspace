@@ -353,14 +353,21 @@ function mentionDom(username) {
     line('cw-mention-status', [person.statusEmoji, person.statusText].filter(Boolean).join(' '));
     line('cw-mention-email', person.email);
 
-    // "Message" opens a direct message with them (the app handles the click)
+    // "Message" opens a direct message with them, "Huddle" starts a call (the app handles the clicks)
     if (person.id !== undefined && !person.isSelf) {
-      const message = document.createElement('button');
-      message.type = 'button';
-      message.className = 'cw-mention-msg';
-      message.setAttribute('data-message-user', String(person.id));
-      message.textContent = '+ Message';
-      body.appendChild(message);
+      const actions = document.createElement('span');
+      actions.className = 'cw-mention-actions';
+      const action = (attribute, className, label) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = className;
+        button.setAttribute(attribute, String(person.id));
+        button.textContent = label;
+        actions.appendChild(button);
+      };
+      action('data-message-user', 'cw-mention-msg', '+ Message');
+      action('data-huddle-user', 'cw-mention-msg cw-mention-huddle', '+ Huddle');
+      body.appendChild(actions);
     }
     card.append(avatar, body);
     root.appendChild(card);
@@ -394,7 +401,7 @@ const Mention = Node.create({
       return {
         dom,
         ignoreMutation: () => true,
-        stopEvent: (event) => Boolean(event.target && event.target.closest && event.target.closest('.cw-mention-msg')),
+        stopEvent: (event) => Boolean(event.target && event.target.closest && event.target.closest('.cw-mention-actions')),
         update: (next) => {
           if (next.type !== node.type) return false;
           if (next.attrs.username !== name) return false;

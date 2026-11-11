@@ -90,6 +90,33 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
 }
 
 const MAX_HUDDLE_PARTICIPANTS = 6;
+const MAX_DIRECT_HUDDLE_PARTICIPANTS = 2;
+
+// A huddle key is a channel id (number) or, for a call between two people, "dm:<low>-<high>".
+function directHuddleKey(a, b) {
+  return `dm:${Math.min(Number(a), Number(b))}-${Math.max(Number(a), Number(b))}`;
+}
+
+function parseDirectHuddleKey(key) {
+  const match = /^dm:(\d+)-(\d+)$/.exec(String(key));
+  return match ? [Number(match[1]), Number(match[2])] : null;
+}
+
+// Throws (with a status) unless this person may be in this huddle: a member of the channel, or one of the two
+// people of a direct call who is allowed to reach the other.
+async function authorizeHuddle(query, userId, key) {
+  const pair = typeof key === 'string' ? parseDirectHuddleKey(key) : null;
+  if (!pair) {
+    await ensureChannelMembership(query, userId, key);
+    return;
+  }
+  if (!pair.includes(Number(userId))) {
+    const err = new Error('This call is not for you');
+    err.status = 403;
+    throw err;
+  }
+  await ensureDirectMessageAccess(query, userId, pair.find((id) => id !== Number(userId)));
+}
 const huddleJoinLocks = new Map();
 
 async function withHuddleJoinLock(channelId, operation) {
@@ -128,6 +155,11 @@ module.exports = (io, socket) => {
     const room = `huddle_${huddleChannelId}`;
     socket.to(room).emit('huddle:participant-left', { peerId: socket.id });
     socket.leave(room);
+    const pair = typeof huddleChannelId === 'string' ? parseDirectHuddleKey(huddleChannelId) : null;
+    if (pair && io.to) {
+      // if they had not answered yet, stop their ringing
+      io.to(`user_${pair.find((id) => id !== Number(currentUserId))}`).emit('huddle:invite-cancelled', { fromId: currentUserId });
+    }
     huddleChannelId = null;
     socket.huddleChannelId = null;
     socket.data.huddleChannelId = null;
@@ -225,7 +257,8 @@ module.exports = (io, socket) => {
     socket.emit('left_channel', { channelId });
   });
 
-  socket.on('huddle:join', async (channelId) => {
+  // channelId: a channel to join, or { withUserId } to start (or answer) a direct call with one person.
+  socket.on('huddle:join', async (target) => {
     if (!currentUserId) {
       socket.emit('huddle:error', { error: 'Authentication required' });
       return;
@@ -235,27 +268,38 @@ module.exports = (io, socket) => {
       return;
     }
 
-    const parsedChannelId = Number(channelId);
-    if (!Number.isSafeInteger(parsedChannelId) || parsedChannelId < 1) {
-      socket.emit('huddle:error', { error: 'A valid channel is required' });
-      return;
+    let parsedKey;
+    let directOther = null;
+    if (target && typeof target === 'object') {
+      directOther = Number(target.withUserId);
+      if (!Number.isSafeInteger(directOther) || directOther < 1 || directOther === Number(currentUserId)) {
+        socket.emit('huddle:error', { error: 'A valid person is required' });
+        return;
+      }
+      parsedKey = directHuddleKey(currentUserId, directOther);
+    } else {
+      parsedKey = Number(target);
+      if (!Number.isSafeInteger(parsedKey) || parsedKey < 1) {
+        socket.emit('huddle:error', { error: 'A valid channel is required' });
+        return;
+      }
     }
 
     huddleJoining = true;
     const joinGeneration = ++huddleJoinGeneration;
     try {
-      await withHuddleJoinLock(parsedChannelId, async () => {
+      await withHuddleJoinLock(parsedKey, async () => {
         if (!huddleJoining || joinGeneration !== huddleJoinGeneration) return;
         const { query } = require('../db');
-        await ensureChannelMembership(query, currentUserId, parsedChannelId);
+        await authorizeHuddle(query, currentUserId, parsedKey);
         if (!huddleJoining || joinGeneration !== huddleJoinGeneration) return;
 
-        if (huddleChannelId === parsedChannelId) {
+        if (huddleChannelId === parsedKey) {
           socket.emit('huddle:error', { error: 'You are already in this huddle' });
           return;
         }
 
-        const room = `huddle_${parsedChannelId}`;
+        const room = `huddle_${parsedKey}`;
         const connectedPeers = await io.in(room).fetchSockets();
         if (!huddleJoining || joinGeneration !== huddleJoinGeneration) return;
 
@@ -263,8 +307,9 @@ module.exports = (io, socket) => {
           socket.emit('huddle:error', { error: 'You are already in this huddle from another session' });
           return;
         }
-        if (connectedPeers.length >= MAX_HUDDLE_PARTICIPANTS) {
-          socket.emit('huddle:error', { error: 'This huddle is full (maximum 6 participants)' });
+        const cap = directOther ? MAX_DIRECT_HUDDLE_PARTICIPANTS : MAX_HUDDLE_PARTICIPANTS;
+        if (connectedPeers.length >= cap) {
+          socket.emit('huddle:error', { error: directOther ? 'This call already has two people' : 'This huddle is full (maximum 6 participants)' });
           return;
         }
 
@@ -277,9 +322,9 @@ module.exports = (io, socket) => {
           socket.data.huddleChannelId = null;
         }
         socket.join(room);
-        huddleChannelId = parsedChannelId;
-        socket.huddleChannelId = parsedChannelId;
-        socket.data.huddleChannelId = parsedChannelId;
+        huddleChannelId = parsedKey;
+        socket.huddleChannelId = parsedKey;
+        socket.data.huddleChannelId = parsedKey;
 
         const participants = connectedPeers.map((peer) => ({
           peerId: peer.id,
@@ -288,20 +333,28 @@ module.exports = (io, socket) => {
         }));
 
         socket.emit('huddle:joined', {
-          channelId: parsedChannelId,
+          channelId: parsedKey,
+          direct: directOther ? { userId: directOther } : undefined,
           participants,
           iceServers: config.WEBRTC_ICE_SERVERS,
         });
         socket.to(room).emit('huddle:participant-joined', {
           peerId: socket.id,
-          channelId: parsedChannelId,
+          channelId: parsedKey,
           id: currentUserId,
           username: socket.username,
         });
+        // the first person into a direct call rings the other one
+        if (directOther && connectedPeers.length === 0 && io.to) {
+          io.to(`user_${directOther}`).emit('huddle:invite', {
+            from: { id: currentUserId, username: socket.username },
+            key: parsedKey,
+          });
+        }
       });
     } catch (err) {
       if (joinGeneration !== huddleJoinGeneration) return;
-      if (err.status !== 403) {
+      if (err.status !== 403 && err.status !== 404 && err.status !== 400) {
         console.error('Huddle join authorization failed:', err);
       }
       socket.emit('huddle:error', { error: err.message || 'Unable to join huddle' });
@@ -335,8 +388,8 @@ module.exports = (io, socket) => {
     try {
       const { query } = require('../db');
       const channelId = huddleChannelId;
-      await ensureChannelMembership(query, currentUserId, channelId);
-      await ensureChannelMembership(query, target.userId, channelId);
+      await authorizeHuddle(query, currentUserId, channelId);
+      await authorizeHuddle(query, target.userId, channelId);
       if (huddleChannelId !== channelId || target.huddleChannelId !== channelId) return;
 
       target.emit('huddle:signal', {
@@ -349,7 +402,7 @@ module.exports = (io, socket) => {
       if (err.status !== 403) {
         console.error('Huddle signaling authorization failed:', err);
       }
-      socket.emit('huddle:error', { error: 'Channel access is required to continue this huddle' });
+      socket.emit('huddle:error', { error: typeof huddleChannelId === 'string' ? 'You can no longer reach this person' : 'Channel access is required to continue this huddle' });
       leaveHuddle();
     }
   });

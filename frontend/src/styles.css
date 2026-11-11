@@ -6313,3 +6313,34 @@ h4.cv-h { font-size: 15px; }
 
 #user-avatar.has-photo,
 .has-photo { background-repeat: no-repeat; }
+
+/* Mention card actions and the incoming call banner */
+.cw-mention-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.cw-mention-actions .cw-mention-msg { margin-top: 0; }
+
+.huddle-invite {
+  position: fixed;
+  top: 76px;
+  right: 24px;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 380px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--purple);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.huddle-invite strong { display: block; font-size: 14px; }
+.huddle-invite span { font-size: 12px; color: var(--text-muted); }
+.huddle-invite-actions { margin-left: auto; display: flex; gap: 6px; }

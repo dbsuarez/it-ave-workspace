@@ -29,6 +29,12 @@ function canvasMentionLookup(username) {
 // "Message" on a profile card opens a direct message with that person.
 if (typeof document !== 'undefined') {
   document.addEventListener('click', (event) => {
+    const huddle = event.target.closest ? event.target.closest('[data-huddle-user]') : null;
+    if (huddle && typeof startDirectHuddle === 'function') {
+      event.preventDefault();
+      startDirectHuddle(Number(huddle.dataset.huddleUser));
+      return;
+    }
     const button = event.target.closest ? event.target.closest('[data-message-user]') : null;
     if (!button || typeof openDM !== 'function') return;
     event.preventDefault();

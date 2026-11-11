@@ -129,6 +129,7 @@ let state = {
   },
   huddle: {
     channelId: null,
+    direct: null,   // { userId, username } while in (or starting) a one-to-one call
     localStream: null,
     peers: new Map(),
     participants: new Map(),
@@ -936,8 +937,10 @@ function connectSocket() {
   });
 
   state.socket.on('huddle:joined', handleHuddleJoined);
+  state.socket.on('huddle:invite', handleHuddleInvite);
+  state.socket.on('huddle:invite-cancelled', handleHuddleInviteCancelled);
   state.socket.on('huddle:participant-joined', (participant) => {
-    if (Number(state.huddle.channelId) !== Number(participant.channelId)) return;
+    if (String(state.huddle.channelId) !== String(participant.channelId)) return;
     state.huddle.participants.set(participant.peerId, participant);
     renderHuddleParticipants();
     updateHuddleConnectedStatus();
@@ -2790,7 +2793,8 @@ function renderHuddleView() {
   const title = document.getElementById('huddle-title');
   if (!select) return;
 
-  const selectedChannelId = state.huddle.channelId
+  const directCall = state.huddle.direct;
+  const selectedChannelId = (directCall ? null : state.huddle.channelId)
     || select.value
     || state.currentChannelId
     || state.channels[0]?.id;
@@ -2813,7 +2817,11 @@ function renderHuddleView() {
 
   const joined = state.huddle.channelId !== null;
   const channel = state.channels.find((item) => Number(item.id) === Number(selectedChannelId));
-  if (title) title.textContent = joined && channel ? `Huddle in #${channel.name}` : 'Channel huddle';
+  if (title) {
+    title.textContent = directCall
+      ? (joined ? `Huddle with ${directCall.username}` : `Calling ${directCall.username}\u2026`)
+      : (joined && channel ? `Huddle in #${channel.name}` : 'Channel huddle');
+  }
   select.disabled = joined || state.huddle.joining || !state.channels.length;
   if (joinButton) {
     joinButton.disabled = joined || state.huddle.joining || !state.channels.length;
@@ -2864,10 +2872,12 @@ function renderHuddleParticipants() {
   });
 }
 
-async function joinHuddle() {
+// Join the channel chosen in the list, or (with `direct`: { userId, username }) start or answer a one-to-one call.
+async function joinHuddle(direct) {
   const select = document.getElementById('huddle-channel-select');
+  const isDirect = Boolean(direct) && Number.isSafeInteger(Number(direct.userId));
   const channelId = Number(select?.value);
-  if (!Number.isSafeInteger(channelId) || !state.channels.some((channel) => Number(channel.id) === channelId)) {
+  if (!isDirect && (!Number.isSafeInteger(channelId) || !state.channels.some((channel) => Number(channel.id) === channelId))) {
     setHuddleStatus('Choose a channel you belong to before joining.', 'error');
     return;
   }
@@ -2881,6 +2891,7 @@ async function joinHuddle() {
   }
 
   state.huddle.joining = true;
+  state.huddle.direct = isDirect ? { userId: Number(direct.userId), username: direct.username || 'them' } : null;
   const joinAttempt = ++state.huddle.joinAttempt;
   state.huddle.muted = false;
   setHuddleStatus('Requesting microphone access…');
@@ -2901,8 +2912,8 @@ async function joinHuddle() {
       id: state.user.id,
       username: state.user.username,
     });
-    setHuddleStatus('Joining channel huddle…');
-    state.socket.emit('huddle:join', channelId);
+    setHuddleStatus(isDirect ? `Calling ${state.huddle.direct.username}\u2026` : 'Joining channel huddle…');
+    state.socket.emit('huddle:join', isDirect ? { withUserId: state.huddle.direct.userId } : channelId);
   } catch (err) {
     if (state.huddle.joinAttempt !== joinAttempt) return;
     console.error('Huddle microphone access failed:', err);
@@ -3059,8 +3070,11 @@ function updateHuddleConnectedStatus() {
   if (!state.huddle.channelId || state.huddle.statusType !== 'connected') return;
   const channel = state.channels.find((item) => Number(item.id) === Number(state.huddle.channelId));
   const alone = state.huddle.participants.size <= 1;
+  const direct = state.huddle.direct;
   setHuddleStatus(
-    `Connected to #${channel?.name || 'channel'}${alone ? '. Waiting for others to join.' : ''}`,
+    direct
+      ? `Connected to ${direct.username}${alone ? '. Waiting for them to answer.' : ''}`
+      : `Connected to #${channel?.name || 'channel'}${alone ? '. Waiting for others to join.' : ''}`,
     'connected'
   );
 }
@@ -3080,6 +3094,7 @@ function cleanupHuddle(notifyServer = true) {
   state.huddle.peers.clear();
   state.huddle.participants.clear();
   state.huddle.channelId = null;
+  state.huddle.direct = null;
   state.huddle.iceServers = [];
   state.huddle.joining = false;
   state.huddle.muted = false;
