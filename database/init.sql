@@ -291,3 +291,20 @@ CREATE TABLE IF NOT EXISTS reminders (
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );
 CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(remind_at) WHERE delivered_at IS NULL;
+
+-- Guest accounts and invitations
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type VARCHAR(20) NOT NULL DEFAULT 'member';
+ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS registration_mode VARCHAR(20) NOT NULL DEFAULT 'open';
+CREATE TABLE IF NOT EXISTS invitations (
+     id SERIAL PRIMARY KEY,
+     code_hash VARCHAR(64) NOT NULL UNIQUE,
+     account_type VARCHAR(20) NOT NULL DEFAULT 'member',
+     channel_ids INTEGER[] NOT NULL DEFAULT '{}',
+     note VARCHAR(120) NOT NULL DEFAULT '',
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+     revoked_at TIMESTAMP WITH TIME ZONE,
+     used_at TIMESTAMP WITH TIME ZONE,
+     used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );

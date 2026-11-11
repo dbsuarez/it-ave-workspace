@@ -3,6 +3,7 @@ const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership } = require('../security');
+const { ensureNotGuest } = require('../guests');
 
 // Get all channels (with member count)
 router.get('/', authenticateToken, async (req, res) => {
@@ -12,7 +13,9 @@ router.get('/', authenticateToken, async (req, res) => {
              COUNT(cm.user_id)::int AS member_count
       FROM channels c
       LEFT JOIN channel_members cm ON c.id = cm.channel_id
-      WHERE c.is_private = FALSE OR EXISTS (
+      WHERE (c.is_private = FALSE AND NOT EXISTS (
+        SELECT 1 FROM users g WHERE g.id = $1 AND g.account_type = 'guest'
+      )) OR EXISTS (
         SELECT 1 FROM channel_members mine
         WHERE mine.channel_id = c.id AND mine.user_id = $1
       ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)
@@ -82,6 +85,7 @@ router.get('/my', authenticateToken, async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, topic, isPrivate } = req.body;
+    await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
 
     if (!name) {
       return res.status(400).json({ error: 'Channel name is required' });
@@ -118,6 +122,7 @@ router.post('/', authenticateToken, async (req, res) => {
       },
     });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Create channel error:', err);
     if (err.code === '23505') { // unique violation
       return res.status(400).json({ error: 'Channel name already exists' });
@@ -280,6 +285,7 @@ router.get('/:channelId/read-receipts', authenticateToken, async (req, res) => {
 router.post('/:channelId/join', authenticateToken, async (req, res) => {
   try {
     const { channelId } = req.params;
+    await ensureNotGuest(query, req.user.userId, 'Guests can only be added to channels by a Superadmin');
 
     // Check channel exists
     const channelResult = await query('SELECT id, is_private FROM channels WHERE id = $1', [channelId]);
@@ -306,6 +312,7 @@ router.post('/:channelId/join', authenticateToken, async (req, res) => {
 
     res.json({ message: 'Joined channel successfully' });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Join channel error:', err);
     res.status(500).json({ error: 'Server error' });
   }

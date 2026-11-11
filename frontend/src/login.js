@@ -16,6 +16,10 @@
   const submitButton = document.getElementById('auth-btn');
   const switchButton = document.getElementById('switch-btn');
   const errorEl = document.getElementById('error-msg');
+  const inviteRow = document.getElementById('invite-row');
+  const inviteInput = document.getElementById('invite-code');
+  const inviteLabel = document.getElementById('invite-label');
+  let inviteRequired = false;
 
   const MODES = {
     login: {
@@ -36,7 +40,13 @@
       switchTo: 'Already have an account?',
       path: '/api/auth/register',
       fallbackError: 'Registration failed',
-      body: (username, password) => ({ username, email: `${username}@itavenue.local`, password }),
+      body: (username, password) => {
+        const inviteCode = inviteInput.value.trim();
+        return {
+          username, email: `${username}@itavenue.local`, password,
+          ...(inviteCode ? { inviteCode } : {}),
+        };
+      },
     },
   };
   let mode = 'login';
@@ -53,6 +63,9 @@
     submitButton.textContent = current.submit;
     switchButton.textContent = current.switchTo;
     errorEl.style.display = 'none';
+    inviteRow.hidden = mode !== 'register';
+    inviteInput.required = mode === 'register' && inviteRequired;
+    inviteLabel.textContent = inviteRequired ? 'Invitation code' : 'Invitation code (optional)';
   }
 
   async function handleSubmit(event) {
@@ -115,6 +128,15 @@
     submitButton.disabled = true;
     return;
   }
+
+  // Ask whether sign-up needs an invitation code. Failure just leaves it optional.
+  fetch(`${API_BASE}/api/admin/registration`)
+    .then((res) => res.json())
+    .then((data) => {
+      inviteRequired = data.mode === 'invite';
+      applyMode();
+    })
+    .catch(() => {});
 
   // Already signed in: close this window so the main window opens.
   Promise.all([bridge.storeGet('authToken'), bridge.storeGet('user')])

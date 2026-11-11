@@ -433,6 +433,7 @@ function setupEventListeners() {
   setupNotificationFeatures();
   setupGroupFeatures();
   setupLaterFeatures();
+  setupAdminFeatures();
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
@@ -853,6 +854,7 @@ function connectSocket() {
   });
 
   state.socket.on('activity', handleActivityEvent);
+  state.socket.on('account_updated', handleAccountUpdated);
   state.socket.on('message_updated', handleMessageUpdated);
   state.socket.on('reminder_due', handleReminderDue);
   state.socket.on('channel_activity', handleChannelActivity);
@@ -2105,6 +2107,8 @@ async function loadModerationAccess() {
     if (!res.ok) throw new Error(data.error || 'Could not load moderation access');
     state.moderation.isSuperadmin = Boolean(data.isSuperadmin);
     state.moderation.moderatorChannelIds = data.moderatorChannelIds || [];
+    state.moderation.accountType = data.accountType || 'member';
+    applyAccountRestrictions();
     const nav = document.getElementById('nav-moderation');
     if (nav) nav.hidden = !state.moderation.isSuperadmin && !state.moderation.moderatorChannelIds.length;
   } catch (err) {
@@ -2160,6 +2164,7 @@ async function loadModerationView() {
   }
   await loadModerationChannel(selectedId);
   if (state.moderation.isSuperadmin) await loadModerationAudit();
+  if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
 }
 
 async function loadModerationAudit() {

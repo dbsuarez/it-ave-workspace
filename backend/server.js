@@ -21,6 +21,7 @@ const conversationRoutes = require('./src/routes/conversations');
 const messageEditRoutes = require('./src/routes/messageEdits');
 const savedRoutes = require('./src/routes/saved');
 const reminderRoutes = require('./src/routes/reminders');
+const adminRoutes = require('./src/routes/admin');
 const migrations = require('./src/migrations');
 const chatSockets = require('./src/sockets/chat');
 
@@ -68,6 +69,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/saved', savedRoutes);
 app.use('/api/reminders', reminderRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -9,9 +9,17 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(
       `SELECT id, username, avatar_color, status, last_seen, created_at,
-              status_text, status_emoji, dnd_until
+              status_text, status_emoji, dnd_until, account_type
        FROM users
        WHERE id != $1
+         AND (
+           NOT EXISTS (SELECT 1 FROM users me WHERE me.id = $1 AND me.account_type = 'guest')
+           OR EXISTS (
+             SELECT 1 FROM channel_members mine
+             JOIN channel_members theirs ON theirs.channel_id = mine.channel_id
+             WHERE mine.user_id = $1 AND theirs.user_id = users.id
+           )
+         )
        ORDER BY username`,
       [req.user.userId]
     );
@@ -26,6 +34,7 @@ router.get('/', authenticateToken, async (req, res) => {
         createdAt: u.created_at,
         statusText: u.status_text || '',
         statusEmoji: u.status_emoji || '',
+        accountType: u.account_type || 'member',
         dndUntil: u.dnd_until && new Date(u.dnd_until) > new Date() ? u.dnd_until : null,
       })),
     });

@@ -1,3 +1,5 @@
+const { ensureGuestCanReach } = require('./guests');
+
 const ALLOWED_EXTENSIONS = new Set([
   'txt', 'csv', 'json', 'xml', 'md', 'log', 'ini', 'cfg', 'yaml', 'yml',
   'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
@@ -201,6 +203,7 @@ async function ensureDirectMessageAccess(query, userId, otherUserId) {
     err.status = 404;
     throw err;
   }
+  await ensureGuestCanReach(query, userId, otherUserId);
 }
 
 async function ensureFileAccess(query, userId, fileId) {

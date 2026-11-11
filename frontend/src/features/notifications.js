@@ -140,7 +140,8 @@ function userStatusMarkup(user) {
   const emoji = user.statusEmoji ? `<span class="user-status-emoji" title="${escapeHtml(user.statusText || '')}">${escapeHtml(user.statusEmoji)}</span>` : '';
   const paused = user.dndUntil && new Date(user.dndUntil) > new Date()
     ? '<span class="user-dnd" title="Notifications paused">paused</span>' : '';
-  return emoji + paused;
+  const guest = user.accountType === 'guest' ? '<span class="user-dnd" title="Guest account">guest</span>' : '';
+  return emoji + guest + paused;
 }
 
 function renderOwnStatus() {

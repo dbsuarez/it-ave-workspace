@@ -1,6 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
+const { ensureNotGuest } = require('../guests');
 
 // Group direct messages: a private conversation between three or more people.
 const router = express.Router();
@@ -116,6 +117,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { memberIds: requested, name } = req.body || {};
+    await ensureNotGuest(query, req.user.userId, 'Guests cannot start group messages');
     const groupName = validateName(name);
     if (!Array.isArray(requested)) throw fail(400, 'memberIds must be a list of user IDs');
     const others = [...new Set(requested.map(parseId))]

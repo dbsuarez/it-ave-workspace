@@ -5,11 +5,12 @@ const jwt = require('jsonwebtoken');
 const { query } = require('../db');
 const config = require('../config');
 const authenticateToken = require('../middleware/auth');
+const { normalizeInviteCode, hashInviteCode, invitationProblem } = require('../guests');
 
 // Register a new user
 router.post('/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, inviteCode } = req.body;
 
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Username, email, and password are required' });
@@ -17,6 +18,23 @@ router.post('/register', async (req, res) => {
 
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Invitations: required when sign-up is invitation-only, optional otherwise.
+    let invitation = null;
+    if (normalizeInviteCode(inviteCode)) {
+      const found = await query(
+        'SELECT * FROM invitations WHERE code_hash = $1',
+        [hashInviteCode(inviteCode)]
+      );
+      const problem = invitationProblem(found.rows[0]);
+      if (problem) return res.status(400).json({ error: problem });
+      invitation = found.rows[0];
+    } else {
+      const settings = await query('SELECT registration_mode FROM moderation_settings WHERE id = 1');
+      if (settings.rows[0]?.registration_mode === 'invite') {
+        return res.status(403).json({ error: 'Sign-up is by invitation only. Enter your invitation code.' });
+      }
     }
 
     // Check if user already exists
@@ -42,15 +60,39 @@ router.post('/register', async (req, res) => {
     );
 
     const user = result.rows[0];
+    const accountType = invitation?.account_type === 'guest' ? 'guest' : 'member';
 
-    // Auto-join default public channels
-    const publicChannels = await query(
-      'SELECT id FROM channels WHERE is_private = false'
-    );
-    for (const ch of publicChannels.rows) {
+    if (invitation) {
+      // Claim the invitation; a concurrent sign-up with the same code loses here.
+      const claimed = await query(
+        `UPDATE invitations SET used_at = NOW(), used_by = $1
+         WHERE id = $2 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+         RETURNING id`,
+        [user.id, invitation.id]
+      );
+      if (!claimed.rows.length) {
+        await query('DELETE FROM users WHERE id = $1', [user.id]);
+        return res.status(400).json({ error: 'This invitation has already been used' });
+      }
+      if (accountType === 'guest') {
+        await query("UPDATE users SET account_type = 'guest' WHERE id = $1", [user.id]);
+      }
+    }
+
+    // Members join every public channel; guests only the channels they were invited to.
+    const joinIds = new Set((invitation?.channel_ids || []).map(Number));
+    if (accountType === 'member') {
+      const publicChannels = await query(
+        'SELECT id FROM channels WHERE is_private = false'
+      );
+      publicChannels.rows.forEach((ch) => joinIds.add(Number(ch.id)));
+    }
+    for (const channelId of joinIds) {
       await query(
-        'INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-        [ch.id, user.id]
+        `INSERT INTO channel_members (channel_id, user_id)
+         SELECT c.id, $2 FROM channels c WHERE c.id = $1
+         ON CONFLICT DO NOTHING`,
+        [channelId, user.id]
       );
     }
 
@@ -70,6 +112,7 @@ router.post('/register', async (req, res) => {
         email: user.email,
         avatarColor: user.avatar_color,
         isSuperadmin: user.is_superadmin,
+        accountType,
       },
     });
   } catch (err) {
