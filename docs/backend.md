@@ -99,6 +99,24 @@ is a 400. The `canvas_updated` socket event carries `revision`, `title` and `con
 The desktop client applies a live update only when the editor has no unsaved edits, and on a 409
 asks "keep my version / use theirs" (copying its own text to the clipboard before discarding it).
 
+**Sections and edit operations** (`src/canvasSections.js`). A section is a top-level Markdown block:
+`heading`, `paragraph`, `list`, `checklist` (`- [ ]` / `- [x]`), `table`, `code` (fences keep blank
+lines and `#` inside), `quote`, `divider`. Blocks are located by exact character offsets, so an
+edit splices only the block it touches (line endings, including CRLF, are preserved).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/canvas/:id/sections?type=&contains=` | Blocks as `{ id, index, type, preview, items? }` plus the `revision` they belong to (viewer access) |
+| PATCH | `/api/canvas/:id` with `{ operation, baseRevision }` | Apply ONE operation (editor access) |
+
+Operations: `insert_after` / `insert_before` (`sectionId`, `markdown`), `insert_at_start` /
+`insert_at_end` (`markdown`), `replace` (`markdown`; with `sectionId` one block, without it the
+whole document), `delete` (`sectionId`), `toggle` (`sectionId` of a checklist, `item` 0-based,
+optional `checked`), `rename` (`title`). Section ids (`<index>-<hash of the text>`) are only valid
+for the revision they were returned with, so `baseRevision` is **required** with an operation; a
+mismatch is a 409 with the current canvas, an id that no longer matches is a 404, and an
+operation cannot be mixed with `title`/`content` in one request.
+
 ### Moderation
 | Method | Endpoint | Description |
 |--------|----------|-------------|

@@ -5,6 +5,7 @@ const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership, ensureDirectMessageAccess, ensureCanvasAccess, getCanvasById } = require('../security');
 const { ensureNotGuest } = require('../guests');
+const { describeSections, applyOperation } = require('../canvasSections');
 
 const MAX_CONTENT_LENGTH = 100000;
 const MAX_TITLE_LENGTH = 160;
@@ -238,11 +239,55 @@ router.get('/:canvasId', authenticateToken, async (req, res) => {
   }
 });
 
-// PATCH /api/canvas/:id - update title/content
+// GET /api/canvas/:id/sections?type=&contains= - the document's top-level blocks. The ids are only
+// valid for the returned revision; send it back as baseRevision with an operation.
+router.get('/:canvasId/sections', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
+    const type = typeof req.query.type === 'string' && req.query.type ? req.query.type : undefined;
+    const contains = typeof req.query.contains === 'string' && req.query.contains ? req.query.contains.slice(0, 200) : undefined;
+    res.json({
+      canvasId,
+      revision: Number(canvas.revision),
+      sections: describeSections(canvas.content, { type, contains }),
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Canvas sections error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+async function applyCanvasOperation(req, res, canvasId) {
+  if (req.body.title !== undefined || req.body.content !== undefined) {
+    return res.status(400).json({ error: 'Send either an operation or title/content, not both' });
+  }
+  const baseRevision = parseBaseRevision(req.body.baseRevision);
+  if (baseRevision === null) {
+    return res.status(400).json({ error: 'baseRevision is required with an operation (section ids belong to one revision)' });
+  }
+  const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+  if (Number(canvas.revision) !== baseRevision) return conflictResponse(res, canvas);
+  const change = applyOperation(canvas.content, req.body.operation);
+  // The same conditional save as everyone else: if another save slipped in meanwhile it is a 409.
+  const saved = await saveCanvasChanges(canvasId, change.title, change.content, baseRevision);
+  if (!saved.canvas) return conflictResponse(res, saved.conflict);
+  req.io?.to(`canvas:${canvasId}`).emit('canvas_updated', {
+    canvasId, kind: saved.canvas.kind, title: saved.canvas.title, content: saved.canvas.content,
+    revision: Number(saved.canvas.revision), updatedAt: saved.canvas.updated_at,
+  });
+  return res.json({ canvas: mapCanvas(saved.canvas) });
+}
+
+// PATCH /api/canvas/:id - update title/content, or apply ONE section operation
+// ({ operation: { op, sectionId?, markdown?, item?, checked?, title? }, baseRevision }).
 router.patch('/:canvasId', authenticateToken, async (req, res) => {
   try {
     const canvasId = parseId(req.params.canvasId);
     if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    if (req.body?.operation !== undefined) return await applyCanvasOperation(req, res, canvasId);
     const title = req.body?.title === undefined ? null : parseTitle(req.body.title);
     if (req.body?.title !== undefined && title === null) {
       return res.status(400).json({ error: 'Canvas title must be between 1 and 160 characters' });

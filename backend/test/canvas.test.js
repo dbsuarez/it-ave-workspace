@@ -361,3 +361,68 @@ test('share-link edits use the same revision check', async () => {
   assert.equal(stale.status, 409);
   assert.equal((await stale.json()).canvas.content, 'by link');
 });
+
+async function createStandalone(content) {
+  const r = await fetch(`${baseUrl}/api/canvas`, {
+    method: 'POST', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Sections', content }),
+  });
+  return (await r.json()).canvas;
+}
+const sectionPatch = (id, body, user = 3) => fetch(`${baseUrl}/api/canvas/${id}`, {
+  method: 'PATCH', headers: { ...authHeader(user), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
+
+test('sections lookup returns blocks and the revision they belong to', async () => {
+  const canvas = await createStandalone('# Plan\n\n- [ ] one\n- [ ] two\n\nDone.');
+  const res = await fetch(`${baseUrl}/api/canvas/${canvas.id}/sections?type=checklist`, { headers: authHeader(3) });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.revision, 1);
+  assert.equal(body.sections.length, 1);
+  assert.equal(body.sections[0].items.length, 2);
+  const search = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}/sections?contains=done`, { headers: authHeader(3) })).json();
+  assert.equal(search.sections[0].type, 'paragraph');
+  const outsider = await fetch(`${baseUrl}/api/canvas/${canvas.id}/sections`, { headers: authHeader(7) });
+  assert.equal(outsider.status, 404, 'access rules apply to lookups too');
+});
+
+test('a section operation edits one block and bumps the revision', async () => {
+  const canvas = await createStandalone('# Plan\n\n- [ ] one\n- [ ] two\n\nDone.');
+  const { sections, revision } = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}/sections?type=checklist`, { headers: authHeader(3) })).json();
+  emitted.length = 0;
+  const res = await sectionPatch(canvas.id, { operation: { op: 'toggle', sectionId: sections[0].id, item: 1 }, baseRevision: revision });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.canvas.content, '# Plan\n\n- [ ] one\n- [x] two\n\nDone.');
+  assert.equal(body.canvas.revision, 2);
+  assert.equal(emitted.find((e) => e.event === 'canvas_updated').payload.revision, 2);
+});
+
+test('an operation needs a baseRevision, and a stale one gets the current canvas back', async () => {
+  const canvas = await createStandalone('# A\n\nText');
+  const { sections } = await (await fetch(`${baseUrl}/api/canvas/${canvas.id}/sections`, { headers: authHeader(3) })).json();
+  const op = { op: 'delete', sectionId: sections[1].id };
+  assert.equal((await sectionPatch(canvas.id, { operation: op })).status, 400);
+  assert.equal((await sectionPatch(canvas.id, { content: 'x', operation: op, baseRevision: 1 })).status, 400, 'not mixed with content');
+  assert.equal((await sectionPatch(canvas.id, { content: '# A\n\nChanged elsewhere', baseRevision: 1 })).status, 200);
+  const stale = await sectionPatch(canvas.id, { operation: op, baseRevision: 1 });
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).canvas.content, '# A\n\nChanged elsewhere');
+  assert.equal(canvases.get(canvas.id).content, '# A\n\nChanged elsewhere', 'nothing was deleted');
+});
+
+test('operations respect roles and report a missing section', async () => {
+  const canvas = await createStandalone('# A\n\nText');
+  const viewerAdd = await fetch(`${baseUrl}/api/canvas/${canvas.id}/collaborators`, {
+    method: 'POST', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'u4', role: 'viewer' }),
+  });
+  assert.equal(viewerAdd.status, 200);
+  const asViewer = await sectionPatch(canvas.id, { operation: { op: 'insert_at_end', markdown: 'x' }, baseRevision: 1 }, 4);
+  assert.equal(asViewer.status, 403, 'viewers cannot edit');
+  const missing = await sectionPatch(canvas.id, { operation: { op: 'delete', sectionId: '9-aaaaaa' }, baseRevision: 1 });
+  assert.equal(missing.status, 404);
+  const unknown = await sectionPatch(canvas.id, { operation: { op: 'explode' }, baseRevision: 1 });
+  assert.equal(unknown.status, 400);
+});
