@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell, desktopCapturer, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 
@@ -256,5 +256,23 @@ ipcMain.handle('app:command', (event, command) => {
       };
     default:
       return false;
+  }
+});
+
+// Copy an image (as a data: URL) to the system clipboard
+ipcMain.handle('clipboard:copyImage', (event, dataUrl) => {
+  try {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+      return { ok: false, error: 'Invalid image data' };
+    }
+    const image = nativeImage.createFromDataURL(dataUrl);
+    if (image.isEmpty()) {
+      return { ok: false, error: 'Could not decode image data' };
+    }
+    clipboard.writeImage(image);
+    return { ok: true };
+  } catch (err) {
+    console.error('Failed to copy image to clipboard:', err);
+    return { ok: false, error: err.message || 'Copy failed' };
   }
 });

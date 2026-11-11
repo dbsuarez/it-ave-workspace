@@ -246,7 +246,19 @@
           <div class="channel-header">
             <div class="channel-info">
               <h1 id="channel-title">#general</h1>
-              <p id="channel-topic"></p>
+              <div class="channel-topic-row">
+                <p id="channel-topic"></p>
+                <button class="icon-btn topic-edit-btn" id="btn-edit-topic" type="button" title="Edit channel description" aria-label="Edit channel description" hidden>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.121 2.121 0 0 1 3 3L10 17l-4 1 1-4 9-11z"/><path d="M4 20h16"/></svg>
+                </button>
+                <form id="channel-topic-form" class="channel-topic-form" hidden autocomplete="off">
+                  <input id="channel-topic-input" type="text" maxlength="250" placeholder="What is this channel about?" aria-label="Channel description">
+                  <div class="channel-topic-form-actions">
+                    <button type="submit" class="btn primary" id="btn-save-topic">Save</button>
+                    <button type="button" class="btn" id="btn-cancel-topic">Cancel</button>
+                  </div>
+                </form>
+              </div>
               <div id="channel-read-receipts" class="read-receipts" aria-live="polite"></div>
             </div>
             <div class="channel-actions">
@@ -792,6 +804,29 @@
       <div class="modal-footer">
         <button class="btn primary" type="button" id="btn-user-profile-message" hidden>Send a message</button>
         <button class="btn primary" type="button" id="btn-user-profile-edit" hidden>Edit my profile</button>
+      </div>
+    </div>
+
+    <div class="modal image-viewer-modal" id="image-viewer-modal" role="dialog" aria-label="Image viewer" aria-modal="true">
+      <div class="image-viewer-body">
+        <button class="image-viewer-close icon-btn" id="btn-close-image-viewer" type="button" aria-label="Close viewer" title="Close">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+        <div class="image-viewer-header">
+          <div>
+            <div class="image-viewer-title" id="image-viewer-title"></div>
+            <div class="image-viewer-meta" id="image-viewer-meta"></div>
+          </div>
+        </div>
+        <figure class="image-viewer-stage">
+          <img id="image-viewer-img" alt="" loading="eager">
+        </figure>
+        <div class="image-viewer-footer">
+          <button class="btn" type="button" id="btn-viewer-copy">Copy image</button>
+          <button class="btn" type="button" id="btn-viewer-download">Download</button>
+          <button class="btn danger" type="button" id="btn-viewer-remove" hidden>Remove image</button>
+          <button class="btn" type="button" id="btn-viewer-close">Close</button>
+        </div>
       </div>
     </div>
   </div>

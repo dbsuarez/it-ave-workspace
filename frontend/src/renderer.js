@@ -12,13 +12,37 @@ const ICON_REPLY = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" 
 
 const ICON_MORE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>';
 
+const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><line x1="4" y1="20" x2="20" y2="20"/></svg>';
+
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.5 14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+
 function messageMoreMenuHtml(msg, isYou, canModerate) {
   const id = escapeHtml(String(msg.id));
   const pinned = Boolean(msg.pinned || msg.pinnedAt);
   const edited = Boolean(msg.editedAt && !msg.pending);
   const saved = typeof savedItemForMessage === 'function' && Boolean(savedItemForMessage(msg.id));
+  const attachments = msg.attachments || [];
+  const channelId = msg.channelId || state.currentChannelId;
+  const canRemoveAttachment = (a) =>
+    Number(a.uploadedBy) === Number(state.user.id) || canModerateChannel(channelId);
+  const imageAttachments = attachments.filter((a) => (a.mimeType || '').toLowerCase().startsWith('image/'));
+  const imageItems = imageAttachments.map((a, index) => {
+    const aid = escapeHtml(String(a.id));
+    const aname = escapeHtml(a.filename || 'image');
+    const multiple = imageAttachments.length > 1;
+    const label = multiple ? ` <span class="menu-kbd">${escapeHtml(a.filename || '')}</span>` : '';
+    const canRemove = canRemoveAttachment(a);
+    const removeLabel = !Number(a.uploadedBy) || Number(a.uploadedBy) === Number(state.user.id)
+      ? 'Remove image'
+      : 'Remove image for everyone';
+    return `<button class="menu-item" type="button" role="menuitem" data-copy-image="${aid}">Copy image${label}</button>
+      <button class="menu-item" type="button" role="menuitem" data-download-image="${aid}" data-image-name="${aname}">Download image${label}</button>
+      ${canRemove ? `<button class="menu-item danger" type="button" role="menuitem" data-remove-image="${aid}" data-image-name="${aname}" data-moderator="${Number(a.uploadedBy) !== Number(state.user.id)}">${removeLabel}${label}</button>` : ''}${index < imageAttachments.length - 1 ? '<div class="menu-sep"></div>' : ''}`;
+  }).join('');
   return `
     <div class="menu msg-more-menu" data-more-menu="${id}" role="menu" aria-label="More actions">
+      ${imageItems}
+      ${imageItems ? '<div class="menu-sep"></div>' : ''}
       <button class="menu-item" type="button" role="menuitem" data-message-pin="${id}" data-pinned="${pinned}">${pinned ? 'Unpin message' : 'Pin message'}</button>
       <button class="menu-item" type="button" role="menuitem" data-save-message="${id}">${saved ? 'Unsave message' : 'Save message'}</button>
       <button class="menu-item" type="button" role="menuitem" data-remind-message="${id}">Remind me</button>
@@ -147,6 +171,9 @@ const els = {
   dmList: document.getElementById('dm-list'),
   channelTitle: document.getElementById('channel-title'),
   channelTopic: document.getElementById('channel-topic'),
+  editTopicBtn: document.getElementById('btn-edit-topic'),
+  channelTopicForm: document.getElementById('channel-topic-form'),
+  channelTopicInput: document.getElementById('channel-topic-input'),
   dmTitle: document.getElementById('dm-title'),
   dmTopic: document.getElementById('dm-topic'),
   messageInput: document.getElementById('message-input'),
@@ -211,6 +238,7 @@ const els = {
   emojiSearch: document.getElementById('emoji-search'),
   emojiPickerCategories: document.getElementById('emoji-picker-categories'),
   emojiPickerGrid: document.getElementById('emoji-picker-grid'),
+
 };
 
 // ============================================================
@@ -299,6 +327,7 @@ function setupEventListeners() {
       return;
     }
     if (e.key === 'Escape') {
+      if (document.getElementById('image-viewer-modal')?.classList.contains('open')) { closeImageViewer(); return; }
       if (closeAllMenus()) return;
       if (els.emojiPicker && !els.emojiPicker.hidden) { closeEmojiPicker(); return; }
       if (state.replyingTo) { cancelReply(); return; }
@@ -364,6 +393,19 @@ function setupEventListeners() {
 
   // Profile modal close buttons
   on('btn-close-user-profile', 'click', closeSettingsModal);
+
+  // Image viewer (lightbox)
+  on('btn-close-image-viewer', 'click', closeImageViewer);
+  on('btn-viewer-close', 'click', closeImageViewer);
+  on('btn-viewer-copy', 'click', copyImageViewerImage);
+  on('btn-viewer-download', 'click', () => imageViewerState.fileId && downloadFile(imageViewerState.fileId, imageViewerState.name || 'image'));
+  on('btn-viewer-remove', 'click', removeImageViewerImage);
+  on('image-viewer-modal', 'click', (event) => {
+    if (event.target && event.target.id === 'image-viewer-modal') closeImageViewer();
+  });
+
+  // Image action buttons (kebab + inline hover) share the same delegation
+  document.addEventListener('click', handleImageAction);
 
   // App menu (hamburger)
   on('btn-app-menu', 'click', (e) => { e.stopPropagation(); toggleMenu('app-menu', 'btn-app-menu'); });
@@ -478,6 +520,9 @@ function setupEventListeners() {
   on('btn-channel-pins', 'click', togglePinnedMessages);
   on('btn-close-channel-pins', 'click', closePinnedMessages);
   on('channel-pins-list', 'click', handlePinnedMessageClick);
+  on('btn-edit-topic', 'click', startEditChannelTopic);
+  on('channel-topic-form', 'submit', saveEditChannelTopic);
+  on('btn-cancel-topic', 'click', cancelEditChannelTopic);
   on('dm-messages', 'click', handleReactionClick);
   on('emoji-picker-categories', 'click', handleEmojiCategoryClick);
   on('emoji-picker-grid', 'click', handleEmojiSelect);
@@ -941,6 +986,19 @@ function connectSocket() {
   state.socket.on('message_updated', handleMessageUpdated);
   state.socket.on('reminder_due', handleReminderDue);
   state.socket.on('channel_activity', handleChannelActivity);
+  state.socket.on('channel_topic_updated', (event) => {
+    const channelId = Number(event.channelId);
+    const channel = state.channels.find((c) => Number(c.id) === channelId);
+    if (channel) channel.topic = event.topic || '';
+    if (Number(state.currentChannelId) === channelId) {
+      if (els.channelTopic && els.channelTopic.hidden !== true) {
+        els.channelTopic.textContent = event.topic || '';
+      } else if (els.channelTopicInput && document.activeElement !== els.channelTopicInput) {
+        els.channelTopicInput.value = event.topic || '';
+      }
+      updateEditTopicVisibility(channelId);
+    }
+  });
   state.socket.on('user_status_updated', handleUserStatusUpdated);
   state.socket.on('new_group_message', handleNewGroupMessage);
   state.socket.on('conversation_updated', handleConversationUpdated);
@@ -1231,6 +1289,7 @@ async function openChannel(channelId) {
     els.channelTitle.textContent = '#' + ch.name;
     els.channelTopic.textContent = ch.topic || '';
   }
+  updateEditTopicVisibility(channelId);
 
   resetChannelTab();
 
@@ -1666,17 +1725,39 @@ function renderMessageEl(msg, allowReply = false) {
     </button>`
     : '';
 
-  const attachmentsHtml = (msg.attachments || []).map((a) => `
-    <div class="attachment-row">
-      <div class="attachment" data-file-id="${escapeHtml(String(a.id))}" data-file-name="${escapeHtml(a.filename)}" role="button" tabindex="0" title="Download ${escapeHtml(a.filename)}">
+  const downloadsHtml = (msg.attachments || []).map((a) => {
+    const id = escapeHtml(String(a.id));
+    const name = escapeHtml(a.filename || 'file');
+    const mime = (a.mimeType || '').toLowerCase();
+    const isImage = mime.startsWith('image/');
+    const label = isImage ? `Download image${name ? `: ${name}` : ''}` : `Download ${name}`;
+    return `<button class="msg-action-btn" type="button" data-download-attachment="${id}" data-file-name="${name}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${ICON_DOWNLOAD}</button>`;
+  }).join('');
+
+  const attachmentsHtml = (msg.attachments || []).map((a) => {
+    const id = escapeHtml(String(a.id));
+    const name = escapeHtml(a.filename);
+    const mime = (a.mimeType || '').toLowerCase();
+    const isImage = mime.startsWith('image/');
+    if (isImage) {
+      return `<div class="attachment-row attachment-row-image">
+        <span class="attachment-image-wrap">
+          <button class="attachment-image" type="button" data-file-id="${id}" data-file-name="${name}" data-file-mime="${escapeHtml(a.mimeType || '')}" data-file-size="${escapeHtml(String(a.size || ''))}" data-uploaded-by="${escapeHtml(String(a.uploadedBy ?? ''))}" data-moderator="${Number(a.uploadedBy) !== Number(state.user.id)}" aria-label="${name}" title="${name}">
+            <img alt="${name}" loading="lazy">
+          </button>
+        </span>
+      </div>`;
+    }
+    return `<div class="attachment-row attachment-row-file">
+      <div class="attachment" data-file-id="${id}" data-file-name="${name}" role="button" tabindex="0" title="Download ${name}">
         <div class="icon">${fileIconSvg(fileIcon(a.mimeType))}</div>
         <div class="info">
-          <div class="name">${escapeHtml(a.filename)}</div>
+          <div class="name">${name}</div>
           <div class="size">${escapeHtml(humanSize(a.size))}</div>
         </div>
       </div>
-      ${Number(a.uploadedBy) === Number(state.user.id) || (allowReply && canModerate) ? `<button class="attachment-delete" type="button" data-delete-file="${escapeHtml(String(a.id))}" data-file-name="${escapeHtml(a.filename)}" data-moderator-delete="${Number(a.uploadedBy) !== Number(state.user.id)}">${Number(a.uploadedBy) === Number(state.user.id) ? 'Delete' : 'Remove attachment'}</button>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const replyPreview = msg.replyTo ? (msg.replyToMessage || {}) : null;
 
   el.innerHTML = `
@@ -1695,14 +1776,19 @@ function renderMessageEl(msg, allowReply = false) {
       </button>` : ''}
       <div class="message-bubble-row">
         <div class="message-text">${formatMessageText(msg.content)}${reactionsHtml ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
-        ${allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
+        ${!attachmentsHtml && allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
           <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
           <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
-          <button class="msg-action-btn" type="button" data-message-more="${escapeHtml(String(msg.id))}" aria-label="More actions" title="More actions" aria-haspopup="true" aria-expanded="false">${ICON_MORE}</button>
+          ${downloadsHtml}<button class="msg-action-btn" type="button" data-message-more="${escapeHtml(String(msg.id))}" aria-label="More actions" title="More actions" aria-haspopup="true" aria-expanded="false">${ICON_MORE}</button>
           ${messageMoreMenuHtml(msg, isYou, canModerate)}
         </span>` : ''}
       </div>
-      ${attachmentsHtml ? `<div class="attachments">${attachmentsHtml}</div>` : ''}
+      ${attachmentsHtml ? `<div class="attachments">${attachmentsHtml}${allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
+          <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
+          <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
+          ${downloadsHtml}<button class="msg-action-btn" type="button" data-message-more="${escapeHtml(String(msg.id))}" aria-label="More actions" title="More actions" aria-haspopup="true" aria-expanded="false">${ICON_MORE}</button>
+          ${messageMoreMenuHtml(msg, isYou, canModerate)}
+        </span>` : ''}</div>` : ''}
     </div>`;
 
   const replyAction = el.querySelector('[data-reply-message]');
@@ -1722,15 +1808,37 @@ function renderMessageEl(msg, allowReply = false) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
     });
   });
-  el.querySelectorAll('[data-delete-file]').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      deleteFileAttachment(
-        button.dataset.deleteFile,
-        button.dataset.fileName,
-        button.dataset.moderatorDelete === 'true',
-      );
+
+  // Image attachments: load the bytes with the bearer token and wire preview
+  el.querySelectorAll('.attachment-image').forEach((node) => {
+    const fileId = node.dataset.fileId;
+    const fileName = node.dataset.fileName;
+    const fileSize = node.dataset.fileSize;
+    const uploaderId = node.dataset.uploadedBy;
+    const moderator = node.dataset.moderator === 'true';
+    const img = node.querySelector('img');
+    fetch(`${API_BASE}/api/files/${fileId}/download`, {
+      headers: { 'Authorization': `Bearer ${state.token}` },
+    })
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error('Could not load image'))))
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        if (img) {
+          img.src = url;
+          img.dataset.objectUrl = url;
+        }
+      })
+      .catch((err) => {
+        console.error('Load image preview error:', err);
+        node.classList.add('image-failed');
+        if (img) {
+          img.alt = `${fileName} (failed to load)`;
+        }
+      });
+
+    // Click opens the lightbox
+    node.addEventListener('click', () => {
+      openImageViewer({ fileId, name: fileName, size: fileSize, imgAlt: img?.alt || fileName, uploaderId, canModerate: moderator, mimeType: node.dataset.fileMime });
     });
   });
 
@@ -2258,6 +2366,7 @@ async function loadModerationAccess() {
     applyAccountRestrictions();
     const nav = document.getElementById('nav-moderation');
     if (nav) nav.hidden = !state.moderation.isSuperadmin && !state.moderation.moderatorChannelIds.length;
+    updateEditTopicVisibility(state.currentChannelId);
   } catch (err) {
     console.error('Load moderation access error:', err);
   }
@@ -2395,7 +2504,12 @@ async function handleModerationClick(event) {
       const role = document.querySelector(`[data-member-role="${userId}"]`).value;
       await checkedApi(`/api/moderation/channels/${channelId}/members/${userId}`, 'PUT', { role });
     } else if (action === 'remove-member') {
-      if (!confirm('Remove this user from the channel?')) return;
+      if (!(await confirmAction({
+        title: 'Remove from channel',
+        message: 'Remove this user from the channel?',
+        confirmLabel: 'Remove',
+        danger: true,
+      }))) return;
       await checkedApi(`/api/moderation/channels/${channelId}/members/${userId}`, 'DELETE');
     } else if (action === 'timeout') {
       const duration = await askText('Timeout duration in minutes (blank uses the workspace default):', { maxLength: 6 });
@@ -2471,7 +2585,12 @@ async function handleModerationMessageClick(event) {
       showToast(err.message || 'Could not report this message.', 'error');
     }
   } else if (deleteButton) {
-    if (!confirm('Remove this message for everyone?')) return;
+    if (!(await confirmAction({
+      title: 'Remove for everyone',
+      message: 'Remove this message for everyone?',
+      confirmLabel: 'Remove',
+      danger: true,
+    }))) return;
     try {
       await checkedApi(`/api/moderation/messages/${deleteButton.dataset.moderateDelete}`, 'DELETE');
       showToast('Message removed.', 'success');
@@ -2479,6 +2598,48 @@ async function handleModerationMessageClick(event) {
       showToast(err.message || 'Could not remove this message.', 'error');
     }
   }
+}
+
+// Reusable confirmation dialog (replaces native window.confirm).
+// Resolves with true if the user confirms, false on cancel / Escape / backdrop click.
+function confirmAction({ title = '', message = '', confirmLabel = 'Delete', cancelLabel = 'Cancel', danger = true } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    const modal = document.createElement('div');
+    modal.className = 'modal confirm-modal open';
+    modal.setAttribute('role', 'alertdialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', title || message || 'Confirm action');
+    modal.innerHTML = `
+      <div class="modal-body">
+        ${title ? `<h3 class="confirm-title">${escapeHtml(title)}</h3>` : ''}
+        ${message ? `<p class="confirm-message">${escapeHtml(message)}</p>` : ''}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" data-confirm-cancel>${escapeHtml(cancelLabel)}</button>
+        <button class="btn ${danger ? 'danger' : 'primary'}" type="button" data-confirm-ok>${escapeHtml(confirmLabel)}</button>
+      </div>`;
+    const finish = (value) => {
+      document.removeEventListener('keydown', onKeydown, true);
+      overlay.remove();
+      modal.remove();
+      resolve(value);
+    };
+    const onKeydown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      finish(false);
+    };
+    modal.querySelector('[data-confirm-ok]').addEventListener('click', () => finish(true));
+    modal.querySelectorAll('[data-confirm-cancel]').forEach((btn) => btn.addEventListener('click', () => finish(false)));
+    overlay.addEventListener('click', () => finish(false));
+    document.addEventListener('keydown', onKeydown, true);
+    document.body.append(overlay, modal);
+    // Focus the Cancel button so Enter does not accidentally confirm a destructive action
+    modal.querySelector('[data-confirm-cancel]')?.focus();
+  });
 }
 
 // Electron does not implement window.prompt(), so text input uses an in-app dialog.
@@ -2916,6 +3077,7 @@ function renderActivity() {
 }
 
 function handleDocumentClick(event) {
+  // Clicking an image attachment opens the lightbox (wired on the element directly)
   // Clicking any avatar opens the profile context menu
   const avatar = event.target.closest('[data-user-id]');
   if (avatar) {
@@ -3307,6 +3469,156 @@ function canModerateChannel(channelId) {
     || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId));
 }
 
+function canEditChannelTopic(channelId) {
+  const ch = (state.channels || []).find((c) => Number(c.id) === Number(channelId));
+  if (state.moderation.isSuperadmin) return true;
+  if (ch && Number(ch.createdBy) === Number(state.user?.id)) return true;
+  return state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId));
+}
+
+function updateEditTopicVisibility(channelId) {
+  if (!els.editTopicBtn) return;
+  els.editTopicBtn.hidden = !canEditChannelTopic(channelId);
+}
+
+function startEditChannelTopic() {
+  const ch = state.channels.find((c) => Number(c.id) === Number(state.currentChannelId));
+  if (!ch || !els.channelTopicInput || !els.channelTopicForm || !els.editTopicBtn || !els.channelTopic) return;
+  els.channelTopicInput.value = ch.topic || '';
+  els.channelTopic.hidden = true;
+  els.editTopicBtn.hidden = true;
+  els.channelTopicForm.hidden = false;
+  els.channelTopicInput.focus();
+  els.channelTopicInput.select();
+}
+
+function cancelEditChannelTopic() {
+  if (!els.channelTopicForm || !els.editTopicBtn || !els.channelTopic) return;
+  els.channelTopicForm.hidden = true;
+  els.channelTopic.hidden = false;
+  updateEditTopicVisibility(state.currentChannelId);
+}
+
+async function saveEditChannelTopic(event) {
+  event.preventDefault();
+  const channelId = state.currentChannelId;
+  if (!channelId) return;
+  const input = els.channelTopicInput;
+  if (!input) return;
+  const topic = input.value.slice(0, 250);
+  try {
+    const res = await api(`/api/channels/${channelId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ topic }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not edit the description');
+    const newTopic = data.channel?.topic || topic;
+    const saved = state.channels.find((c) => Number(c.id) === Number(channelId));
+    if (saved) saved.topic = newTopic;
+    if (els.channelTopic) els.channelTopic.textContent = newTopic;
+    cancelEditChannelTopic();
+    showToast('Channel description updated.', 'success');
+  } catch (err) {
+    console.error('Update channel description error:', err);
+    showToast(err.message || 'Could not update the description.', 'error');
+    cancelEditChannelTopic();
+  }
+}
+
+async function handleImageAction(event) {
+  const downloadBtn = event.target.closest('[data-download-attachment]');
+  if (downloadBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    await downloadFile(downloadBtn.dataset.downloadAttachment, downloadBtn.dataset.fileName || 'file');
+    return;
+  }
+  const removeBtn = event.target.closest('[data-remove-image]');
+  if (removeBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const fileId = removeBtn.dataset.removeImage;
+    await deleteFileAttachment(fileId, removeBtn.dataset.imageName || 'image', removeBtn.dataset.moderator === 'true');
+    return;
+  }
+  const copyBtn = event.target.closest('[data-copy-image]');
+  if (copyBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const fileId = copyBtn.dataset.copyImage;
+    try {
+      const res = await fetch(`${API_BASE}/api/files/${fileId}/download`, {
+        headers: { 'Authorization': `Bearer ${state.token}` },
+      });
+      if (!res.ok) throw new Error('Could not load image');
+      const blob = await res.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Could not encode image'));
+        reader.readAsDataURL(blob);
+      });
+      const result = await window.electronAPI?.copyImageToClipboard?.(dataUrl);
+      if (!result?.ok) throw new Error(result?.error || 'Could not copy image');
+      showToast('Image copied to clipboard.', 'success');
+    } catch (err) {
+      console.error('Copy image error:', err);
+      showToast(err.message || 'Could not copy image.', 'error');
+    }
+  }
+}
+
+let imageViewerState = { fileId: null, name: null, size: null, uploaderId: null, canModerate: false, mimeType: null };
+
+function canRemoveImageAttachment(uploaderId, moderated) {
+  if (Number(uploaderId) === Number(state.user?.id)) return true;
+  if (moderated || canModerateChannel(state.currentChannelId)) return true;
+  return false;
+}
+
+function openImageViewer({ fileId, name, size, imgAlt, uploaderId, canModerate, mimeType }) {
+  imageViewerState = { fileId, name, size, uploaderId, canModerate: Boolean(canModerate), mimeType: mimeType || null };
+  const modal = document.getElementById('image-viewer-modal');
+  if (!modal) return;
+  const title = document.getElementById('image-viewer-title');
+  const meta = document.getElementById('image-viewer-meta');
+  const img = document.getElementById('image-viewer-img');
+  const removeBtn = document.getElementById('btn-viewer-remove');
+  if (title) title.textContent = name || 'Image';
+  if (meta) {
+    const parts = [];
+    if (size) parts.push(humanSize(Number(size) || 0));
+    if (mimeType) parts.push(mimeType);
+    meta.textContent = parts.join(' · ');
+  }
+  if (img) {
+    img.src = document.querySelector(`.attachment-image[data-file-id="${String(fileId).replace(/"/g, '\\"')}"] img`)?.src || '';
+    img.alt = imgAlt || name || 'Image';
+  }
+  if (removeBtn) removeBtn.hidden = !canRemoveImageAttachment(uploaderId, canModerate);
+  modal.classList.add('open');
+}
+
+function closeImageViewer() {
+  document.getElementById('image-viewer-modal')?.classList.remove('open');
+  imageViewerState = { fileId: null, name: null, size: null, uploaderId: null, canModerate: false, mimeType: null };
+}
+
+function copyImageViewerImage() {
+  const { fileId } = imageViewerState;
+  if (!fileId) return;
+  handleImageAction({ target: Object.assign(document.createElement('button'), { dataset: { copyImage: String(fileId) } }) });
+}
+
+async function removeImageViewerImage() {
+  const { fileId, name, uploaderId, canModerate } = imageViewerState;
+  if (!fileId) return;
+  const moderated = canRemoveImageAttachment(uploaderId, canModerate) && Number(uploaderId) !== Number(state.user?.id);
+  await deleteFileAttachment(fileId, name || 'image', moderated);
+  closeImageViewer();
+}
+
 async function deleteFileAttachment(fileId, name, requireReason = false) {
   const reason = requireReason
     ? await askText(`Why are you removing "${name}"? (Required, up to 500 characters)`, { required: true })
@@ -3316,7 +3628,12 @@ async function deleteFileAttachment(fileId, name, requireReason = false) {
     showToast('The reason must be 500 characters or fewer.', 'error');
     return;
   }
-  if (!confirm(`Delete "${name}" for everyone? This cannot be undone.`)) return;
+  if (!(await confirmAction({
+    title: 'Delete attachment',
+    message: `Delete "${name}" for everyone? This cannot be undone.`,
+    confirmLabel: 'Delete',
+    danger: true,
+  }))) return;
 
   try {
     const res = await api(`/api/files/${fileId}`, {
@@ -3453,7 +3770,12 @@ function renderNotes(notes) {
     card.onclick = () => openNoteEditor(n);
     card.querySelector('.btn-note-delete').addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete note "${n.title}"?`)) return;
+      if (!(await confirmAction({
+        title: 'Delete note',
+        message: `Delete note "${n.title}"?`,
+        confirmLabel: 'Delete',
+        danger: true,
+      }))) return;
       try {
         const res = await api(`/api/notes/${n.id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Delete failed');
@@ -3688,7 +4010,12 @@ async function handleListContainerClick(event) {
   const deleteListButton = event.target.closest('[data-delete-list]');
   if (deleteListButton) {
     const list = state.lists.find((entry) => String(entry.id) === deleteListButton.dataset.deleteList);
-    if (!list || !confirm(`Delete "${list.title}" and all its items?`)) return;
+    if (!list || !(await confirmAction({
+      title: 'Delete list',
+      message: `Delete "${list.title}" and all its items?`,
+      confirmLabel: 'Delete',
+      danger: true,
+    }))) return;
     try {
       const res = await api(`/api/lists/${list.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Could not delete list');
@@ -3768,7 +4095,12 @@ async function openCreateCanvas() {
 }
 
 async function handleCanvasChannelChange() {
-  if (state.canvasDirty && !confirm('Discard unsaved canvas changes?')) {
+  if (state.canvasDirty && !(await confirmAction({
+    title: 'Discard changes?',
+    message: 'Discard unsaved canvas changes?',
+    confirmLabel: 'Discard',
+    danger: true,
+  }))) {
     els.canvasChannelSelect.value = String(state.canvasChannelId || '');
     return;
   }
@@ -3820,7 +4152,12 @@ async function loadCanvases() {
 }
 
 async function openCanvas(canvasId, confirmDiscard = true) {
-  if (confirmDiscard && state.canvasDirty && !confirm('Discard unsaved canvas changes?')) return;
+  if (confirmDiscard && state.canvasDirty && !(await confirmAction({
+    title: 'Discard changes?',
+    message: 'Discard unsaved canvas changes?',
+    confirmLabel: 'Discard',
+    danger: true,
+  }))) return;
   const requestId = ++state.canvasDetailRequestId;
   try {
     const res = await api(`/api/canvases/${canvasId}`);
@@ -3868,12 +4205,17 @@ function handleCanvasDocSelect(event) {
   if (button) openCanvas(button.dataset.canvasId);
 }
 
-function createNewCanvas() {
+async function createNewCanvas() {
   if (els.canvasChannelSelect?.disabled) {
     showToast('Join a channel before creating a canvas.', 'error');
     return;
   }
-  if (state.canvasDirty && !confirm('Discard unsaved canvas changes?')) return;
+  if (state.canvasDirty && !(await confirmAction({
+    title: 'Discard changes?',
+    message: 'Discard unsaved canvas changes?',
+    confirmLabel: 'Discard',
+    danger: true,
+  }))) return;
   state.canvasDetailRequestId += 1;
   state.currentCanvasId = null;
   state.canvasChannelId = Number(els.canvasChannelSelect.value);
@@ -3939,7 +4281,12 @@ async function saveCanvas(event) {
 }
 
 async function deleteCanvas() {
-  if (!state.currentCanvasId || !confirm(`Delete "${els.canvasTitleInput.value}"?`)) return;
+  if (!state.currentCanvasId || !(await confirmAction({
+    title: 'Delete canvas',
+    message: `Delete "${els.canvasTitleInput.value}"?`,
+    confirmLabel: 'Delete',
+    danger: true,
+  }))) return;
   try {
     const res = await api(`/api/canvases/${state.currentCanvasId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Could not delete canvas');

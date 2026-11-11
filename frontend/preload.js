@@ -23,4 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // API configuration (set via environment variables in main process)
   apiBase: process.env.API_BASE || 'http://127.0.0.1:3001',
   socketUrl: process.env.SOCKET_URL || 'http://127.0.0.1:3001',
+
+  // Clipboard: copy an image (passed as a data: URL) to the system clipboard
+  copyImageToClipboard: (dataUrl) => ipcRenderer.invoke('clipboard:copyImage', dataUrl),
 });
