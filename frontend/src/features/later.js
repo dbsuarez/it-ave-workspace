@@ -19,16 +19,9 @@ function savedItemForFile(fileId) {
 // ============================================================
 // Extra actions on channel messages (called from renderMessageEl)
 // ============================================================
-function messageExtraActionsHtml(msg, isYou) {
-  if (msg.pending || msg.id == null) return '';
-  const id = escapeHtml(String(msg.id));
-  const saved = Boolean(savedItemForMessage(msg.id));
-  return `
-    <button class="message-extra-action" type="button" data-save-message="${id}">${saved ? 'Unsave' : 'Save'}</button>
-    <button class="message-extra-action" type="button" data-remind-message="${id}">Remind me</button>
-    ${isYou ? `<button class="message-extra-action" type="button" data-edit-message="${id}">Edit</button>
-    <button class="message-extra-action danger" type="button" data-delete-own-message="${id}">Delete</button>` : ''}`;
-}
+// The Save / Remind me / Edit / Delete buttons are rendered by
+// renderer.js inside the per-message "More actions" menu (data-save-message,
+// data-remind-message, ...). The click delegation below handles them.
 
 function messageEditedHtml(msg) {
   if (!msg.editedAt || msg.pending) return '';

@@ -1175,7 +1175,7 @@ body.iav-dev .demo-banner {
 
 .message-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   margin-bottom: 4px;
 }
@@ -1254,44 +1254,6 @@ body.iav-dev .demo-banner {
 @keyframes message-highlight {
   0%, 100% { background: transparent; }
   25%, 75% { background: rgba(168, 85, 247, 0.16); }
-}
-
-.message-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.message-actions a,
-.message-reaction-action,
-.message-pin-action {
-  color: var(--accent);
-  text-decoration: none;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.message-actions a:hover,
-.message-reaction-action:hover,
-.message-pin-action:hover {
-  text-decoration: underline;
-}
-
-.message-reaction-action {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-}
-
-.message-pin-action {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
 }
 
 .emoji-picker {
@@ -1403,9 +1365,12 @@ body.iav-dev .demo-banner {
 }
 
 .reactions {
-  display: flex;
+  position: absolute;
+  right: 0;
+  bottom: -14px;
+  display: inline-flex;
   gap: 4px;
-  margin-top: 6px;
+  z-index: 7;
   flex-wrap: wrap;
 }
 
@@ -1413,19 +1378,33 @@ body.iav-dev .demo-banner {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--chip-bg);
+  height: 22px;
+  background: var(--surface);
   color: var(--chip-text);
-  border: 1px solid #D8B4FE;
-  border-radius: 16px;
-  padding: 2px 8px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 6px;
   font-size: 11.5px;
+  line-height: 1;
   cursor: pointer;
   user-select: none;
   font-family: inherit;
+  box-shadow: none;
 }
 
 .reaction:hover {
-  background: #DDD0FE;
+  background: var(--muted-bg);
+}
+
+.reaction .emoji,
+.reaction .count {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.reaction .emoji {
+  font-size: 12px;
 }
 
 .reaction .count {
@@ -1434,15 +1413,96 @@ body.iav-dev .demo-banner {
 }
 
 .reaction.me {
-  background: #D7E3F4;
-  color: #1E40Af;
-  border-color: #BFDBFe;
+  background: var(--surface);
+  color: var(--chip-text);
+  border: 0;
 }
 
-.reaction .remove {
-  margin-left: 2px;
-  font-size: 9px;
-  opacity: 0.6;
+.reaction.me:hover {
+  background: var(--muted-bg);
+}
+
+/* Reaction pills overlap the bubble's lower outer corner */
+.message-text {
+  position: relative;
+}
+
+.message.own .reactions {
+  left: 0;
+  right: auto;
+}
+
+/* ============================================================
+   Reaction details popup
+   ============================================================ */
+.reaction-info-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
+.reaction-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reaction-group + .reaction-group {
+  margin-top: 10px;
+}
+
+.reaction-group-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.reaction-group-label span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.reaction-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.reaction-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reaction-row-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.reaction-row.me {
+  cursor: pointer;
+}
+
+.reaction-row.me:hover,
+.reaction-row.me:focus-visible {
+  background: var(--muted-bg);
 }
 
 .attachment {
@@ -3228,9 +3288,8 @@ body.theme-dark .mention.mention-me {
   color: #fff;
 }
 
-.message.own .message-actions,
-.message.own .reactions,
-.message.own .attachments {
+.message.own .attachments,
+.message.own .message-actions {
   justify-content: flex-end;
 }
 
@@ -3246,66 +3305,89 @@ body.theme-dark .mention.mention-me {
   background: transparent;
 }
 
-/* Actions float over the row on hover so they take no space between messages. */
-.message {
-  position: relative;
-  padding: 3px 2px;
+/* Bubble + adjacent inline action row */
+.message-bubble-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.message.own .message-bubble-row {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .message-actions {
   display: none;
-  position: absolute;
-  top: -12px;
-  right: 8px;
-  margin-top: 0;
-  padding: 5px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-soft);
+  position: relative;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 0 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   z-index: 5;
   white-space: nowrap;
-}
-
-.message.own .message-actions {
-  right: auto;
-  left: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .message:hover .message-actions,
-.message:focus-within .message-actions {
+.message:focus-within .message-actions,
+.message.actions-visible .message-actions {
+  display: inline-flex;
+}
+
+.msg-action-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.msg-action-btn:hover {
+  background: var(--muted-bg);
+  color: var(--text);
+}
+
+/* Per-message "more actions" dropdown (fixed to viewport, flips when needed) */
+.msg-more-menu {
+  display: none;
+  flex-direction: column;
+  position: fixed;
+  min-width: 212px;
+  z-index: 1200;
+}
+
+.msg-more-menu.open {
   display: flex;
+}
+
+.menu-item.danger {
+  color: var(--danger);
+}
+
+.menu-item.danger:hover {
+  background: rgba(224, 82, 99, 0.08);
 }
 
 .message .message-text {
   margin-bottom: 2px;
 }
 
-.message .reactions:empty {
-  display: none;
-}
-
 /* ============================================================
    Edit / delete own messages, saved items, reminders
    ============================================================ */
-.message-extra-action {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-  font-weight: 700;
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.message-extra-action:hover {
-  text-decoration: underline;
-}
-
-.message-extra-action.danger {
-  color: var(--danger);
-}
-
 .message-edited {
   border: 0;
   padding: 0;

@@ -6,6 +6,31 @@
 // ("Identifier 'electronAPI' has already been declared"), which kills the
 // renderer before any handler is attached.
 
+const ICON_REACT = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M8.2 14.2s1.6 2.1 3.8 2.1 3.8-2.1 3.8-2.1"/><line x1="9" y1="9.2" x2="9.01" y2="9.2"/><line x1="15" y1="9.2" x2="15.01" y2="9.2"/></svg>';
+
+const ICON_REPLY = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="10 16 5 11 10 6"/><path d="M5 11h9a5 5 0 0 1 5 5v2.5"/></svg>';
+
+const ICON_MORE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>';
+
+function messageMoreMenuHtml(msg, isYou, canModerate) {
+  const id = escapeHtml(String(msg.id));
+  const pinned = Boolean(msg.pinned || msg.pinnedAt);
+  const edited = Boolean(msg.editedAt && !msg.pending);
+  const saved = typeof savedItemForMessage === 'function' && Boolean(savedItemForMessage(msg.id));
+  return `
+    <div class="menu msg-more-menu" data-more-menu="${id}" role="menu" aria-label="More actions">
+      <button class="menu-item" type="button" role="menuitem" data-message-pin="${id}" data-pinned="${pinned}">${pinned ? 'Unpin message' : 'Pin message'}</button>
+      <button class="menu-item" type="button" role="menuitem" data-save-message="${id}">${saved ? 'Unsave message' : 'Save message'}</button>
+      <button class="menu-item" type="button" role="menuitem" data-remind-message="${id}">Remind me</button>
+      ${edited ? `<button class="menu-item" type="button" role="menuitem" data-message-edits="${id}">Earlier versions</button>` : ''}
+      ${isYou ? `<button class="menu-item" type="button" role="menuitem" data-edit-message="${id}">Edit</button>
+      <div class="menu-sep"></div>
+      <button class="menu-item danger" type="button" role="menuitem" data-delete-own-message="${id}">Delete message</button>` : ''}
+      ${!isYou ? `<button class="menu-item" type="button" role="menuitem" data-report-message="${id}">Report</button>` : ''}
+      ${!isYou && canModerate ? `<button class="menu-item danger" type="button" role="menuitem" data-moderate-delete="${id}">Remove for everyone</button>` : ''}
+    </div>`;
+}
+
 // Configuration
 const API_BASE = window.electronAPI?.apiBase || 'http://127.0.0.1:3001';
 const SOCKET_URL = window.electronAPI?.socketUrl || 'http://127.0.0.1:3001';
@@ -339,13 +364,14 @@ function setupEventListeners() {
     window.electronAPI?.appCommand?.('toggle-maximize');
   });
 
-  // Close menus when clicking elsewhere
-  document.addEventListener('click', (event) => {
-    closeAllMenus();
-    if (!event.target.closest('.search-box')) hideSearchResults();
-    if (!event.target.closest('.emoji-picker') && !event.target.closest('[data-open-reactions]')) {
-      closeEmojiPicker();
-    }
+  // Document-level clicks in the capture phase: toggle the "More actions" menu
+  // and close floating UI. Capture ensures item clicks that stop propagation
+  // (e.g. pin/unpin) still close the menu.
+  document.addEventListener('click', handleDocumentClick, true);
+  initLongPress();
+  // Fixed-position menus should close when scrollable content moves behind them
+  ['messages', 'dm-messages'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('scroll', () => closeAllMenus(), { passive: true });
   });
 
   on('global-search', 'input', handleGlobalSearchInput);
@@ -882,10 +908,7 @@ function connectSocket() {
     if (!message) return;
     message.reactions = event.reactions || [];
     if (Number(state.currentChannelId) === channelId && state.view === 'channel') {
-      const container = document.getElementById('messages');
-      const scrollTop = container.scrollTop;
-      renderMessages('messages', messages);
-      container.scrollTop = scrollTop;
+      applyReactionsInPlace('messages', messages, event.messageId, event.reactions);
     }
   });
 
@@ -1560,6 +1583,19 @@ function removePendingMessage(clientMessageId) {
   removeFrom(state.directMessages);
 }
 
+// Swap one message's reactions in place without re-rendering the whole list
+function applyReactionsInPlace(containerId, list, messageId, reactions) {
+  if (!Array.isArray(list)) return;
+  const item = list.find((m) => Number(m.id) === Number(messageId));
+  if (!item) return;
+  item.reactions = reactions || [];
+  const container = document.getElementById(containerId);
+  const old = container ? container.querySelector(`#message-${String(messageId).replace(/[^0-9]/g, '')}`) : null;
+  if (!old) return;
+  const fresh = renderMessageEl(item, containerId === 'messages');
+  if (fresh) old.replaceWith(fresh);
+}
+
 function renderMessageEl(msg, allowReply = false) {
   const isYou = (msg.userId ?? msg.senderId) === state.user.id;
   const username = msg.username || msg.senderUsername || 'Unknown';
@@ -1575,8 +1611,8 @@ function renderMessageEl(msg, allowReply = false) {
 
   const reactionsHtml = (msg.reactions || []).map((r) => {
     const hasMe = r.users && r.users.includes(state.user.id);
-    return `<button type="button" class="reaction${hasMe ? ' me' : ''}" data-reaction-message="${escapeHtml(String(msg.id))}" data-reaction-emoji="${escapeHtml(r.emoji)}" aria-label="${escapeHtml(r.emoji)} reaction, ${r.count} people">
-      ${r.emoji}<span class="count">${r.count}</span>${hasMe ? '<span class="remove">✕</span>' : ''}
+    return `<button type="button" class="reaction${hasMe ? ' me' : ''}" data-reaction-message="${escapeHtml(String(msg.id))}" data-reaction-emoji="${escapeHtml(r.emoji)}" aria-label="${escapeHtml(r.emoji)} reaction, ${Number(r.count) === 1 ? '1 person' : `${r.count} people`}">
+      <span class="emoji">${r.emoji}</span>${Number(r.count) === 1 ? '' : `<span class="count">${r.count}</span>`}
     </button>`;
   }).join('');
 
@@ -1607,25 +1643,21 @@ function renderMessageEl(msg, allowReply = false) {
         <span class="message-reply-author">${escapeHtml(replyPreview.username || 'Original message')}</span>
         <span class="message-reply-content">${escapeHtml(replyPreview.content || 'Attachment')}</span>
       </button>` : ''}
-      <div class="message-text">${formatMessageText(msg.content)}</div>
-      ${attachmentsHtml ? `<div class="attachments">${attachmentsHtml}</div>` : ''}
-      <div class="message-actions">
-        ${allowReply ? `<button class="message-reaction-action" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="Add reaction" title="Add reaction">Add reaction</button>` : ''}
-        ${allowReply ? '<a class="message-reply-action" href="#">Reply</a>' : ''}
-        ${allowReply ? `<button class="message-pin-action" type="button" data-message-pin="${escapeHtml(String(msg.id))}" data-pinned="${isPinned}" aria-label="${isPinned ? 'Unpin' : 'Pin'} message">${isPinned ? 'Unpin' : 'Pin'}</button>` : ''}
-        ${allowReply && !isYou ? `<button class="message-report-action" type="button" data-report-message="${escapeHtml(String(msg.id))}">Report</button>` : ''}
-        ${allowReply ? messageExtraActionsHtml(msg, isYou) : ''}
-        ${allowReply && canModerate && !isYou ? `<button class="message-delete-action" type="button" data-moderate-delete="${escapeHtml(String(msg.id))}">Remove</button>` : ''}
+      <div class="message-bubble-row">
+        <div class="message-text">${formatMessageText(msg.content)}${reactionsHtml ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
+        ${allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
+          <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
+          <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
+          <button class="msg-action-btn" type="button" data-message-more="${escapeHtml(String(msg.id))}" aria-label="More actions" title="More actions" aria-haspopup="true" aria-expanded="false">${ICON_MORE}</button>
+          ${messageMoreMenuHtml(msg, isYou, canModerate)}
+        </span>` : ''}
       </div>
-      <div class="reactions">${reactionsHtml}</div>
+      ${attachmentsHtml ? `<div class="attachments">${attachmentsHtml}</div>` : ''}
     </div>`;
 
-  const replyAction = el.querySelector('.message-reply-action');
+  const replyAction = el.querySelector('[data-reply-message]');
   if (replyAction) {
-    replyAction.addEventListener('click', (event) => {
-      event.preventDefault();
-      beginReply(msg);
-    });
+    replyAction.addEventListener('click', () => beginReply(msg));
   }
 
   const replyQuote = el.querySelector('.message-reply-preview');
@@ -1848,7 +1880,65 @@ function handleReactionClick(event) {
   }
   const reaction = event.target.closest('[data-reaction-message][data-reaction-emoji]');
   if (reaction) {
-    addReaction(reaction.dataset.reactionMessage, reaction.dataset.reactionEmoji);
+    showReactionDetails(reaction.dataset.reactionMessage);
+    return;
+  }
+}
+
+async function showReactionDetails(messageId) {
+  try {
+    const res = await api(`/api/messages/${messageId}/reactions`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load reactions');
+
+    const rows = data.reactions || [];
+    if (rows.length === 0) {
+      closeSettingsModal();
+      return;
+    }
+
+    // Group by emoji for display, one line per reactor
+    const byEmoji = new Map();
+    for (const row of rows) {
+      if (!byEmoji.has(row.emoji)) byEmoji.set(row.emoji, []);
+      byEmoji.get(row.emoji).push(row);
+    }
+
+    const meId = String(state.user?.id);
+    const blocks = [...byEmoji.entries()].map(([emoji, reactors]) => {
+      const entries = reactors.map((u) => {
+        const you = String(u.user_id) === meId;
+        const initial = (u.username || '?').charAt(0).toUpperCase();
+        const name = escapeHtml(u.username || 'Unknown');
+        const inner = `<span class="avatar-mini" style="background:${escapeHtml(u.avatar_color || '#A855F7')};">${initial}</span>
+          <span class="reaction-row-name">${name}${you ? ' (You)' : ''}</span>
+          <span class="reaction-row-emoji">${emoji}</span>`;
+        return you
+          ? `<button type="button" class="reaction-row me" data-remove-reaction="${escapeHtml(String(messageId))}" data-remove-reaction-emoji="${escapeHtml(emoji)}" title="Tap to remove your reaction">${inner}</button>`
+          : `<div class="reaction-row">${inner}</div>`;
+      }).join('');
+      return `<div class="reaction-group" role="group" aria-label="${escapeHtml(emoji)} reactions">
+        <div class="reaction-group-label">${emoji} <span>${reactors.length}</span></div>
+        ${entries}
+      </div>`;
+    }).join('');
+
+    openInfoModal('Reactions', `<p class="reaction-info-note">Tap your name to remove your reaction.</p>${blocks}`);
+
+    // Wire up the remove buttons for the current user
+    const body = document.getElementById('info-modal-body');
+    body.querySelectorAll('[data-remove-reaction]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const targetMessageId = btn.dataset.removeReaction;
+        const targetEmoji = btn.dataset.removeReactionEmoji;
+        if (!targetMessageId) return;
+        await addReaction(targetMessageId, targetEmoji);
+        await showReactionDetails(targetMessageId);
+      });
+    });
+  } catch (err) {
+    console.error('Show reaction details error:', err);
+    showToast(err.message || 'Could not load reactions.', 'error');
   }
 }
 
@@ -1926,12 +2016,14 @@ async function addReaction(messageId, emoji) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to update reaction');
 
-    // Reload current messages to update reaction counts
-    if (state.currentChannelId) {
-      await loadChannelMessages(state.currentChannelId);
+    // Apply the server's authoritative reaction state in place; no full reload
+    const channelId = state.currentChannelId;
+    if (state.view === 'channel' && channelId && state.messages[channelId]) {
+      applyReactionsInPlace('messages', state.messages[channelId], messageId, data.reactions);
     }
-    if (state.currentDMId) {
-      await loadDmMessages(state.currentDMId);
+    const dmId = state.currentDMId;
+    if (state.view === 'dm' && dmId && state.directMessages[dmId]) {
+      applyReactionsInPlace('dm-messages', state.directMessages[dmId], messageId, data.reactions);
     }
   } catch (err) {
     console.error('Add reaction error:', err);
@@ -2773,6 +2865,63 @@ function renderActivity() {
   if (state.section === 'activity') renderActivityFeed();
 }
 
+function handleDocumentClick(event) {
+  // Toggle a per-message "More actions" menu open/closed
+  const more = event.target.closest('[data-message-more]');
+  if (more) {
+    const menu = more.parentElement?.querySelector('.msg-more-menu');
+    if (menu) {
+      const willOpen = !menu.classList.contains('open');
+      closeAllMenus();
+      if (willOpen) {
+        menu.classList.add('open');
+        more.setAttribute('aria-expanded', 'true');
+        positionMoreMenu(more, menu);
+      }
+      return;
+    }
+  }
+  // Clicking a menu action always closes menus; nothing else to do here
+  closeAllMenus();
+  if (!event.target.closest('.search-box')) hideSearchResults();
+  if (!event.target.closest('.emoji-picker') && !event.target.closest('[data-open-reactions]')) {
+    closeEmojiPicker();
+  }
+  // Clear long-pressed mobile action state when tapping elsewhere
+  if (!event.target.closest('.message')) {
+    document.querySelectorAll('.message.actions-visible').forEach((node) => node.classList.remove('actions-visible'));
+  }
+}
+
+function positionMoreMenu(anchor, menu) {
+  const rect = anchor.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const margin = 12;
+  let left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - menuRect.width - margin));
+  let top = rect.bottom + 6;
+  if (top + menuRect.height > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - menuRect.height - 6);
+  }
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+// Long-press on a message reveals the action row on touch devices
+let longPressTimer = null;
+function initLongPress() {
+  document.addEventListener('touchstart', (event) => {
+    const message = event.target.closest('.message');
+    if (!message) return;
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      message.classList.toggle('actions-visible');
+    }, 550);
+  }, { passive: true });
+  ['touchend', 'touchcancel', 'touchmove'].forEach((type) => {
+    document.addEventListener(type, () => clearTimeout(longPressTimer), { passive: true });
+  });
+}
+
 function closeAllMenus() {
   let closed = false;
   document.querySelectorAll('.menu.open').forEach((m) => {
@@ -2783,6 +2932,13 @@ function closeAllMenus() {
     t.classList.remove('open');
     t.setAttribute('aria-expanded', 'false');
     closed = true;
+  });
+  document.querySelectorAll('.msg-more-menu.open').forEach((m) => {
+    m.classList.remove('open');
+    closed = true;
+  });
+  document.querySelectorAll('[data-message-more][aria-expanded="true"]').forEach((b) => {
+    b.setAttribute('aria-expanded', 'false');
   });
   ['btn-create', 'btn-user-menu', 'btn-app-menu'].forEach((id) => {
     document.getElementById(id)?.setAttribute('aria-expanded', 'false');

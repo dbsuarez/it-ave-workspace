@@ -453,6 +453,35 @@ router.patch('/:messageId/pin', authenticateToken, async (req, res) => {
   }
 });
 
+// Reactors for a single message (popup lists names and emojis)
+router.get('/:messageId/reactions', authenticateToken, async (req, res) => {
+  try {
+    const messageId = Number(req.params.messageId);
+    if (!Number.isFinite(messageId)) {
+      return res.status(400).json({ error: 'Invalid message id' });
+    }
+    const messageCheck = await query('SELECT channel_id FROM messages WHERE id = $1', [messageId]);
+    if (messageCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    const channelId = messageCheck.rows[0].channel_id;
+    await ensureChannelMembership(query, req.user.userId, channelId);
+
+    const rows = await query(
+      `SELECT r.emoji, u.id AS user_id, u.username, u.avatar_color AS avatar_color
+       FROM reactions r JOIN users u ON u.id = r.user_id
+       WHERE r.message_id = $1
+       ORDER BY r.emoji ASC, u.username ASC`,
+      [messageId]
+    );
+    res.json({ messageId, channelId, reactions: rows.rows });
+  } catch (err) {
+    console.error('Reactions detail error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Server error' });
+  }
+});
+
+
 // Add reaction to a message
 router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
   try {
