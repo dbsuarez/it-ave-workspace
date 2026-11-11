@@ -444,6 +444,10 @@
               </button>
             </header>
             <div class="canvas2-list" id="canvas2-list" aria-live="polite"></div>
+            <div class="canvas2-list canvas2-trash" id="canvas2-trash" aria-live="polite" hidden></div>
+            <footer class="canvas2-list-footer">
+              <button class="btn" id="btn-canvas2-trash" type="button" title="Canvases you deleted can be restored for a few days">Recently deleted</button>
+            </footer>
           </aside>
           <section class="canvas2-editor-pane" id="canvas2-editor-pane" hidden>
             <header class="canvas2-editor-header">
@@ -1019,6 +1023,7 @@
   <script src="features/canvas-slash.js"></script>
   <script src="features/canvas-view.js"></script>
   <script src="features/canvas-comments.js"></script>
+  <script src="features/canvas-trash.js"></script>
   <script src="vendor/canvas-editor.js"></script>
   <script src="features/canvas-wysiwyg.js"></script>
   <script src="renderer.js"></script>

@@ -64,5 +64,7 @@ module.exports = {
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   MAX_FILE_SIZE_MB: parseInt(process.env.MAX_FILE_SIZE_MB || '25', 10),
   UPLOAD_DIR: process.env.UPLOAD_DIR || '/app/uploads',
+  // how long a deleted personal canvas can be restored before it is removed for good
+  CANVAS_TRASH_DAYS: Math.max(1, parseInt(process.env.CANVAS_TRASH_DAYS || '7', 10) || 7),
   WEBRTC_ICE_SERVERS: getIceServers(),
 };

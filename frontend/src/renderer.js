@@ -1015,6 +1015,10 @@ function connectSocket() {
     }
   });
   state.socket.on('user_status_updated', handleUserStatusUpdated);
+  // the owner deleted a canvas somebody else has open
+  state.socket.on('canvas_deleted', (event) => {
+    if (typeof canvasDeletedElsewhere === 'function') canvasDeletedElsewhere(Number(event.canvasId));
+  });
   state.socket.on('canvas_comments_updated', (event) => {
     if (typeof canvasCommentsChanged === 'function') canvasCommentsChanged(Number(event.canvasId));
   });
@@ -4827,7 +4831,7 @@ async function deleteCanvas2Standalone() {
   const current = canvas2StandaloneState.list.find((c) => Number(c.id) === Number(id));
   const ok = await confirmAction({
     title: 'Delete this canvas?',
-    message: `"${current?.title || 'Untitled canvas'}" will be permanently deleted. This cannot be undone.`,
+    message: `"${current?.title || 'Untitled canvas'}" will move to Recently deleted. You can restore it for a few days; after that it is removed for good.`,
     confirmLabel: 'Delete',
     danger: true,
   });
@@ -4844,7 +4848,7 @@ async function deleteCanvas2Standalone() {
     } else {
       showCanvas2Empty();
     }
-    showToast('Canvas deleted.', 'success');
+    showToast('Canvas deleted. You can restore it from Recently deleted.', 'success');
   } catch (err) {
     console.error('Delete standalone canvas error:', err);
     showToast(err.message || 'Could not delete the canvas.', 'error');

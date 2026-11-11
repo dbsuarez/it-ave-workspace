@@ -118,7 +118,7 @@ async function saveCanvasChanges(canvasId, title, content, baseRevision, userId,
          content = COALESCE($2, content),
          revision = revision + 1,
          updated_at = NOW()
-     WHERE id = $3 AND ($4::int IS NULL OR revision = $4)
+     WHERE id = $3 AND deleted_at IS NULL AND ($4::int IS NULL OR revision = $4)
      RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id`,
     [title, content, canvasId, baseRevision]
   );
@@ -250,7 +250,7 @@ router.get('/standalone', authenticateToken, async (req, res) => {
       `SELECT c.id, c.kind, c.channel_id, c.dm_user_low, c.dm_user_high, c.title, c.content, c.created_by,
               c.created_at, c.updated_at, c.revision, c.owner_id
        FROM canvases c
-       WHERE c.kind = 'standalone'
+       WHERE c.kind = 'standalone' AND c.deleted_at IS NULL
          AND (COALESCE(c.owner_id, c.created_by) = $1
               OR EXISTS (SELECT 1 FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1)
               OR EXISTS (SELECT 1 FROM canvas_channel_grants g
@@ -268,6 +268,58 @@ router.get('/standalone', authenticateToken, async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Standalone canvases list error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/canvas/deleted - the caller's own deleted personal canvases that can still be restored
+router.get('/deleted', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, title, LEFT(content, 160) AS preview, deleted_at,
+              deleted_at + ($2::int * INTERVAL '1 day') AS expires_at
+       FROM canvases
+       WHERE kind = 'standalone' AND deleted_at IS NOT NULL
+         AND deleted_at > NOW() - ($2::int * INTERVAL '1 day')
+         AND COALESCE(owner_id, created_by) = $1
+       ORDER BY deleted_at DESC, id DESC`,
+      [req.user.userId, config.CANVAS_TRASH_DAYS]
+    );
+    res.json({
+      retentionDays: config.CANVAS_TRASH_DAYS,
+      canvases: result.rows.map((row) => ({
+        id: row.id, title: row.title, preview: row.preview, deletedAt: row.deleted_at, expiresAt: row.expires_at,
+      })),
+    });
+  } catch (err) {
+    console.error('Deleted canvases list error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/canvas/:id/restore - bring one of your deleted personal canvases back
+router.post('/:canvasId/restore', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    const found = await query(
+      `SELECT id, kind, owner_id, created_by, deleted_at,
+              (deleted_at > NOW() - ($2::int * INTERVAL '1 day')) AS restorable
+       FROM canvases WHERE id = $1`,
+      [canvasId, config.CANVAS_TRASH_DAYS]
+    );
+    const row = found.rows[0];
+    // the same answer for "no such canvas", "not deleted" and "not yours": nothing to restore
+    if (!row || row.kind !== 'standalone' || !row.deleted_at || canvasOwnerId(row) !== Number(req.user.userId)) {
+      return res.status(404).json({ error: 'Canvas not found' });
+    }
+    if (!row.restorable) return res.status(410).json({ error: 'This canvas was deleted too long ago to restore' });
+    await query('UPDATE canvases SET deleted_at = NULL, deleted_by = NULL WHERE id = $1', [canvasId]);
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
+    res.json({ canvas: mapCanvas(canvas, { myRole: 'owner' }) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Restore canvas error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -587,7 +639,13 @@ router.delete('/:canvasId', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Only the owner can delete this canvas' });
       }
     }
-    // the images go with the canvas (rows cascade); remove the stored files too
+    if (canvas.kind === 'standalone') {
+      // personal canvases go to the trash first, so a mistake can be undone (see GET /deleted, POST /:id/restore)
+      await query('UPDATE canvases SET deleted_at = NOW(), deleted_by = $2 WHERE id = $1', [canvasId, req.user.userId]);
+      req.io?.to(`canvas:${canvasId}`).emit('canvas_deleted', { canvasId });
+      return res.json({ success: true, restorable: true, retentionDays: config.CANVAS_TRASH_DAYS });
+    }
+    // channel and DM canvases are removed at once; their images go with them (rows cascade), so remove the files too
     const images = await query('SELECT filename FROM files WHERE canvas_id = $1', [canvasId]);
     await query('DELETE FROM canvases WHERE id = $1', [canvasId]);
     for (const row of images.rows || []) {
@@ -923,7 +981,7 @@ router.get('/share/:token', authenticateToken, async (req, res) => {
       `SELECT cs.id AS share_id, cs.role, cs.canvas_id, cs.expires_at, c.*
        FROM canvas_shares cs
        JOIN canvases c ON c.id = cs.canvas_id
-       WHERE cs.token = $1`,
+       WHERE cs.token = $1 AND c.deleted_at IS NULL`,
       [token]
     );
     const row = result.rows[0];

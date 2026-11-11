@@ -260,6 +260,7 @@ db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT N
     });
     reminderRoutes.startReminderScheduler(io);
     scheduledRoutes.startScheduledMessageRunner(io);
+    require('./src/canvasTrash').schedulePurge(db.query.bind(db));
   })
   .catch((err) => {
     console.error('Failed to apply startup database migrations:', err);

@@ -154,6 +154,8 @@ test('only the newest 100 versions are kept, and deleting the canvas deletes its
   const count = await admin.query('SELECT COUNT(*) AS n FROM canvas_revisions WHERE canvas_id = $1', [canvas.id]);
   assert.equal(Number(count.rows[0].n), 100);
   await call(ids.alice, 'DELETE', `/${canvas.id}`);
+  await admin.query("UPDATE canvases SET deleted_at = NOW() - INTERVAL '30 days' WHERE id = $1", [canvas.id]);
+  await require('../src/canvasTrash').purgeExpiredCanvases(require('../src/db').query);
   const gone = await admin.query('SELECT COUNT(*) AS n FROM canvas_revisions WHERE canvas_id = $1', [canvas.id]);
   assert.equal(Number(gone.rows[0].n), 0);
 });

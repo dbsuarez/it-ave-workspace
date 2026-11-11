@@ -142,6 +142,11 @@ module.exports = [
   // Guests are not part of group messages (see routes/conversations.js)
   "DELETE FROM conversation_members WHERE user_id IN (SELECT id FROM users WHERE account_type = 'guest')",
 
+  // Deleting a personal canvas moves it to the trash for a few days (deleted_at); a purge removes it later
+  'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE',
+  'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL',
+  'CREATE INDEX IF NOT EXISTS idx_canvases_deleted_at ON canvases(deleted_at) WHERE deleted_at IS NOT NULL',
+
   // Comment threads on a canvas (a top-level comment may quote the passage it is about; replies have parent_id)
   `CREATE TABLE IF NOT EXISTS canvas_comments (
      id SERIAL PRIMARY KEY,

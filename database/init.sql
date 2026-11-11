@@ -502,6 +502,11 @@ BEGIN
 END
 $$;
 
+-- Trash for personal canvases; mirrors backend/src/migrations.js.
+ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_canvases_deleted_at ON canvases(deleted_at) WHERE deleted_at IS NOT NULL;
+
 -- Comment threads on a canvas; mirrors backend/src/migrations.js.
 CREATE TABLE IF NOT EXISTS canvas_comments (
   id SERIAL PRIMARY KEY,

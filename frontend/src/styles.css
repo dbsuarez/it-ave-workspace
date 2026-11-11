@@ -6111,3 +6111,59 @@ h4.cv-h { font-size: 15px; }
   overflow-x: auto;
   overflow-y: hidden;
 }
+
+/* Recently deleted canvases */
+.canvas2-list-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.canvas2-list-footer .btn {
+  width: 100%;
+}
+
+.canvas2-list[hidden] {
+  display: none;
+}
+
+.canvas2-trash-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.canvas2-trash-head strong {
+  flex: 1;
+  color: var(--text);
+}
+
+.canvas2-trash-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.canvas2-trash-item strong {
+  font-size: 13px;
+}
+
+.canvas2-trash-item span {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.canvas2-trash-item .btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+}

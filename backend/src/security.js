@@ -208,7 +208,7 @@ async function getCanvasById(query, canvasId) {
   const result = await query(
     `SELECT id, kind, channel_id, dm_user_low, dm_user_high, created_by, title, content, created_at, updated_at, revision, owner_id
      FROM canvases
-     WHERE id = $1`,
+     WHERE id = $1 AND deleted_at IS NULL`,
     [canvasId]
   );
   if (!result.rows[0]) {

@@ -141,6 +141,9 @@ test('deleting the canvas deletes its comments', async (t) => {
   const id = await newCanvas();
   await call(ids.alice, 'POST', `/${id}/comments`, { body: 'bye' });
   await call(ids.alice, 'DELETE', `/${id}`);
+  assert.equal((await call(ids.alice, 'GET', `/${id}/comments`)).status, 404, 'a deleted canvas shows nothing');
+  await admin.query("UPDATE canvases SET deleted_at = NOW() - INTERVAL '30 days' WHERE id = $1", [id]);
+  await require('../src/canvasTrash').purgeExpiredCanvases(require('../src/db').query);
   const left = await admin.query('SELECT COUNT(*) AS n FROM canvas_comments WHERE canvas_id = $1', [id]);
   assert.equal(Number(left.rows[0].n), 0);
 });

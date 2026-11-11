@@ -123,6 +123,10 @@ test('deleting the canvas deletes its images, rows and files', async (t) => {
   assert.equal(up.status, 201);
   assert.ok(fs.readdirSync(uploadDir).some((f) => f.includes('gone.png')));
   assert.equal((await json(ids.alice, 'DELETE', `/api/canvas/${canvasId}`)).status, 200);
+  assert.equal((await download(ids.alice, up.json.fileId)).status, 404, 'hidden while in the trash');
+  assert.ok(fs.readdirSync(uploadDir).some((f) => f.includes('gone.png')), 'kept while it can be restored');
+  await admin.query("UPDATE canvases SET deleted_at = NOW() - INTERVAL '30 days' WHERE id = $1", [canvasId]);
+  await require('../src/canvasTrash').purgeExpiredCanvases(require('../src/db').query);
   const rows = await admin.query('SELECT COUNT(*) AS n FROM files WHERE id = $1', [up.json.fileId]);
   assert.equal(Number(rows.rows[0].n), 0);
   await new Promise((resolve) => setTimeout(resolve, 100));
