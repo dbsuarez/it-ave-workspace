@@ -246,4 +246,16 @@ BEGIN
   END IF;
 END
 $$`,
+
+  // Canvas history: snapshots of saved versions (kept short, see routes/canvas.js)
+  `CREATE TABLE IF NOT EXISTS canvas_revisions (
+     id SERIAL PRIMARY KEY,
+     canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+     revision INTEGER NOT NULL,
+     title VARCHAR(160) NOT NULL,
+     content TEXT NOT NULL,
+     edited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     edited_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     UNIQUE (canvas_id, revision)
+   )`,
 ];

@@ -136,6 +136,7 @@ const API = () => (sql, params = []) => {
     canvas.updated_at = new Date();
     return { rows: [canvas] };
   }
+  if (sql.includes('canvas_revisions')) return { rows: [] };
   if (sql.includes('FROM canvases WHERE id = $1')) {
     const canvas = canvases.get(Number(params[0]));
     return { rows: canvas ? [canvas] : [] };

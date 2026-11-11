@@ -137,15 +137,16 @@ function previewOf(block) {
 }
 
 // Lookup used by GET /sections: optionally filtered by type and/or a case-insensitive substring.
-function describeSections(content, { type, contains, limit = 200 } = {}) {
+function describeSections(content, { type, contains, limit = 200, full = false } = {}) {
   const needle = typeof contains === 'string' && contains ? contains.toLowerCase() : null;
   return parseSections(content)
     .filter((block) => (!type || block.type === type))
     .filter((block) => (!needle || block.text.toLowerCase().includes(needle)))
-    .slice(0, limit)
+    .slice(0, full ? MAX_SECTIONS : limit)
     .map((block) => {
       const out = { id: block.id, index: block.index, type: block.type, preview: previewOf(block) };
       if (block.type === 'checklist') out.items = checklistItems(block.text);
+      if (full) out.text = block.text;
       return out;
     });
 }

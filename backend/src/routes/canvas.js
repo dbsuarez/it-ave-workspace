@@ -48,7 +48,42 @@ function parseBaseRevision(value) {
 // One conditional UPDATE: it only applies when baseRevision still matches, so two people saving
 // from the same starting point cannot silently overwrite each other. On a mismatch nothing is
 // written and the caller gets the current canvas back with HTTP 409.
-async function saveCanvasChanges(canvasId, title, content, baseRevision) {
+const REVISION_WINDOW_MS = 60 * 1000; // saves by one person within a minute share one history entry
+const MAX_REVISIONS = 100;
+
+// Keeps a short history. Autosave fires every few seconds while typing, so consecutive saves by the
+// same person within a minute are folded into one entry instead of flooding the list. A failure here
+// never fails the save itself.
+async function recordRevision(canvas, userId, { newEntry = false } = {}) {
+  try {
+    const last = (await query(
+      'SELECT id, edited_by, edited_at FROM canvas_revisions WHERE canvas_id = $1 ORDER BY revision DESC LIMIT 1',
+      [canvas.id]
+    )).rows[0];
+    const recent = !newEntry && last && Number(last.edited_by) === Number(userId)
+      && Date.now() - new Date(last.edited_at).getTime() < REVISION_WINDOW_MS;
+    if (recent) {
+      await query(
+        'UPDATE canvas_revisions SET revision = $2, title = $3, content = $4, edited_at = NOW() WHERE id = $1',
+        [last.id, canvas.revision, canvas.title, canvas.content]
+      );
+    } else {
+      await query(
+        'INSERT INTO canvas_revisions (canvas_id, revision, title, content, edited_by) VALUES ($1, $2, $3, $4, $5)',
+        [canvas.id, canvas.revision, canvas.title, canvas.content, userId]
+      );
+      await query(
+        `DELETE FROM canvas_revisions WHERE canvas_id = $1 AND id NOT IN (
+           SELECT id FROM canvas_revisions WHERE canvas_id = $1 ORDER BY revision DESC LIMIT ${MAX_REVISIONS})`,
+        [canvas.id]
+      );
+    }
+  } catch (err) {
+    console.error('Canvas history error:', err.message);
+  }
+}
+
+async function saveCanvasChanges(canvasId, title, content, baseRevision, userId, options = {}) {
   const result = await query(
     `UPDATE canvases
      SET title = COALESCE($1, title),
@@ -59,7 +94,10 @@ async function saveCanvasChanges(canvasId, title, content, baseRevision) {
      RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id`,
     [title, content, canvasId, baseRevision]
   );
-  if (result.rows[0]) return { canvas: result.rows[0] };
+  if (result.rows[0]) {
+    await recordRevision(result.rows[0], userId, options);
+    return { canvas: result.rows[0] };
+  }
   const current = await query(
     `SELECT id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id
      FROM canvases WHERE id = $1`,
@@ -256,7 +294,7 @@ router.get('/:canvasId/sections', authenticateToken, async (req, res) => {
     res.json({
       canvasId,
       revision: Number(canvas.revision),
-      sections: describeSections(canvas.content, { type, contains }),
+      sections: describeSections(canvas.content, { type, contains, full: req.query.full === 'true' }),
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -277,7 +315,7 @@ async function applyCanvasOperation(req, res, canvasId) {
   if (Number(canvas.revision) !== baseRevision) return conflictResponse(res, canvas);
   const change = applyOperation(canvas.content, req.body.operation);
   // The same conditional save as everyone else: if another save slipped in meanwhile it is a 409.
-  const saved = await saveCanvasChanges(canvasId, change.title, change.content, baseRevision);
+  const saved = await saveCanvasChanges(canvasId, change.title, change.content, baseRevision, req.user.userId);
   if (!saved.canvas) return conflictResponse(res, saved.conflict);
   req.io?.to(`canvas:${canvasId}`).emit('canvas_updated', {
     canvasId, kind: saved.canvas.kind, title: saved.canvas.title, content: saved.canvas.content,
@@ -300,7 +338,7 @@ router.patch('/:canvasId', authenticateToken, async (req, res) => {
     const content = req.body?.content === undefined ? null : parseContent(req.body.content);
     const baseRevision = parseBaseRevision(req.body?.baseRevision);
     await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
-    const saved = await saveCanvasChanges(canvasId, title, content, baseRevision);
+    const saved = await saveCanvasChanges(canvasId, title, content, baseRevision, req.user.userId);
     if (!saved.canvas) return conflictResponse(res, saved.conflict);
     const result = { rows: [saved.canvas] };
     req.io?.to(`canvas:${canvasId}`).emit('canvas_updated', {
@@ -423,6 +461,91 @@ router.get('/:canvasId/collaborators', authenticateToken, async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('List collaborators error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ---- History ----------------------------------------------------------------------------------
+
+// GET /api/canvas/:id/revisions - saved versions, newest first
+router.get('/:canvasId/revisions', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
+    const result = await query(
+      `SELECT r.revision, r.title, r.edited_at, r.edited_by, u.username, LENGTH(r.content) AS size
+       FROM canvas_revisions r LEFT JOIN users u ON u.id = r.edited_by
+       WHERE r.canvas_id = $1 ORDER BY r.revision DESC LIMIT ${MAX_REVISIONS}`,
+      [canvasId]
+    );
+    res.json({
+      revisions: result.rows.map((r) => ({
+        revision: Number(r.revision), title: r.title, editedAt: r.edited_at, size: Number(r.size),
+        editedBy: r.edited_by === null ? null : { id: r.edited_by, username: r.username },
+      })),
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Canvas revisions error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+async function loadRevision(canvasId, revision) {
+  const result = await query(
+    `SELECT r.revision, r.title, r.content, r.edited_at, r.edited_by, u.username
+     FROM canvas_revisions r LEFT JOIN users u ON u.id = r.edited_by
+     WHERE r.canvas_id = $1 AND r.revision = $2`,
+    [canvasId, revision]
+  );
+  return result.rows[0] || null;
+}
+
+// GET /api/canvas/:id/revisions/:revision - one saved version with its text
+router.get('/:canvasId/revisions/:revision', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    const revision = parseId(req.params.revision);
+    if (canvasId === null || revision === null) return res.status(400).json({ error: 'Valid canvas and revision numbers are required' });
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
+    const row = await loadRevision(canvasId, revision);
+    if (!row) return res.status(404).json({ error: 'That version is no longer available' });
+    res.json({
+      revision: {
+        revision: Number(row.revision), title: row.title, content: row.content, editedAt: row.edited_at,
+        editedBy: row.edited_by === null ? null : { id: row.edited_by, username: row.username },
+      },
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Canvas revision read error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/canvas/:id/revisions/:revision/restore - make an old version current again. It is saved as a
+// NEW version (nothing is erased), so a restore can itself be undone from the history.
+router.post('/:canvasId/revisions/:revision/restore', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    const revision = parseId(req.params.revision);
+    if (canvasId === null || revision === null) return res.status(400).json({ error: 'Valid canvas and revision numbers are required' });
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const row = await loadRevision(canvasId, revision);
+    if (!row) return res.status(404).json({ error: 'That version is no longer available' });
+    const baseRevision = parseBaseRevision(req.body?.baseRevision);
+    // A restore always gets its own history entry, so the version it replaces is never folded away.
+    const saved = await saveCanvasChanges(canvasId, row.title, row.content, baseRevision, req.user.userId, { newEntry: true });
+    if (!saved.canvas) return conflictResponse(res, saved.conflict);
+    req.io?.to(`canvas:${canvasId}`).emit('canvas_updated', {
+      canvasId, kind: saved.canvas.kind, title: saved.canvas.title, content: saved.canvas.content,
+      revision: Number(saved.canvas.revision), updatedAt: saved.canvas.updated_at,
+    });
+    res.json({ canvas: mapCanvas(saved.canvas) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Canvas restore error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -620,7 +743,7 @@ router.patch('/share/:token', authenticateToken, async (req, res) => {
     const share = shareResult.rows[0];
     if (!share) return res.status(404).json({ error: 'Share link not found' });
     if (share.role !== 'editor') return res.status(403).json({ error: 'This share link is read-only' });
-    const saved = await saveCanvasChanges(share.canvas_id, title, content, baseRevision);
+    const saved = await saveCanvasChanges(share.canvas_id, title, content, baseRevision, req.user.userId);
     if (!saved.canvas) return conflictResponse(res, saved.conflict, { myRole: 'editor' });
     const result = { rows: [saved.canvas] };
     req.io?.to(`canvas:${share.canvas_id}`).emit('canvas_updated', {

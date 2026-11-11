@@ -302,7 +302,11 @@ granted; Lists stay channel-scoped until they have access levels.
 | 4. Lists typed schema with to-do migration | **Done** (backend): typed columns/rows/cells, 7 column types, to-do items migrated once with ids preserved, old endpoints kept as wrappers. First real-PostgreSQL tests (`test/helpers/scratchDb.js` builds a throwaway database): migration, 13 route tests, 10 validator tests. Verified on the live data (output identical before and after) and through the existing Lists screen. The client still shows the to-do view; the table view is step 6 |
 | 5. Select options, subtasks, archive, copy, duplicate, pagination | **Done** (backend; select options came with step 4): subtasks one level deep, archive/restore with subtasks, duplicate row, copy list (with or without rows, across channels), cursor paging. 18 real-database route tests |
 | 6. Lists access levels, table view | **Table view done; per-list access levels deferred** (decision 5: lists stay channel-scoped, where channel membership plus "guests read-only" already applies). New-list form offers Checklist or Table (starter columns Status, Owner, Due date). Table: inline-editable typed cells, coloured select chips, people, links, sort by column, filter, subtasks, duplicate, archive and restore, copy list, add/rename/delete columns, load-more paging. Verified in the Electron client. Board view only if someone asks |
-| 7. Richer Canvas blocks and history UI | Not started |
+| 7. Richer Canvas blocks and history UI | **Done**: reading view (headings, interactive checklists, tables, callouts, code, quotes, dividers) with a Read/Edit toggle in both editors, version history with preview and restore (100 versions, autosave folded per minute), no more no-op saves. Verified in the Electron client and with 6 real-database history tests and 8 renderer tests |
+
+**Open polish from this work:** a channel canvas's title is stored as `#<channel id>` (shown as `#23`)
+instead of the channel name; the toggle is the only reading-view edit (everything else is Markdown);
+board view for Lists and per-list access levels were deliberately left out (see steps 6 and the plan).
 
 ## Hardening done (2026-11-11)
 

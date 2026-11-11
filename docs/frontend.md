@@ -87,6 +87,18 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | Moderation | ✅ Channel-scoped roles, timeout policy, timeouts, slow mode, reports, message and attachment removal, and audit log |
 | Auto-updater | ⏳ Planned |
 
+## Canvas: Read, Edit and History
+
+Both canvas editors (the channel/DM sheet and the personal canvas manager) have a **Read / Edit**
+toggle and a **History** button. A canvas with content opens in **Read**: headings, paragraphs,
+lists, **checklists you can tick** (each tick is one section operation checked against the canvas
+revision), tables with alignment, callouts (`> [!info]`, `[!note]`, `[!tip]`, `[!warning]`,
+`[!danger]` with an optional title), code blocks, quotes and dividers. All text is escaped before
+rendering (`features/canvas-render.js`, covered by tests). **Edit** is the Markdown textarea with
+autosave. Opening, reading or closing a canvas without typing does not save anything. **History**
+lists earlier versions; pick one to preview its text and **Restore this version** (kept as a new
+version, so it can be undone). Viewers get Read only.
+
 ## Lists: checklist and table
 
 The Lists screen (More → Lists) shows checklists (the original card: tick, assignee, due date) and

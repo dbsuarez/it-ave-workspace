@@ -1024,11 +1024,13 @@ function connectSocket() {
         title: document.getElementById('canvas2-editor-title'),
         content: document.getElementById('canvas2-editor'),
       });
+      canvasViewRefresh(incomingCanvasId, event.revision);
       return;
     }
     // Header-anchored channel/DM canvas sheet
     if (canvas2State.activeId && Number(canvas2State.activeId) === incomingCanvasId) {
       applyRemoteCanvasUpdate(canvas2State, event, { title: els.canvasSheetTitle, content: els.canvasSheetEditor });
+      canvasViewRefresh(incomingCanvasId, event.revision);
     }
   });
   state.socket.on('new_group_message', handleNewGroupMessage);
@@ -4525,7 +4527,7 @@ async function openCanvas2(kind, extra = {}) {
     }
     sheet.setAttribute('aria-hidden', 'false');
     if (state.socket) state.socket.emit('join_canvas', data.canvas.id);
-    els.canvasSheetEditor.focus({ preventScroll: true });
+    canvasViewOpened('sheet', { canEdit: true, hasContent: Boolean(els.canvasSheetEditor.value.trim()) });
   } catch (err) {
     console.error('Open canvas error:', err);
     showToast(err.message || 'Could not open the canvas.', 'error');
@@ -4535,6 +4537,8 @@ async function openCanvas2(kind, extra = {}) {
 async function saveCanvas2() {
   const canvasId = canvas2State.activeId;
   if (!canvasId || canvas2State.saving) return;
+  // Nothing typed since the last save or load: do not create a new revision (or history entry) for nothing.
+  if (els.canvasSheetTitle.value === canvas2State.savedTitle && els.canvasSheetEditor.value === canvas2State.savedContent) return;
   canvas2State.saving = true;
   let retryAfterConflict = false;
   if (els.canvasSheetStatus) {
@@ -4738,6 +4742,7 @@ async function openCanvas2Standalone(id) {
     renderCanvas2StandaloneList();
     setCanvas2StandaloneStatus(canEdit ? 'Saved' : 'Read-only');
     if (state.socket) state.socket.emit('join_canvas', canvas.id);
+    canvasViewOpened('standalone', { canEdit, hasContent: Boolean((editor ? editor.value : '').trim()) });
   } catch (err) {
     console.error('Open standalone canvas error:', err);
     showToast(err.message || 'Could not open the canvas.', 'error');
@@ -4772,6 +4777,7 @@ async function saveCanvas2Standalone() {
   const titleEl = document.getElementById('canvas2-editor-title');
   const editor = document.getElementById('canvas2-editor');
   if (!titleEl || !editor) return;
+  if (titleEl.value === canvas2StandaloneState.savedTitle && editor.value === canvas2StandaloneState.savedContent) return;
   canvas2StandaloneState.saving = true;
   let retryAfterConflict = false;
   setCanvas2StandaloneStatus('Saving…');

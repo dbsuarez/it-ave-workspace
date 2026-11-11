@@ -131,5 +131,5 @@ function formatRichText(content, context = {}) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { formatRichText, findMentionRanges, escapeRichText };
+  module.exports = { formatRichText, formatInlineText, formatTextBlock, findMentionRanges, escapeRichText };
 }

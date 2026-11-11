@@ -126,6 +126,19 @@ edit splices only the block it touches (line endings, including CRLF, are preser
 | GET | `/api/canvas/:id/sections?type=&contains=` | Blocks as `{ id, index, type, preview, items? }` plus the `revision` they belong to (viewer access) |
 | PATCH | `/api/canvas/:id` with `{ operation, baseRevision }` | Apply ONE operation (editor access) |
 
+**History.** Saves are snapshotted in `canvas_revisions` (newest 100 kept). Consecutive saves by
+the same person within a minute fold into one entry, so autosave does not flood the list; a save by
+someone else, or after a minute, is a new entry. A failure to record history never fails the save.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/canvas/:id/revisions` | Saved versions, newest first (viewer access) |
+| GET | `/api/canvas/:id/revisions/:revision` | One version with its text (viewer access) |
+| POST | `/api/canvas/:id/revisions/:revision/restore` | Make it current as a NEW version, optional `baseRevision` (editor access). A restore always gets its own entry, so the version it replaces can be restored again |
+
+`GET /api/canvas/:id/sections?full=true` also returns each section's text, which is what the reading
+view renders.
+
 **Ownership and channel grants (standalone canvases).** The owner is explicit (`owner_id`, falling
 back to the creator for older rows) and transferable. Access comes from three places, and the
 highest role wins: ownership, a personal grant (`canvas_collaborators`), or a grant to a channel
