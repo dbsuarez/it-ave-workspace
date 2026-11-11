@@ -206,6 +206,61 @@ async function ensureDirectMessageAccess(query, userId, otherUserId) {
   await ensureGuestCanReach(query, userId, otherUserId);
 }
 
+async function getCanvasById(query, canvasId) {
+  const result = await query(
+    `SELECT id, kind, channel_id, dm_user_low, dm_user_high, created_by, title, content, created_at, updated_at
+     FROM canvases
+     WHERE id = $1`,
+    [canvasId]
+  );
+  if (!result.rows[0]) {
+    const err = new Error('Canvas not found');
+    err.status = 404;
+    throw err;
+  }
+  return result.rows[0];
+}
+
+// Returns the canvas row when userId meets the access requirements.
+// neededRole is 'viewer' (default) or 'editor'.
+async function ensureCanvasAccess(query, userId, canvasId, neededRole = 'viewer') {
+  if (!userId || !canvasId) {
+    const err = new Error('Missing canvas information');
+    err.status = userId ? 400 : 401;
+    throw err;
+  }
+  const canvas = await getCanvasById(query, canvasId);
+  if (canvas.kind === 'channel') {
+    await ensureChannelMembership(query, userId, canvas.channel_id);
+    return canvas;
+  }
+  if (canvas.kind === 'dm') {
+    if (Number(userId) !== Number(canvas.dm_user_low) && Number(userId) !== Number(canvas.dm_user_high)) {
+      const err = new Error('Canvas not found');
+      err.status = 404;
+      throw err;
+    }
+    return canvas;
+  }
+  const collaborators = await query(
+    `SELECT role FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2`,
+    [canvasId, userId]
+  );
+  const isOwner = canvas.created_by !== null && Number(canvas.created_by) === Number(userId);
+  const row = collaborators.rows[0];
+  if (!isOwner && !row) {
+    const err = new Error('Canvas not found');
+    err.status = 404;
+    throw err;
+  }
+  if (neededRole === 'editor' && !isOwner && row?.role !== 'editor') {
+    const err = new Error('Viewer access only');
+    err.status = 403;
+    throw err;
+  }
+  return canvas;
+}
+
 async function ensureFileAccess(query, userId, fileId) {
   const fileResult = await query(
     `SELECT id, message_id, dm_message_id, uploaded_by
@@ -272,6 +327,8 @@ module.exports = {
   ensureNotTimedOut,
   ensureCanPostToChannel,
   ensureDirectMessageAccess,
+  ensureCanvasAccess,
+  getCanvasById,
   ensureFileAccess,
   isExtensionAllowed,
   isMimeAllowed,

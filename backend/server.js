@@ -14,6 +14,7 @@ const notesRoutes = require('./src/routes/notes');
 const searchRoutes = require('./src/routes/search');
 const listsRoutes = require('./src/routes/lists');
 const canvasesRoutes = require('./src/routes/canvases');
+const canvasRoutes = require('./src/routes/canvas');
 const moderationRoutes = require('./src/routes/moderation');
 const activityRoutes = require('./src/routes/activity');
 const settingsRoutes = require('./src/routes/settings');
@@ -68,6 +69,7 @@ app.use('/api/notes', notesRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/lists', listsRoutes);
 app.use('/api/canvases', canvasesRoutes);
+app.use('/api/canvas', canvasRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -198,6 +200,50 @@ db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT N
     )
   `))
   .then(() => db.query('CREATE INDEX IF NOT EXISTS idx_channel_canvases_channel_id ON channel_canvases(channel_id)'))
+  .then(() => db.query(`
+    CREATE TABLE IF NOT EXISTS canvases (
+      id SERIAL PRIMARY KEY,
+      kind VARCHAR(16) NOT NULL CHECK (kind IN ('channel', 'dm', 'standalone')),
+      channel_id INTEGER NULL REFERENCES channels(id) ON DELETE CASCADE,
+      dm_user_low INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+      dm_user_high INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+      title VARCHAR(160) NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      CHECK (
+        (kind = 'channel' AND channel_id IS NOT NULL)
+        OR (kind = 'dm' AND dm_user_low IS NOT NULL AND dm_user_high IS NOT NULL)
+        OR (kind = 'standalone' AND channel_id IS NULL AND dm_user_low IS NULL AND dm_user_high IS NULL)
+      ),
+      CHECK (dm_user_low IS NULL OR dm_user_low < dm_user_high)
+    )
+  `))
+  .then(() => db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_canvases_channel ON canvases(channel_id) WHERE kind = 'channel'`))
+  .then(() => db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_canvases_dm ON canvases(dm_user_low, dm_user_high) WHERE kind = 'dm'`))
+  .then(() => db.query(`
+    CREATE TABLE IF NOT EXISTS canvas_collaborators (
+      canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'editor')),
+      granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      PRIMARY KEY (canvas_id, user_id)
+    )
+  `))
+  .then(() => db.query(`
+    CREATE TABLE IF NOT EXISTS canvas_shares (
+      id SERIAL PRIMARY KEY,
+      canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+      token VARCHAR(64) NOT NULL UNIQUE,
+      role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'editor')),
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      expires_at TIMESTAMP WITH TIME ZONE
+    )
+  `))
+  .then(() => db.query('CREATE INDEX IF NOT EXISTS idx_canvas_shares_token ON canvas_shares(token)'))
   .then(() => migrations.reduce((chain, sql) => chain.then(() => db.query(sql)), Promise.resolve()))
   .then(() => {
     server.listen(PORT, () => {

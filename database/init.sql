@@ -358,3 +358,45 @@ CREATE TABLE IF NOT EXISTS webhooks (
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      last_used_at TIMESTAMP WITH TIME ZONE
    );
+
+-- Canvas 2.0: channel, DM and standalone rich-text documents.
+CREATE TABLE IF NOT EXISTS canvases (
+     id SERIAL PRIMARY KEY,
+     kind VARCHAR(16) NOT NULL CHECK (kind IN ('channel', 'dm', 'standalone')),
+     channel_id INTEGER NULL REFERENCES channels(id) ON DELETE CASCADE,
+     dm_user_low INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+     dm_user_high INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+     title VARCHAR(160) NOT NULL,
+     content TEXT NOT NULL DEFAULT '',
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     CHECK (
+         (kind = 'channel' AND channel_id IS NOT NULL)
+       OR (kind = 'dm' AND dm_user_low IS NOT NULL AND dm_user_high IS NOT NULL)
+       OR (kind = 'standalone' AND channel_id IS NULL AND dm_user_low IS NULL AND dm_user_high IS NULL)
+     ),
+     CHECK (dm_user_low IS NULL OR dm_user_low < dm_user_high)
+   );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_canvases_channel ON canvases(channel_id) WHERE kind = 'channel';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_canvases_dm ON canvases(dm_user_low, dm_user_high) WHERE kind = 'dm';
+
+CREATE TABLE IF NOT EXISTS canvas_collaborators (
+     canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'editor')),
+     granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     PRIMARY KEY (canvas_id, user_id)
+   );
+
+CREATE TABLE IF NOT EXISTS canvas_shares (
+     id SERIAL PRIMARY KEY,
+     canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+     token VARCHAR(64) NOT NULL UNIQUE,
+     role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'editor')),
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     expires_at TIMESTAMP WITH TIME ZONE
+   );
+CREATE INDEX IF NOT EXISTS idx_canvas_shares_token ON canvas_shares(token);
