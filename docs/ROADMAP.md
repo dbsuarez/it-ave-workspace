@@ -241,6 +241,22 @@ Priority order, by user-visible value:
    - Reuse the same business logic / API client
    - Android will refuse plain HTTP; requires domain + TLS
 
+### Hardening added (2026-11-12)
+
+| Item | State |
+|------|-------|
+| Schema in three places (A09) | **Done**: the inline schema in `server.js` moved into `migrations.js`; `test/schema.test.js` keeps `server.js` free of schema and checks the migrations are repeatable |
+| CORS reflection (A07) | **Done**: only the desktop app, local tools and `CORS_ORIGINS` may call from a browser |
+| CI | **Done (needs the repo on GitHub Actions to run)**: `.github/workflows/ci.yml` |
+| TLS / reverse proxy | **Ready**: `--profile tls` (Caddy, automatic certificates); not yet deployed on a real domain |
+| Scheduled backups | **Done and verified**: `--profile backup` wrote a dump that reads back |
+| TURN relay | **Ready**: `--profile turn`; needs a Linux host with a public address |
+| Installer signing | **Ready**: set `CSC_LINK` / `CSC_KEY_PASSWORD` and run `npm run dist`; needs a purchased certificate |
+| App smoke test | **Done**: `npm run smoke` (source or packaged build) |
+| Real-microphone call test on two devices | **Procedure written** (`docs/CALL_TEST.md`); needs two people and hardware |
+
+See `deploy/README.md`.
+
 ### Requested, not started (2026-11-12)
 
 - ~~Org chart and employee pages~~ - done (People, under More).

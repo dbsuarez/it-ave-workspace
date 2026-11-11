@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend tests (real PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # the real-database tests build a throwaway database here and drop it afterwards
+      TEST_DATABASE_ADMIN_URL: postgres://ci:ci@127.0.0.1:5432/postgres
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: The real-database tests must have run (not been skipped)
+        run: |
+          out="$(npm test 2>&1)"
+          echo "$out" | grep -E "^ℹ (pass|fail|skipped)"
+          echo "$out" | grep -qE "^ℹ skipped 0" || { echo "Some tests were skipped: is PostgreSQL reachable?"; exit 1; }
+
+  frontend:
+    name: Desktop client checks and tests
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: The committed editor bundle matches its source
+        run: |
+          npm run editor
+          git diff --exit-code -- src/vendor/canvas-editor.js
+
+  audit:
+    name: Dependency audit (production dependencies)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: backend
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend
+
+  smoke:
+    name: App starts (Windows)
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run smoke

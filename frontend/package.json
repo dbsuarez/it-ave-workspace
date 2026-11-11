@@ -9,6 +9,8 @@
     "test": "node --test \"test/*.test.js\"",
     "vendor": "node scripts/vendor.js",
     "editor": "node scripts/build-editor.js",
+    "smoke": "node scripts/smoke.js",
+    "verify:installer": "node scripts/verify-installer.js",
     "prestart": "npm run check",
     "start": "electron .",
     "dev": "electron .",

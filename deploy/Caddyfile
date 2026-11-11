@@ -1,0 +1,22 @@
+# HTTPS in front of the backend, run by the `proxy` service in docker-compose.yml (profile "tls"):
+#   SITE_ADDRESS=chat.example.com docker compose --profile tls up -d proxy
+# With a real domain pointing at this machine, Caddy gets and renews a Let's Encrypt certificate by itself.
+# With an IP address or "localhost" it makes its own certificate (see deploy/README.md for trusting it).
+# WebSocket (Socket.IO) traffic is proxied automatically.
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# uploads can be large; matches MAX_FILE_SIZE_MB with some room
+	request_body {
+		max_size 60MB
+	}
+
+	reverse_proxy backend:3001
+}

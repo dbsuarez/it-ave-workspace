@@ -31,6 +31,12 @@ docker cp itavenue-backend:/app/uploads "backups\uploads-$stamp"
 Copy the `backups` folder **off this machine** (another disk or cloud storage). A backup that only
 lives next to the database does not survive a dead disk. `backups/` should stay out of git.
 
+## Scheduled backups
+
+To have this done for you every day, start the backup service: `docker compose --profile backup up -d backup`.
+It writes the same two files into `backups/` on a schedule and removes old ones. See
+[`deploy/README.md`](../deploy/README.md#scheduled-backups). You still need to copy `backups/` off the machine.
+
 ## Restore
 
 Restore into a new, empty database first to check the dump, then swap if you need to.
