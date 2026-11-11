@@ -218,7 +218,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at, job_title FROM users WHERE id = $1',
       [req.user.userId]
     );
 
@@ -237,6 +237,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         status: user.status,
         lastSeen: user.last_seen,
         createdAt: user.created_at,
+        jobTitle: user.job_title || '',
       },
     });
   } catch (err) {
@@ -248,14 +249,18 @@ router.get('/me', authenticateToken, async (req, res) => {
 router.patch('/me', authenticateToken, async (req, res) => {
   const username = typeof req.body.username === 'string' ? req.body.username.trim() : null;
   const avatarColor = req.body.avatarColor;
+  const jobTitle = typeof req.body.jobTitle === 'string' ? req.body.jobTitle.trim() : null;
 
+  if (jobTitle !== null && jobTitle.length > 100) {
+    return res.status(400).json({ error: 'Job title can be at most 100 characters' });
+  }
   if (username !== null && (username.length < 2 || username.length > 50)) {
     return res.status(400).json({ error: 'Username must be between 2 and 50 characters' });
   }
   if (avatarColor !== undefined && !/^#[0-9a-fA-F]{6}$/.test(avatarColor)) {
     return res.status(400).json({ error: 'Avatar color must be a six-digit hex color' });
   }
-  if (username === null && avatarColor === undefined) {
+  if (username === null && avatarColor === undefined && jobTitle === null) {
     return res.status(400).json({ error: 'No profile changes were provided' });
   }
 
@@ -263,10 +268,11 @@ router.patch('/me', authenticateToken, async (req, res) => {
     const result = await query(
       `UPDATE users
        SET username = COALESCE($1, username),
-           avatar_color = COALESCE($2, avatar_color)
+           avatar_color = COALESCE($2, avatar_color),
+           job_title = COALESCE($4, job_title)
        WHERE id = $3
-       RETURNING id, username, email, avatar_color, is_superadmin, token_version`,
-      [username, avatarColor ?? null, req.user.userId]
+       RETURNING id, username, email, avatar_color, is_superadmin, token_version, job_title`,
+      [username, avatarColor ?? null, req.user.userId, jobTitle]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -286,6 +292,7 @@ router.patch('/me', authenticateToken, async (req, res) => {
         email: user.email,
         avatarColor: user.avatar_color,
         isSuperadmin: user.is_superadmin,
+        jobTitle: user.job_title || '',
       },
     });
   } catch (err) {

@@ -6167,3 +6167,88 @@ h4.cv-h { font-size: 15px; }
   padding: 4px 10px;
   font-size: 12px;
 }
+
+/* @mentions: a chip inline, a profile card when alone on a line */
+.cw-mention {
+  display: inline;
+  user-select: none;
+}
+
+.cw-mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px 0 3px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.14);
+  color: var(--purple);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.cw-mention-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.cw-mention-card {
+  display: none;
+}
+
+.cw-mention-solo .cw-mention-known .cw-mention-chip {
+  display: none;
+}
+
+.cw-mention-solo .cw-mention-known {
+  display: block;
+}
+
+.cw-mention-solo .cw-mention-known .cw-mention-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 280px;
+  max-width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.cw-mention-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.cw-mention-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cw-mention-name { font-size: 16px; font-weight: 800; color: var(--text); }
+.cw-mention-title { font-size: 13px; color: var(--text); }
+.cw-mention-status { font-size: 12px; color: var(--text-muted); }
+.cw-mention-status::before { content: "\25CF "; color: var(--text-muted); }
+.cw-mention-status.online::before { color: #22c55e; }
+.cw-mention-email { font-size: 12px; color: var(--purple); overflow-wrap: anywhere; }
+
+.cw-editor .ProseMirror-selectednode .cw-mention-chip,
+.cw-editor .ProseMirror-selectednode .cw-mention-card { outline: 2px solid var(--purple); }

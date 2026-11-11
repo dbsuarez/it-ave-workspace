@@ -142,6 +142,9 @@ module.exports = [
   // Guests are not part of group messages (see routes/conversations.js)
   "DELETE FROM conversation_members WHERE user_id IN (SELECT id FROM users WHERE account_type = 'guest')",
 
+  // Job title shown on profile cards (for example when someone is mentioned in a canvas)
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) NOT NULL DEFAULT ''",
+
   // Deleting a personal canvas moves it to the trash for a few days (deleted_at); a purge removes it later
   'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL',

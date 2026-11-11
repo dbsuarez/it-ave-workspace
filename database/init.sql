@@ -502,6 +502,9 @@ BEGIN
 END
 $$;
 
+-- Job title on profiles; mirrors backend/src/migrations.js.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) NOT NULL DEFAULT '';
+
 -- Trash for personal canvases; mirrors backend/src/migrations.js.
 ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE canvases ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL;

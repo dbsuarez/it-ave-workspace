@@ -9,7 +9,7 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(
       `SELECT id, username, email, avatar_color, status, last_seen, created_at,
-              status_text, status_emoji, dnd_until, account_type
+              status_text, status_emoji, dnd_until, account_type, job_title
        FROM users
        WHERE id != $1
          AND account_type <> 'bot'
@@ -37,6 +37,7 @@ router.get('/', authenticateToken, async (req, res) => {
         statusText: u.status_text || '',
         statusEmoji: u.status_emoji || '',
         accountType: u.account_type || 'member',
+        jobTitle: u.job_title || '',
         dndUntil: u.dnd_until && new Date(u.dnd_until) > new Date() ? u.dnd_until : null,
       })),
     });

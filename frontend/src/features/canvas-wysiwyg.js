@@ -11,6 +11,18 @@
 //
 // Needs (loaded before): vendor/canvas-editor.js (ITAEditor), canvas-slash.js, canvas-view.js.
 
+// People shown in mention cards and offered by the @ picker: everyone the app already knows about.
+function canvasMentionPeople() {
+  const people = [...(typeof state !== 'undefined' && state.users ? state.users : [])];
+  if (typeof state !== 'undefined' && state.user) people.push(state.user);
+  return people;
+}
+
+function canvasMentionLookup(username) {
+  const wanted = String(username || '').toLowerCase();
+  return canvasMentionPeople().find((person) => String(person.username || '').toLowerCase() === wanted) || null;
+}
+
 const canvasWysiwyg = (() => {
   const nativeValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
   const instances = {};
@@ -580,7 +592,7 @@ const canvasWysiwyg = (() => {
       <button type="button" class="slash-item${i === menu.active ? ' active' : ''}" role="option" aria-selected="${i === menu.active}" data-slash="${item.id}">
         <span class="slash-label">${item.label}</span>
         <span class="slash-hint">${item.hint}</span>
-        <span class="slash-key">/${item.keys[0]}</span>
+        <span class="slash-key">${item.mention ? '' : `/${item.keys[0]}`}</span>
       </button>`).join('');
     const coords = inst.editor.view.coordsAtPos(inst.editor.state.selection.from);
     const height = menu.el.offsetHeight;
@@ -593,9 +605,47 @@ const canvasWysiwyg = (() => {
     if (current) current.scrollIntoView({ block: 'nearest' });
   }
 
+  // "@" and a name fragment before the cursor: offer people
+  function mentionContext(inst) {
+    const { selection } = inst.editor.state;
+    if (!selection.empty || !canEdit(inst)) return null;
+    const { $from } = selection;
+    if (!$from.parent.isTextblock || $from.parent.type.name === 'codeBlock') return null;
+    const before = $from.parent.textBetween(0, $from.parentOffset, '\0', '\0');
+    const match = /(?:^|\s)@([A-Za-z0-9_.-]{0,50})$/.exec(before);
+    return match ? { query: match[1], from: selection.from - match[1].length - 1, to: selection.from } : null;
+  }
+
+  function updateMentions(inst) {
+    const context = mentionContext(inst);
+    if (!context) { closeSlash(inst); return; }
+    const q = context.query.toLowerCase();
+    const people = canvasMentionPeople()
+      .filter((p) => p.username && p.username.toLowerCase().includes(q))
+      .sort((a, b) => Number(b.username.toLowerCase().startsWith(q)) - Number(a.username.toLowerCase().startsWith(q)) || a.username.localeCompare(b.username))
+      .slice(0, 8);
+    if (!people.length) { closeSlash(inst); return; }
+    const items = people.map((p) => ({ id: `user:${p.username}`, mention: true, username: p.username, label: `@${p.username}`, hint: p.jobTitle || p.email || '', keys: [p.status || ''] }));
+    if (!inst.menu) {
+      inst.menu = { el: make('div', 'slash-menu', { role: 'listbox', 'aria-label': 'Mention someone' }), items, active: 0, context };
+      document.body.appendChild(inst.menu.el);
+    } else if (inst.menu.query !== context.query) {
+      inst.menu.active = 0;
+    }
+    inst.menu.items = items;
+    inst.menu.query = context.query;
+    inst.menu.context = context;
+    renderSlash(inst);
+  }
+
+  function insertMention(inst, username, from, to) {
+    closeSlash(inst);
+    inst.editor.chain().focus().deleteRange({ from, to }).insertContent({ type: 'mention', attrs: { username } }).run();
+  }
+
   function updateSlash(inst) {
     const context = slashContext(inst);
-    if (!context) { closeSlash(inst); return; }
+    if (!context) { updateMentions(inst); return; }
     const items = filterSlashItems(context.query);
     if (!items.length) { closeSlash(inst); return; }
     if (!inst.menu) {
@@ -639,7 +689,9 @@ const canvasWysiwyg = (() => {
         if (event.key === 'Enter' || event.key === 'Tab') {
           event.preventDefault();
           event.stopPropagation();
-          runSlash(inst, menu.items[menu.active], menu.context.from, menu.context.to, '');
+          const chosen = menu.items[menu.active];
+          if (chosen.mention) insertMention(inst, chosen.username, menu.context.from, menu.context.to);
+          else runSlash(inst, chosen, menu.context.from, menu.context.to, '');
           return;
         }
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeSlash(inst); return; }
@@ -680,8 +732,10 @@ const canvasWysiwyg = (() => {
       const button = event.target.closest ? event.target.closest('.slash-item') : null;
       if (!button || !inst.menu || !inst.menu.el.contains(button)) return;
       event.preventDefault();
-      const item = slashItemById(button.dataset.slash);
-      if (item) runSlash(inst, item, inst.menu.context.from, inst.menu.context.to, '');
+      const item = inst.menu.items.find((entry) => entry.id === button.dataset.slash);
+      if (!item) return;
+      if (item.mention) insertMention(inst, item.username, inst.menu.context.from, inst.menu.context.to);
+      else runSlash(inst, item, inst.menu.context.from, inst.menu.context.to, '');
     });
 
     // comment bubble, drag grip and table "+" handles follow the pointer

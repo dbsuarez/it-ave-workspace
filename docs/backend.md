@@ -136,6 +136,17 @@ someone else, or after a minute, is a new entry. A failure to record history nev
 | GET | `/api/canvas/:id/revisions/:revision` | One version with its text (viewer access) |
 | POST | `/api/canvas/:id/revisions/:revision/restore` | Make it current as a NEW version, optional `baseRevision` (editor access). A restore always gets its own entry, so the version it replaces can be restored again |
 
+**Trash.** Deleting a *personal* canvas sets `deleted_at` instead of removing it, for
+`CANVAS_TRASH_DAYS` (default 7). A deleted canvas does not exist for any other endpoint (404), its
+collaborators lose access, and its comments, history and pictures are kept. `backend/src/canvasTrash.js`
+purges expired ones at startup and every six hours (rows cascade; stored pictures are unlinked).
+Channel and DM canvases are still removed at once.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/canvas/deleted` | The caller's own deleted personal canvases that can still be restored, with `expiresAt` |
+| POST | `/api/canvas/:id/restore` | Restore one (owner only; 404 for anyone else, 410 if past the retention) |
+
 **Comments.** Threads on a canvas, kept in `canvas_comments` (a top-level comment may quote the passage
 it is about; replies are flat under it). Anyone who can read the canvas reads them; editors write.
 

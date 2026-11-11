@@ -615,6 +615,7 @@ function closeSettingsModal() {
 function openProfileModal() {
   document.getElementById('profile-username').value = state.user.username || '';
   document.getElementById('profile-avatar-color').value = state.user.avatarColor || '#6b21a8';
+  document.getElementById('profile-job-title').value = state.user.jobTitle || '';
   openSettingsModal(els.profileModal);
 }
 
@@ -689,10 +690,11 @@ async function saveProfile(event) {
   event.preventDefault();
   const username = document.getElementById('profile-username').value.trim();
   const avatarColor = document.getElementById('profile-avatar-color').value;
+  const jobTitle = document.getElementById('profile-job-title').value.trim();
   try {
     const res = await api('/api/auth/me', {
       method: 'PATCH',
-      body: JSON.stringify({ username, avatarColor }),
+      body: JSON.stringify({ username, avatarColor, jobTitle }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not update profile');

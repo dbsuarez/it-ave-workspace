@@ -10,7 +10,8 @@
 //   - pictures              "![name](file:<id>)" (only canvas files; remote images are never loaded)
 //   - tables, headings, lists, quotes, code, dividers: plain GitHub-style Markdown
 const { Editor, Node, mergeAttributes } = require('@tiptap/core');
-const { NodeSelection } = require('@tiptap/pm/state');
+const { NodeSelection, Plugin } = require('@tiptap/pm/state');
+const { Decoration, DecorationSet } = require('@tiptap/pm/view');
 const { StarterKit } = require('@tiptap/starter-kit');
 const { Table, TableRow, TableHeader, TableCell } = require('@tiptap/extension-table');
 const { TaskList, TaskItem } = require('@tiptap/extension-list');
@@ -285,6 +286,142 @@ function startBlockDrag(editor, blockElement, event) {
   return true;
 }
 
+// "@name" is one unit in the page. Saved as plain "@name" text, so old clients, search and notifications
+// keep working. Next to other text it shows as a small chip; alone on a line it shows as a profile card
+// (picture, name, job title, status, email) so readers know who is meant. The details come from the app
+// through the global canvasMentionLookup(username), which returns the person or null.
+const MENTION_RE = /^@([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)/;
+
+function mentionDom(username) {
+  const person = typeof canvasMentionLookup === 'function' ? canvasMentionLookup(username) : null;
+  const root = document.createElement('span');
+  root.className = `cw-mention${person ? ' cw-mention-known' : ''}`;
+  root.setAttribute('data-mention', username);
+  root.contentEditable = 'false';
+  const color = (person && person.avatarColor) || '#6B21A8';
+  const initial = (username[0] || '?').toUpperCase();
+
+  const chip = document.createElement('span');
+  chip.className = 'cw-mention-chip';
+  const dot = document.createElement('span');
+  dot.className = 'cw-mention-dot';
+  dot.style.background = color;
+  dot.textContent = initial;
+  chip.append(dot, document.createTextNode(`@${username}`));
+  root.appendChild(chip);
+
+  if (person) {
+    const card = document.createElement('span');
+    card.className = 'cw-mention-card';
+    const avatar = document.createElement('span');
+    avatar.className = 'cw-mention-avatar';
+    avatar.style.background = color;
+    avatar.textContent = initial;
+    const body = document.createElement('span');
+    body.className = 'cw-mention-body';
+    const line = (className, text) => {
+      if (!text) return;
+      const el = document.createElement('span');
+      el.className = className;
+      el.textContent = text;
+      body.appendChild(el);
+    };
+    line('cw-mention-name', `@${person.username || username}`);
+    const role = person.accountType === 'guest' ? 'Guest' : person.isSuperadmin ? 'Superadmin' : '';
+    line('cw-mention-title', [person.jobTitle, role].filter(Boolean).join(' · '));
+    const status = [person.statusEmoji, person.statusText].filter(Boolean).join(' ');
+    line(`cw-mention-status${person.status === 'online' ? ' online' : ''}`, status || (person.status ? person.status[0].toUpperCase() + person.status.slice(1) : ''));
+    line('cw-mention-email', person.email);
+    card.append(avatar, body);
+    root.appendChild(card);
+  }
+  return root;
+}
+
+const Mention = Node.create({
+  name: 'mention',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return { username: { default: '' } };
+  },
+
+  parseHTML() {
+    return [{ tag: 'span[data-mention]', getAttrs: (el) => ({ username: el.getAttribute('data-mention') }) }];
+  },
+
+  renderHTML({ node }) {
+    return ['span', { 'data-mention': node.attrs.username, class: 'cw-mention-static' }, `@${node.attrs.username}`];
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      let name = node.attrs.username;
+      let dom = mentionDom(name);
+      return {
+        dom,
+        ignoreMutation: () => true,
+        update: (next) => {
+          if (next.type !== node.type) return false;
+          if (next.attrs.username !== name) return false;
+          return true;
+        },
+      };
+    };
+  },
+
+  // a paragraph holding only one mention (and maybe spaces) is marked, so it shows as a card
+  addProseMirrorPlugins() {
+    return [new Plugin({
+      props: {
+        decorations(state) {
+          const decorations = [];
+          state.doc.descendants((node, pos) => {
+            if (node.type.name !== 'paragraph') return true;
+            let mentions = 0;
+            let other = false;
+            node.forEach((child) => {
+              if (child.type.name === 'mention') mentions += 1;
+              else if (!(child.isText && !child.text.trim())) other = true;
+            });
+            if (mentions === 1 && !other) decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: 'cw-mention-solo' }));
+            return false;
+          });
+          return DecorationSet.create(state.doc, decorations);
+        },
+      },
+    })];
+  },
+
+  markdownTokenizer: {
+    name: 'mention',
+    level: 'inline',
+    start: (src) => {
+      const match = /(^|[\s(])@[A-Za-z0-9_]/.exec(src);
+      return match ? match.index + match[1].length : -1;
+    },
+    tokenize(src, tokens) {
+      // only after whitespace, "(" or at the start: "ann@example.com" is an email, never a mention
+      const previous = tokens && tokens.length ? tokens[tokens.length - 1] : null;
+      const before = previous ? String(previous.raw || '').slice(-1) : '';
+      if (before && !/[\s(]/.test(before)) return undefined;
+      const match = MENTION_RE.exec(src);
+      return match ? { type: 'mention', raw: match[0], username: match[1] } : undefined;
+    },
+  },
+
+  parseMarkdown(token, helpers) {
+    return helpers.createNode('mention', { username: token.username });
+  },
+
+  renderMarkdown(node) {
+    return `@${node.attrs?.username || ''}`;
+  },
+});
+
 function buildExtensions({ placeholder } = {}) {
   return [
     StarterKit.configure({
@@ -300,6 +437,7 @@ function buildExtensions({ placeholder } = {}) {
     TableCell,
     Callout,
     CanvasImage,
+    Mention,
     Placeholder.configure({ placeholder: placeholder || "Write something, or press / for commands" }),
     Markdown,
   ];

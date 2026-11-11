@@ -128,6 +128,12 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
   10px per dash, three dashes or fewer means automatic), which other Markdown renderers ignore.
 - **Picture bar.** Selecting a picture floats a bar with **Size** (25, 50, 75 percent, full width) and
   **Align** menus, plus Description, Replace and Delete.
+- **Mentions.** Type `@` and a name to pick someone; it is saved as plain `@name` text, so search and
+  old clients keep working. Next to other text it shows as a small chip. Alone on its own line it
+  becomes a profile card (avatar, name, job title, status, email) so readers know who is meant. The
+  details come from the people the app already knows (`canvasMentionLookup` in
+  `features/canvas-wysiwyg.js`); an unknown name stays a plain chip. People set their **job title** in
+  Profile.
 - **Moving things.** Hover any block and drag its grip (six dots) to move it, whether it is a paragraph,
   a picture, a table or a callout.
 - **Markdown source.** The **Markdown** button swaps the page for the Markdown text (with its own
@@ -135,6 +141,12 @@ and lives in `editor-src/canvas-editor.js` (the editor and our Markdown dialect)
 - **Viewers and guests** get the same page, locked: no toolbar, no editing, links still open.
 - **Rebuilding the bundle.** After changing `editor-src/` or upgrading `@tiptap/*`, run
   `npm run editor` in `frontend/` and commit `src/vendor/canvas-editor.js`.
+
+## Canvas: recently deleted
+
+Deleting a personal canvas moves it to **Recently deleted** (button at the bottom of the canvas list)
+for 7 days (`CANVAS_TRASH_DAYS`). **Restore** brings it back with its comments, pictures and history.
+After that a purge removes it for good. Channel and DM canvases are still removed at once.
 
 ## Canvas: comments
 

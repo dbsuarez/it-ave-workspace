@@ -216,3 +216,44 @@ test('auto-fit widths: natural when they fit, shrunk together when they do not, 
   assert.ok(mixed.reduce((a, b) => a + b, 0) <= 500);
   assert.ok(mixed[1] > mixed[2], 'the wider column stays wider');
 });
+
+test('mentions are one unit, saved as plain @name, and never confused with emails or code', () => {
+  const md = 'Hello @ann and @bob_smith, see `@code` or mail ann@example.com.\n';
+  const out = roundTrip(md);
+  // the email becomes an ordinary mailto link (the editor's autolinking); it is not a mention
+  assert.equal(out, 'Hello @ann and @bob_smith, see `@code` or mail [ann@example.com](mailto:ann@example.com).\n');
+  assert.equal(roundTrip(out), out, 'stable');
+  const editor = open(md);
+  const names = [];
+  editor.state.doc.descendants((node) => { if (node.type.name === 'mention') names.push(node.attrs.username); });
+  assert.deepEqual(names, ['ann', 'bob_smith'], 'only real mentions, not the email or the code');
+  editor.destroy();
+  assert.equal(roundTrip('Thanks @ann.\n'), 'Thanks @ann.\n', 'a final full stop is not part of the name');
+  assert.equal(roundTrip('@ann\n'), '@ann\n');
+});
+
+test('a mention alone on its line becomes a profile card, with details from the app', () => {
+  globalThis.canvasMentionLookup = (name) => (name === 'ann'
+    ? { username: 'ann', email: 'ann@itavenue.ph', jobTitle: 'IT Manager', status: 'online', statusText: 'In a meeting', avatarColor: '#123456', accountType: 'member' }
+    : null);
+  try {
+    const editor = open('@ann\n\nHello @ann and @zed\n');
+    const dom = editor.view.dom;
+    const solo = dom.querySelectorAll('.cw-mention-solo');
+    assert.equal(solo.length, 1, 'only the line with just a mention');
+    const card = solo[0].querySelector('.cw-mention-card');
+    assert.ok(card, 'the solo mention has a card');
+    assert.match(card.textContent, /@ann/);
+    assert.match(card.textContent, /IT Manager/);
+    assert.match(card.textContent, /In a meeting/);
+    assert.match(card.textContent, /ann@itavenue\.ph/);
+    assert.equal(card.querySelector('.cw-mention-avatar').style.background, 'rgb(18, 52, 86)');
+    // inline mentions are chips; an unknown person has no card at all
+    const inline = dom.querySelectorAll('p:not(.cw-mention-solo) .cw-mention');
+    assert.equal(inline.length, 2);
+    assert.ok(!inline[1].querySelector('.cw-mention-card'), 'an unknown person is just a chip');
+    editor.destroy();
+  } finally {
+    delete globalThis.canvasMentionLookup;
+  }
+});
