@@ -4412,6 +4412,7 @@ body.theme-dark .huddle-btn.media.active {
 .view-canvas2 {
   display: none;
   grid-template-columns: 300px 1fr;
+  grid-template-rows: minmax(0, 1fr);
   flex-direction: row;
 }
 
@@ -4819,7 +4820,8 @@ body.theme-dark .huddle-btn.media.active {
 }
 
 .tl-col-tools {
-  display: none;
+  display: inline-flex;
+  visibility: hidden;
   position: absolute;
   right: 4px;
   top: 4px;
@@ -4827,7 +4829,7 @@ body.theme-dark .huddle-btn.media.active {
 }
 
 .tl-th:hover .tl-col-tools {
-  display: inline-flex;
+  visibility: visible;
 }
 
 .tl-col-tools button {
@@ -4975,8 +4977,9 @@ body.theme-dark .huddle-btn.media.active {
   text-align: right;
 }
 
+/* Hidden with visibility, not display, so showing them on hover never changes the row width or height. */
 .tl-act {
-  display: none;
+  visibility: hidden;
   border: 0;
   background: transparent;
   color: var(--text-muted);
@@ -4989,7 +4992,7 @@ body.theme-dark .huddle-btn.media.active {
 
 .tl-row:hover .tl-act,
 .tl-row:focus-within .tl-act {
-  display: inline-block;
+  visibility: visible;
 }
 
 .tl-act:hover {
