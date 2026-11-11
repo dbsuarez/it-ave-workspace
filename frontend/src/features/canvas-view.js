@@ -64,6 +64,7 @@ function canvasViewOpened(which, { canEdit, hasContent }) {
   const button = view.modeButton();
   if (button) button.hidden = !canEdit;
   cvwShow(which, canEdit && !hasContent ? 'edit' : 'read');
+  if (typeof ccRefreshCount === 'function') ccRefreshCount(which);
 }
 
 // Called by renderer.js when another person's save arrives while this canvas is open.
@@ -113,6 +114,7 @@ async function cvwShow(which, mode) {
     editor.hidden = true;
     container.hidden = false;
     cvwLoadImages(container);
+    if (typeof ccDecorate === 'function') ccDecorate(which, container);
   } catch (err) {
     console.error('Canvas read view error:', err);
     showToast(err.message || 'Could not show the canvas.', 'error');

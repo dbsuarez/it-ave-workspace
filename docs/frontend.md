@@ -103,6 +103,17 @@ Both canvas editors (`features/canvas-slash.js`) help with Markdown without hidi
   inserts `![name](file:<id>)` as its own block. The reading view fetches each picture with the
   signed-in request and shows it from a blob URL; there is never a public URL.
 
+- **Templates.** An empty canvas in Edit mode offers Meeting notes, Project plan, Action items,
+  Incident report and Channel FAQ; picking one fills the canvas with editable Markdown.
+
+## Canvas: comments
+
+The **Comments** button in the canvas header (showing the number of open threads) opens a panel
+(`features/canvas-comments.js`). In the reading view each block shows a comment bubble on hover;
+pressing it starts a thread that quotes that block. Editors can reply, resolve and reopen threads,
+filter Open / Resolved / All, and delete their own comments; viewers read. Other people's comments
+appear live.
+
 ## Canvas: Read, Edit and History
 
 Both canvas editors (the channel/DM sheet and the personal canvas manager) have a **Read / Edit**

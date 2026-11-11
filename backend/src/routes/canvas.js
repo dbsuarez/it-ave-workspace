@@ -382,6 +382,141 @@ router.patch('/:canvasId', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/canvas/:id - delete; owner only for standalone, creator or mod/superadmin for others
+// ---- comments -----------------------------------------------------------------------------------
+// Threads: a top-level comment (optionally quoting the passage it is about) and flat replies. Anyone who
+// can read the canvas can read them; editors can write, reply and resolve. The author, or the canvas
+// owner/creator, can delete a comment (deleting a top-level one removes its replies).
+
+const MAX_COMMENT_LENGTH = 2000;
+const MAX_ANCHOR_LENGTH = 200;
+const MAX_COMMENTS_PER_CANVAS = 500;
+
+function mapComment(row) {
+  return {
+    id: row.id,
+    parentId: row.parent_id,
+    body: row.body,
+    anchor: row.anchor,
+    author: row.user_id ? { id: row.user_id, username: row.username } : null,
+    createdAt: row.created_at,
+    resolved: Boolean(row.resolved_at),
+    resolvedAt: row.resolved_at,
+    resolvedBy: row.resolved_by ? { id: row.resolved_by, username: row.resolved_by_username } : null,
+  };
+}
+
+const COMMENT_SELECT = `SELECT c.id, c.parent_id, c.body, c.anchor, c.user_id, u.username, c.created_at,
+        c.resolved_at, c.resolved_by, r.username AS resolved_by_username
+   FROM canvas_comments c
+   LEFT JOIN users u ON u.id = c.user_id
+   LEFT JOIN users r ON r.id = c.resolved_by`;
+
+function notifyComments(req, canvasId) {
+  req.io?.to(`canvas:${canvasId}`).emit('canvas_comments_updated', { canvasId });
+}
+
+router.get('/:canvasId/comments', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
+    const result = await query(`${COMMENT_SELECT} WHERE c.canvas_id = $1 ORDER BY c.created_at, c.id`, [canvasId]);
+    res.json({ comments: result.rows.map(mapComment) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('List canvas comments error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/:canvasId/comments', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
+    if (!body || body.length > MAX_COMMENT_LENGTH) {
+      return res.status(400).json({ error: `A comment must be 1 to ${MAX_COMMENT_LENGTH} characters` });
+    }
+    let anchor = null;
+    if (req.body.anchor !== undefined && req.body.anchor !== null) {
+      if (typeof req.body.anchor !== 'string') return res.status(400).json({ error: 'anchor must be text' });
+      anchor = req.body.anchor.trim().slice(0, MAX_ANCHOR_LENGTH) || null;
+    }
+    let parentId = null;
+    if (req.body.parentId !== undefined && req.body.parentId !== null) {
+      parentId = parseId(req.body.parentId);
+      if (parentId === null) return res.status(400).json({ error: 'parentId must be a valid comment ID' });
+      const parent = await query('SELECT id, parent_id FROM canvas_comments WHERE id = $1 AND canvas_id = $2', [parentId, canvasId]);
+      if (parent.rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
+      if (parent.rows[0].parent_id) return res.status(400).json({ error: 'Reply to the top-level comment of the thread' });
+      anchor = null;
+    }
+    const count = await query('SELECT COUNT(*) AS n FROM canvas_comments WHERE canvas_id = $1', [canvasId]);
+    if (Number(count.rows[0].n) >= MAX_COMMENTS_PER_CANVAS) {
+      return res.status(400).json({ error: `A canvas can hold at most ${MAX_COMMENTS_PER_CANVAS} comments` });
+    }
+    const inserted = await query(
+      `INSERT INTO canvas_comments (canvas_id, parent_id, user_id, body, anchor) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [canvasId, parentId, req.user.userId, body, anchor]
+    );
+    const row = await query(`${COMMENT_SELECT} WHERE c.id = $1`, [inserted.rows[0].id]);
+    notifyComments(req, canvasId);
+    res.status(201).json({ comment: mapComment(row.rows[0]) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Add canvas comment error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Resolve or reopen a thread (the top-level comment).
+router.patch('/:canvasId/comments/:commentId', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    const commentId = parseId(req.params.commentId);
+    if (canvasId === null || commentId === null) return res.status(400).json({ error: 'Canvas and comment IDs must be valid' });
+    await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    if (typeof req.body.resolved !== 'boolean') return res.status(400).json({ error: 'resolved must be true or false' });
+    const found = await query('SELECT id, parent_id FROM canvas_comments WHERE id = $1 AND canvas_id = $2', [commentId, canvasId]);
+    if (found.rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
+    if (found.rows[0].parent_id) return res.status(400).json({ error: 'Only a whole thread can be resolved' });
+    await query(
+      'UPDATE canvas_comments SET resolved_at = $1, resolved_by = $2 WHERE id = $3',
+      [req.body.resolved ? new Date() : null, req.body.resolved ? req.user.userId : null, commentId]
+    );
+    const row = await query(`${COMMENT_SELECT} WHERE c.id = $1`, [commentId]);
+    notifyComments(req, canvasId);
+    res.json({ comment: mapComment(row.rows[0]) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Resolve canvas comment error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/:canvasId/comments/:commentId', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    const commentId = parseId(req.params.commentId);
+    if (canvasId === null || commentId === null) return res.status(400).json({ error: 'Canvas and comment IDs must be valid' });
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const found = await query('SELECT id, user_id FROM canvas_comments WHERE id = $1 AND canvas_id = $2', [commentId, canvasId]);
+    if (found.rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
+    const me = Number(req.user.userId);
+    const mine = Number(found.rows[0].user_id) === me;
+    const canvasAdmin = Number(canvas.created_by) === me || canvasOwnerId(canvas) === me;
+    if (!mine && !canvasAdmin) return res.status(403).json({ error: 'Only the author or the canvas owner can delete a comment' });
+    await query('DELETE FROM canvas_comments WHERE id = $1', [commentId]);
+    notifyComments(req, canvasId);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Delete canvas comment error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Upload an image to put inside this canvas (editor access). The text of the canvas refers to it as
 // ![name](file:<id>); readers fetch it from /api/files/<id>/download, which follows the canvas's access.
 router.post('/:canvasId/images', authenticateToken, async (req, res) => {

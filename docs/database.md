@@ -14,7 +14,7 @@ The `init.sql` file creates:
 - **messages** - Channel messages with inline replies and pin metadata
 - **direct_messages** - 1:1 direct messages
 - **reactions** - Emoji reactions on messages
-- **files** - File attachment metadata (`message_id` for channel messages, `dm_message_id` for DMs, `canvas_id` for an image inside a canvas, deleted with it)
+- **files** - File attachment metadata (`message_id` for channel messages, `dm_message_id` for DMs, `canvas_id` for an image inside a canvas, deleted with it; comments live in `canvas_comments`)
 - **notes** - Per-user notes (title, content, created_at, updated_at)
 - **channel_lists** - Channel-shared lists: title, description, `todo_mode`, creator metadata
 - **list_columns** - A list's typed columns (`text`, `checkbox`, `date`, `user`, `select`, `number`,

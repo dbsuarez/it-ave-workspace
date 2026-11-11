@@ -451,6 +451,7 @@
               <div class="canvas2-editor-actions">
                 <span class="canvas2-status" id="canvas2-status" aria-live="polite">Saved</span>
                 <button class="btn canvas-mode-btn" id="btn-canvas2-mode" type="button" title="Show the finished canvas">Read</button>
+                <button class="btn canvas-mode-btn" id="btn-canvas2-comments" type="button" title="Comments">Comments</button>
                 <button class="btn canvas-mode-btn" id="btn-canvas2-history" type="button" title="Earlier versions">History</button>
                 <button class="icon-btn" id="btn-canvas2-share" type="button" title="Collaborators and share link" aria-label="Collaborators and share link">
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -551,6 +552,7 @@
             <div class="canvas-sheet-actions">
               <span class="canvas-sheet-status" id="canvas-sheet-status" aria-live="polite">Saved</span>
               <button class="btn canvas-mode-btn" id="btn-canvas-sheet-mode" type="button" title="Show the finished canvas">Read</button>
+              <button class="btn canvas-mode-btn" id="btn-canvas-sheet-comments" type="button" title="Comments">Comments</button>
               <button class="btn canvas-mode-btn" id="btn-canvas-sheet-history" type="button" title="Earlier versions">History</button>
               <button class="icon-btn" id="btn-close-canvas" type="button" title="Close canvas" aria-label="Close canvas">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -877,6 +879,31 @@
       </div>
     </div>
 
+    <div class="modal canvas-comments-modal" id="canvas-comments-modal" role="dialog" aria-label="Canvas comments">
+      <div class="modal-header">
+        <h3>Comments</h3>
+        <select id="canvas-comments-filter" aria-label="Show">
+          <option value="open">Open</option>
+          <option value="resolved">Resolved</option>
+          <option value="all">All</option>
+        </select>
+        <button class="modal-close" id="btn-close-canvas-comments" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body canvas-comments-body">
+        <form class="cc-composer" id="canvas-comments-composer">
+          <div class="cc-anchor-chip" id="canvas-comments-anchor" hidden>
+            <span></span>
+            <button type="button" class="cc-link" id="btn-canvas-comments-clear-anchor" aria-label="Comment on the whole canvas instead">&times;</button>
+          </div>
+          <textarea id="canvas-comments-input" maxlength="2000" rows="3" placeholder="Add a comment…" aria-label="Comment"></textarea>
+          <button class="btn primary" type="submit">Comment</button>
+        </form>
+        <div class="cc-list" id="canvas-comments-list"></div>
+      </div>
+    </div>
+
     <div class="modal canvas-history-modal" id="canvas-history-modal" role="dialog" aria-label="Canvas history">
       <div class="modal-header">
         <h3>Version history</h3>
@@ -991,6 +1018,7 @@
   <script src="features/canvas-render.js"></script>
   <script src="features/canvas-slash.js"></script>
   <script src="features/canvas-view.js"></script>
+  <script src="features/canvas-comments.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

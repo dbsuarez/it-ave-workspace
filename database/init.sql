@@ -502,6 +502,20 @@ BEGIN
 END
 $$;
 
+-- Comment threads on a canvas; mirrors backend/src/migrations.js.
+CREATE TABLE IF NOT EXISTS canvas_comments (
+  id SERIAL PRIMARY KEY,
+  canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+  parent_id INTEGER REFERENCES canvas_comments(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  body TEXT NOT NULL,
+  anchor TEXT,
+  resolved_at TIMESTAMP WITH TIME ZONE,
+  resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_comments_canvas ON canvas_comments(canvas_id, created_at);
+
 -- Images inside a canvas; mirrors backend/src/migrations.js.
 ALTER TABLE files ADD COLUMN IF NOT EXISTS canvas_id INTEGER REFERENCES canvases(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_files_canvas_id ON files(canvas_id);

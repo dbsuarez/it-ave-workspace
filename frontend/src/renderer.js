@@ -1015,6 +1015,9 @@ function connectSocket() {
     }
   });
   state.socket.on('user_status_updated', handleUserStatusUpdated);
+  state.socket.on('canvas_comments_updated', (event) => {
+    if (typeof canvasCommentsChanged === 'function') canvasCommentsChanged(Number(event.canvasId));
+  });
   state.socket.on('canvas_updated', (event) => {
     const incomingCanvasId = Number(event.canvasId);
     // Standalone canvas manager editor

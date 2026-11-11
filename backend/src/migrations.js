@@ -142,6 +142,20 @@ module.exports = [
   // Guests are not part of group messages (see routes/conversations.js)
   "DELETE FROM conversation_members WHERE user_id IN (SELECT id FROM users WHERE account_type = 'guest')",
 
+  // Comment threads on a canvas (a top-level comment may quote the passage it is about; replies have parent_id)
+  `CREATE TABLE IF NOT EXISTS canvas_comments (
+     id SERIAL PRIMARY KEY,
+     canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+     parent_id INTEGER REFERENCES canvas_comments(id) ON DELETE CASCADE,
+     user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     body TEXT NOT NULL,
+     anchor TEXT,
+     resolved_at TIMESTAMP WITH TIME ZONE,
+     resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_canvas_comments_canvas ON canvas_comments(canvas_id, created_at)',
+
   // Images inside a canvas are files that belong to the canvas (deleted with it)
   'ALTER TABLE files ADD COLUMN IF NOT EXISTS canvas_id INTEGER REFERENCES canvases(id) ON DELETE CASCADE',
   'CREATE INDEX IF NOT EXISTS idx_files_canvas_id ON files(canvas_id)',

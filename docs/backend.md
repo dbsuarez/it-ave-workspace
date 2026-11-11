@@ -136,6 +136,19 @@ someone else, or after a minute, is a new entry. A failure to record history nev
 | GET | `/api/canvas/:id/revisions/:revision` | One version with its text (viewer access) |
 | POST | `/api/canvas/:id/revisions/:revision/restore` | Make it current as a NEW version, optional `baseRevision` (editor access). A restore always gets its own entry, so the version it replaces can be restored again |
 
+**Comments.** Threads on a canvas, kept in `canvas_comments` (a top-level comment may quote the passage
+it is about; replies are flat under it). Anyone who can read the canvas reads them; editors write.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/canvas/:id/comments` | All comments, oldest first, with author and resolved state (viewer access) |
+| POST | `/api/canvas/:id/comments` | `{ body, anchor? }` starts a thread, `{ body, parentId }` replies to one (editor access; 2000 characters, 500 per canvas) |
+| PATCH | `/api/canvas/:id/comments/:commentId` | `{ resolved: true/false }` on a top-level comment (editor access) |
+| DELETE | `/api/canvas/:id/comments/:commentId` | The author, the canvas owner or its creator; a top-level comment takes its replies with it |
+
+Every change emits `canvas_comments_updated` to the canvas room so open clients refresh. Comments are
+not yet turned into mention notifications.
+
 **Images.** `POST /api/canvas/:id/images` (multipart field `file`, editor access) stores a PNG, JPG,
 GIF or WebP (not SVG) of up to 10 MB, content-checked like chat uploads, at most 50 per canvas. It
 returns `{ fileId, name, size, mimeType }`; the canvas text refers to it as `![name](file:<fileId>)`.
