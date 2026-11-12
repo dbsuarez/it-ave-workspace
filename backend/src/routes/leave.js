@@ -7,7 +7,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { fail, canManageEmployees, requireHr } = require('../hr');
+const { fail, canManageEmployees, requireHr, withRoleAccess, HR_LIKE_SQL } = require('../hr');
 const { parseDay, formatDay, leaveDays } = require('../leaveDays');
 
 const router = express.Router();
@@ -47,7 +47,7 @@ async function member(userId) {
   )).rows[0];
   if (!row) throw fail(401, 'Account not found');
   if (row.account_type !== 'member' || row.deactivated_at) throw fail(403, 'Leave is for workspace members');
-  return row;
+  return withRoleAccess(row);
 }
 
 const isHrLike = (actor) => canManageEmployees(actor);
@@ -222,7 +222,7 @@ function mapRequest(row) {
 async function approverIds(requester) {
   const result = await query(
     `SELECT id FROM users WHERE account_type = 'member' AND deactivated_at IS NULL AND id <> $1
-       AND (id = $2 OR is_hr OR is_superadmin)`,
+       AND (id = $2 OR ${HR_LIKE_SQL})`,
     [requester.id, requester.manager_id]
   );
   return result.rows.map((r) => r.id);

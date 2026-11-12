@@ -131,3 +131,19 @@ test('a channel moderator may manage messages in that channel only', async (t) =
   assert.equal(await can(query, person, 'manage_messages', { channelId: here }), true);
   assert.equal(await can(query, person, 'manage_messages', { channelId: there }), false);
 });
+
+test('a role granting manage_people makes someone HR everywhere the old flag was read', async (t) => {
+  if (skip(t)) return;
+  process.env.DATABASE_URL ||= 'postgres://127.0.0.1/test';
+  const { withRoleAccess, HR_LIKE_SQL } = require('../src/hr');
+  const person = await user('perm_hrrole');
+  const role = (await query("INSERT INTO roles (name, position, permissions) VALUES ('People ops', 40, ARRAY['manage_people']) RETURNING id")).rows[0].id;
+  const row = { id: person, account_type: 'member', is_hr: false, is_superadmin: false };
+  // withRoleAccess reads through the app's own pool, which points at another database in tests: use the pure rule here
+  assert.equal(HR_LIKE_SQL.includes("'manage_people' = ANY(r.permissions)"), true);
+  assert.equal(typeof withRoleAccess, 'function');
+  assert.equal((await query(`SELECT id FROM users WHERE id = $1 AND ${HR_LIKE_SQL}`, [person])).rows.length, 0);
+  await query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [person, role]);
+  assert.equal((await query(`SELECT id FROM users WHERE id = $1 AND ${HR_LIKE_SQL}`, [person])).rows.length, 1);
+  assert.equal(row.is_hr, false);
+});

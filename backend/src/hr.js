@@ -14,8 +14,20 @@ async function hrActor(userId) {
   const result = await query('SELECT id, account_type, is_superadmin, is_hr FROM users WHERE id = $1', [userId]);
   const row = result.rows[0];
   if (!row) throw fail(401, 'Account not found');
+  return withRoleAccess(row);
+}
+
+// Someone whose role grants manage_people is treated as HR everywhere the old is_hr flag is read.
+async function withRoleAccess(row) {
+  if (row.account_type === 'member' && !row.is_hr && !row.is_superadmin && await can(query, row.id, 'manage_people')) {
+    return { ...row, is_hr: true };
+  }
   return row;
 }
+
+// SQL for "this user is HR-like" over the users table (alias-free): the flags, or a role granting manage_people.
+const HR_LIKE_SQL = `(is_hr OR is_superadmin OR id IN (
+  SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE 'manage_people' = ANY(r.permissions)))`;
 
 const canManageEmployees = (actor) => Boolean(actor && actor.account_type === 'member' && (actor.is_superadmin || actor.is_hr));
 
@@ -55,4 +67,4 @@ async function applyChecklist(userId, kind) {
   return inserted.rows.length;
 }
 
-module.exports = { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin, temporaryPassword, applyChecklist };
+module.exports = { withRoleAccess, HR_LIKE_SQL, fail, hrActor, canManageEmployees, requireHr, requireSuperadmin, temporaryPassword, applyChecklist };
