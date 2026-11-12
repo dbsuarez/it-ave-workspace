@@ -7,7 +7,7 @@
 function exportPerson(person, username) {
   const role = person.accountType === 'guest' ? 'Guest' : person.isSuperadmin ? 'Superadmin' : '';
   return {
-    username: person.username || username,
+    username: (typeof personName === 'function' ? personName(person) : '') || person.username || username,
     email: person.email || '',
     jobTitle: person.jobTitle || '',
     role,

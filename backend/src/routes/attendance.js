@@ -368,7 +368,7 @@ router.get('/board', async (req, res) => {
     if (!date) throw fail(400, 'Choose a real date');
     const hr = canManageEmployees(actor);
     const people = (await query(
-      `SELECT id FROM users WHERE account_type = 'member' AND deactivated_at IS NULL AND ($1::boolean OR manager_id = $2)`, [hr, actor.id]
+      `SELECT id FROM users WHERE account_type = 'member' AND deactivated_at IS NULL AND NOT (is_superadmin AND LOWER(username) = 'admin') AND ($1::boolean OR manager_id = $2)`, [hr, actor.id]
     )).rows.map((r) => r.id);
     if (!people.length) return res.json({ date, timezone: TZ, scope: hr ? 'all' : 'team', rows: [] });
     const built = await buildDays(people, date, date, { includeIp: hr });
@@ -811,7 +811,7 @@ router.get('/export', async (req, res) => {
     await requireHr(req.user.userId);
     const { from, to } = rangeFrom(req.query);
     const people = (await query(
-      `SELECT id FROM users WHERE account_type = 'member' AND (deactivated_at IS NULL OR deactivated_at >= $1::date)`, [from]
+      `SELECT id FROM users WHERE account_type = 'member' AND NOT (is_superadmin AND LOWER(username) = 'admin') AND (deactivated_at IS NULL OR deactivated_at >= $1::date)`, [from]
     )).rows.map((r) => r.id);
     const built = people.length ? await buildDays(people, from, to) : new Map();
     const list = Array.from(built.values()).sort((a, b) => (a.person.lastName || a.person.username).localeCompare(b.person.lastName || b.person.username));

@@ -102,7 +102,7 @@ router.get('/me', async (req, res) => {
 router.get('/employees', async (req, res) => {
   try {
     await requireHr(req.user.userId);
-    const result = await query(`${EMPLOYEE_SELECT} WHERE u.account_type = 'member' ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), u.username)), LOWER(u.first_name)`);
+    const result = await query(`${EMPLOYEE_SELECT} WHERE u.account_type = 'member' AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin') ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), u.username)), LOWER(u.first_name)`);
     res.json({ employees: result.rows.map(mapEmployee) });
   } catch (err) {
     sendError(res, err, 'List employees error');
@@ -507,7 +507,7 @@ function csvCell(value) {
 router.get('/export', async (req, res) => {
   try {
     await requireHr(req.user.userId);
-    const result = await query(`${EMPLOYEE_SELECT} WHERE u.account_type = 'member' ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), u.username)), LOWER(u.first_name)`);
+    const result = await query(`${EMPLOYEE_SELECT} WHERE u.account_type = 'member' AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin') ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), u.username)), LOWER(u.first_name)`);
     const employees = result.rows.map(mapEmployee);
     const nameOf = new Map(employees.map((e) => [e.id, [e.firstName, e.middleName, e.lastName].filter(Boolean).join(' ') || e.username]));
     const header = ['Employee no.', 'Last name', 'First name', 'Middle name', 'Username', 'Email', 'Job title', 'Department', 'Employment type', 'Status', 'Hire date', 'Last day', 'Location', 'Phone', 'Reports to'];

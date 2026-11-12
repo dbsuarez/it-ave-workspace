@@ -294,12 +294,14 @@ const MENTION_RE = /^@([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)/;
 
 function mentionDom(username) {
   const person = typeof canvasMentionLookup === 'function' ? canvasMentionLookup(username) : null;
+  // shown as the full name when the person has one; what is saved is still @username
+  const shownName = (person && typeof personName === 'function' ? personName(person) : '') || username;
   const root = document.createElement('span');
   root.className = `cw-mention${person ? ' cw-mention-known' : ''}`;
   root.setAttribute('data-mention', username);
   root.contentEditable = 'false';
   const color = (person && person.avatarColor) || '#6B21A8';
-  const initial = (username[0] || '?').toUpperCase();
+  const initial = (shownName[0] || '?').toUpperCase();
 
   const chip = document.createElement('span');
   chip.className = 'cw-mention-chip';
@@ -307,7 +309,7 @@ function mentionDom(username) {
   dot.className = 'cw-mention-dot';
   dot.style.background = color;
   dot.textContent = initial;
-  chip.append(dot, document.createTextNode(`@${username}`));
+  chip.append(dot, document.createTextNode(`@${shownName}`));
   root.appendChild(chip);
 
   if (person) {
@@ -336,7 +338,7 @@ function mentionDom(username) {
     nameRow.className = 'cw-mention-namerow';
     const name = document.createElement('span');
     name.className = 'cw-mention-name';
-    name.textContent = person.username || username;
+    name.textContent = shownName;
     if (person.id !== undefined) name.setAttribute('data-profile-user', String(person.id));
     const presence = document.createElement('span');
     presence.className = `cw-mention-presence${person.status === 'online' ? ' online' : ''}`;

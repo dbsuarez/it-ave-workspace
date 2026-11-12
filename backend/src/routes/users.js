@@ -112,7 +112,7 @@ router.get('/:userId/photo', authenticateToken, async (req, res) => {
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, username, email, avatar_color, status, last_seen, created_at,
+      `SELECT id, username, first_name, middle_name, last_name, email, avatar_color, status, last_seen, created_at,
               status_text, status_emoji, dnd_until, account_type, job_title, photo_file, photo_updated_at
        FROM users
        WHERE id != $1
@@ -135,6 +135,9 @@ router.get('/', authenticateToken, async (req, res) => {
       users: result.rows.map((u) => ({
         id: u.id,
         username: u.username,
+        firstName: u.first_name || '',
+        middleName: u.middle_name || '',
+        lastName: u.last_name || '',
         email: u.email,
         avatarColor: u.avatar_color,
         status: u.status,

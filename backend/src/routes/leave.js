@@ -461,7 +461,7 @@ router.get('/calendar', async (req, res) => {
     const result = await query(
       `${REQUEST_SELECT}
        WHERE r.status IN ('approved', 'pending') AND r.start_date <= $2::date AND r.end_date >= $1::date
-         AND u.account_type = 'member' AND u.deactivated_at IS NULL
+         AND u.account_type = 'member' AND u.deactivated_at IS NULL AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')
          AND ($3::boolean OR u.id = $4 OR u.id = $5 OR u.manager_id = $4
               OR ($5::int IS NOT NULL AND u.manager_id = $5))
        ORDER BY r.start_date, u.username`,
