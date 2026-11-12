@@ -58,8 +58,10 @@ function renderPeople() {
   const title = document.getElementById('people-title');
   const sub = document.getElementById('people-sub');
   const actions = document.getElementById('people-actions');
+  const tabsRow = document.getElementById('people-tabs-row');
   if (!title || !actions) return;
   if (peopleState.pageId !== null) {
+    if (tabsRow) tabsRow.hidden = true;
     title.textContent = peopleState.page ? personName(peopleState.page.person) : 'Person';
     sub.textContent = 'Employee page';
     actions.innerHTML = '<button type="button" class="btn" data-people-back>← People</button>';
@@ -69,15 +71,20 @@ function renderPeople() {
   title.textContent = 'People';
   sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : peopleState.tab === 'manage' ? 'Employee records, departments and accounts.' : peopleState.tab === 'leave' ? 'Time off: balances, requests, approvals and who is away.' : peopleState.tab === 'attendance' ? 'Clock in and out, timesheets, and the payroll export.' : 'Everyone in the workspace.';
   const departments = Array.from(new Set(peopleState.list.map((p) => p.department).filter(Boolean))).sort();
-  actions.innerHTML = `
-    <div class="pp-tabs" role="tablist">
+  // The tabs get their own row under the title, so they never move; the search and filters sit on the right of the title.
+  if (tabsRow) {
+    tabsRow.hidden = false;
+    tabsRow.innerHTML = `
       <button type="button" class="pp-tab${peopleState.tab === 'directory' ? ' active' : ''}" data-people-tab="directory" role="tab">Directory</button>
       <button type="button" class="pp-tab${peopleState.tab === 'chart' ? ' active' : ''}" data-people-tab="chart" role="tab">Org chart</button>
       <button type="button" class="pp-tab${peopleState.tab === 'leave' ? ' active' : ''}" data-people-tab="leave" role="tab">Leave${typeof leaveState !== 'undefined' && leaveState.waiting ? ` (${leaveState.waiting})` : ''}</button>
       <button type="button" class="pp-tab${peopleState.tab === 'attendance' ? ' active' : ''}" data-people-tab="attendance" role="tab">Attendance</button>
       ${canManageEmployees() ? `<button type="button" class="pp-tab${peopleState.tab === 'manage' ? ' active' : ''}" data-people-tab="manage" role="tab">Manage</button>` : ''}
-    </div>
-    <input type="search" id="people-search" class="pp-search" placeholder="Search name, title, department…" value="${escapeText(peopleState.query)}" aria-label="Search people">
+    `;
+  }
+  const showSearch = !['leave', 'attendance'].includes(peopleState.tab); // those two tabs have no list to search
+  actions.innerHTML = `
+    ${showSearch ? `<input type="search" id="people-search" class="pp-search" placeholder="Search name, title, department…" value="${escapeText(peopleState.query)}" aria-label="Search people">` : ''}
     ${peopleState.tab === 'directory' && departments.length ? `<select id="people-department" class="pp-select" aria-label="Department">
       <option value="">All departments</option>${departments.map((d) => `<option value="${escapeText(d)}"${d === peopleState.department ? ' selected' : ''}>${escapeText(d)}</option>`).join('')}</select>` : ''}
     ${peopleState.tab === 'chart' && canManageEmployees()

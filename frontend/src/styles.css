@@ -6843,3 +6843,11 @@ h4.cv-h { font-size: 15px; }
 #checklists-modal .form-group > label { display: block; margin-bottom: 6px; font-weight: 700; }
 .tpl-area { display: block; width: 100%; max-height: none; min-height: 150px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; line-height: 1.5; resize: vertical; }
 .tpl-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* People: the sections (tabs) have their own row under the title, so they never move when the filters change */
+.pp-tabs-row { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.pp-tabs-row[hidden] { display: none; }
+.pp-tabs-row .pp-tab { padding: 10px 16px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+.pp-tabs-row .pp-tab:hover { color: var(--text); }
+.pp-tabs-row .pp-tab.active { border-bottom-color: var(--purple); background: transparent; color: var(--text); box-shadow: none; }
+.people-actions .pp-search { width: 260px; }
