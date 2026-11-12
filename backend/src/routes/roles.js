@@ -144,14 +144,16 @@ router.post('/view-as', async (req, res) => {
     )).rows[0];
     if (!target) throw fail(404, 'Person not found');
     if (target.is_superadmin) throw fail(400, 'View as is for people who are not Owners');
+    const full = !((await query('SELECT go_live FROM moderation_settings WHERE id = 1')).rows[0] || {}).go_live;
     const jwt = require('jsonwebtoken');
     const config = require('../config');
     const token = jwt.sign(
-      { userId: target.id, username: target.username, tokenVersion: Number(target.token_version || 0), viewAs: req.user.userId },
+      { userId: target.id, username: target.username, tokenVersion: Number(target.token_version || 0), viewAs: req.user.userId, viewFull: full },
       config.JWT_SECRET, { expiresIn: `${VIEW_AS_MINUTES}m` }
     );
-    await audit(req.user.userId, 'view_as_started', target.id, { minutes: VIEW_AS_MINUTES });
+    await audit(req.user.userId, 'view_as_started', target.id, { minutes: VIEW_AS_MINUTES, includesPrivate: full });
     res.json({
+      full,
       token,
       expiresAt: new Date(Date.now() + VIEW_AS_MINUTES * 60000).toISOString(),
       user: {

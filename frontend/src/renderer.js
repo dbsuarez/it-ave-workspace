@@ -277,6 +277,15 @@ async function init() {
       loadModerationAccess();
       loadUserGroups();
       loadRoleMentions();
+      if (viewing.viewFull) {
+        // testing mode (Pre-launch): their private screens are shown too, read-only
+        loadActivity();
+        loadUserSettings();
+        loadGroups();
+        loadSaved();
+        loadReminders();
+        loadSidebarLayout();
+      }
     } else {
     connectSocket();
     loadChannels();

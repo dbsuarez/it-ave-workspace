@@ -35,13 +35,14 @@ async function exitViewAs() {
 
 // Called once the app is up in a View as session: the bar across the top, a read-only look, and an automatic exit.
 function applyViewAsMode(claims) {
-  state.viewAs = { by: claims.viewAs, until: claims.exp * 1000 };
+  state.viewAs = { by: claims.viewAs, until: claims.exp * 1000, full: Boolean(claims.viewFull) };
   document.body.classList.add('view-as');
+  if (claims.viewFull) document.body.classList.add('view-as-full');
   const bar = document.createElement('div');
   bar.className = 'view-as-bar';
   bar.setAttribute('role', 'status');
   const name = typeof personName === 'function' ? personName(state.user) : state.user.username;
-  bar.innerHTML = `<span>Viewing as <strong>${escapeHtml(name)}</strong>. Read-only: nothing is saved as them, and their private messages are not shown.</span>
+  bar.innerHTML = `<span>Viewing as <strong>${escapeHtml(name)}</strong>. Read-only: nothing is saved as them. ${claims.viewFull ? 'Testing mode: their private messages, notes and saved items are shown too.' : 'Their private messages are not shown.'}</span>
     <button type="button" class="btn small" data-view-as-exit>Exit View as</button>`;
   document.body.prepend(bar);
   bar.querySelector('[data-view-as-exit]').addEventListener('click', exitViewAs);

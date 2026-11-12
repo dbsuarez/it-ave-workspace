@@ -148,3 +148,9 @@ reloading; it never joins their personal room (DMs, notifications), never marks 
 password off and makes everyone choose their own, and limits clocking to the office networks, and it is refused while an
 office network is not listed. The card also lists warnings: not on https, a proxy without TRUST_PROXY, a short or default
 JWT_SECRET, CORS open to every site. Return to pre-launch relaxes clocking but never brings the shared password back.
+
+**View as, testing mode (2026-11-12):** while the workspace is Pre-launch, View as shows everything the person can read,
+including their direct messages, notes, saved items, leave and attendance, still strictly read-only (every write is refused,
+no presence, no acting as them); the orange bar says so and the audit entry records `includesPrivate`. The moment the
+workspace goes Live this mode ends and View as returns to what their roles decide (channels, people, lists, channel canvases),
+so employees' private messages are not open to anyone looking through their eyes. (`viewAsRefusal(..., { full })`.)

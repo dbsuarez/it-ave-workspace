@@ -28,9 +28,13 @@ const VIEW_AS_ALLOWED = [
 ];
 
 // null when the request may go ahead, otherwise the message to refuse it with.
-function viewAsRefusal(method, path) {
+// `full` is the testing mode (while the workspace is still Pre-launch): everything the person can READ is shown, including
+// their direct messages, notes and saved items, still strictly read-only. Once the workspace is Live it is off, and only
+// the whitelist above applies, so employees' private messages are not open to anyone looking through their eyes.
+function viewAsRefusal(method, path, { full = false } = {}) {
   if (!['GET', 'HEAD'].includes(String(method || '').toUpperCase())) return 'View as is read-only: nothing can be changed.';
   const clean = String(path || '').split('?')[0].replace(/\/+$/, '');
+  if (full) return /^\/api\/(auth\/(?!me$)|roles\/view-as)/.test(clean) ? 'That is not available in View as.' : null;
   if (!VIEW_AS_ALLOWED.some((pattern) => pattern.test(clean))) return 'That is private to the person and is not shown in View as.';
   return null;
 }

@@ -7,6 +7,16 @@ const jwt = require('jsonwebtoken');
 const { viewAsRefusal } = require('../src/viewAs');
 const { createScratchDatabase } = require('./helpers/scratchDb');
 
+test('in testing mode every GET is allowed except signing in elsewhere and starting another View as; writes never are', () => {
+  for (const path of ['/api/conversations', '/api/notes', '/api/saved', '/api/search?q=a', '/api/files', '/api/leave/summary', '/api/settings']) {
+    assert.equal(viewAsRefusal('GET', path, { full: true }), null, path);
+    assert.match(viewAsRefusal('GET', path, { full: false }), /private/, path);
+  }
+  assert.match(viewAsRefusal('GET', '/api/auth/login', { full: true }), /not available/);
+  assert.equal(viewAsRefusal('GET', '/api/auth/me', { full: true }), null);
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.match(viewAsRefusal(method, '/api/notes', { full: true }), /read-only/);
+});
+
 test('View as may read channels, channel messages, people and lists, and nothing that writes or is private', () => {
   for (const path of ['/api/auth/me', '/api/channels', '/api/channels/my', '/api/channels/4/members', '/api/messages/4', '/api/messages/4?limit=50',
     '/api/messages/4/pins', '/api/messages/4/threads/9', '/api/people', '/api/people/3', '/api/users', '/api/user-groups',
@@ -28,6 +38,7 @@ let baseUrl;
 let pool;
 let config;
 const ids = {};
+let started;
 
 test.before(async () => {
   scratch = await createScratchDatabase();
@@ -78,7 +89,7 @@ test('only an Owner can start View as, for a person who is not an Owner', async 
   assert.equal((await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', {})).status, 400);
   assert.equal((await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.other })).status, 400, 'not another Owner');
   assert.equal((await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: 99999 })).status, 404);
-  const started = await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.ann });
+  started = await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.ann });
   assert.equal(started.status, 200);
   assert.equal(started.json.user.id, ids.ann);
   assert.equal(started.json.user.isSuperadmin, false);
@@ -87,19 +98,38 @@ test('only an Owner can start View as, for a person who is not an Owner', async 
   assert.equal(claims.viewAs, ids.boss);
   assert.ok(claims.exp - claims.iat <= 3600, 'one hour at most');
   ids.viewToken = started.json.token;
+  started.json.full = started.json.full;
   const audit = await admin.query("SELECT actor_id, target_user_id FROM moderation_audit_log WHERE action = 'view_as_started'");
   assert.deepEqual(audit.rows, [{ actor_id: ids.boss, target_user_id: ids.ann }]);
 });
 
-test('the View as token can read what roles decide, and is refused writes and private things', async (t) => {
+test('while Pre-launch (testing), View as reads everything the person can, including private screens, and still refuses every write', async (t) => {
   if (skip(t)) return;
+  assert.equal(started.json.full, true);
+  assert.equal(jwt.verify(ids.viewToken, config.JWT_SECRET).viewFull, true);
   assert.equal((await call(ids.viewToken, 'GET', '/api/people')).status, 200);
+  assert.equal((await call(ids.viewToken, 'GET', '/api/conversations')).status, 200, 'direct messages are shown in testing mode');
   const write = await call(ids.viewToken, 'POST', '/api/roles/view-as', { userId: ids.bob });
   assert.equal(write.status, 403);
   assert.match(write.json.error, /read-only/);
-  const dms = await call(ids.viewToken, 'GET', '/api/conversations');
-  assert.equal(dms.status, 403);
-  assert.match(dms.json.error, /private/);
+  assert.equal((await call(ids.viewToken, 'PUT', '/api/people/1', {})).status, 403);
+  const audit = await admin.query("SELECT details FROM moderation_audit_log WHERE action = 'view_as_started'");
+  assert.equal(audit.rows[0].details.includesPrivate, true, 'the audit log says private screens were included');
+});
+
+test('once the workspace is Live, View as goes back to what the roles decide and private things are refused again', async (t) => {
+  if (skip(t)) return;
+  await admin.query('UPDATE moderation_settings SET go_live = TRUE WHERE id = 1');
+  try {
+    assert.equal((await call(ids.viewToken, 'GET', '/api/people')).status, 200);
+    const dms = await call(ids.viewToken, 'GET', '/api/conversations');
+    assert.equal(dms.status, 403);
+    assert.match(dms.json.error, /private/);
+    const fresh = await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.ann });
+    assert.equal(fresh.json.full, false);
+  } finally {
+    await admin.query('UPDATE moderation_settings SET go_live = FALSE WHERE id = 1');
+  }
 });
 
 test('the View as token stops working when the Owner who started it is no longer an Owner', async (t) => {

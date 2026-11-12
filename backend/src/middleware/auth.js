@@ -27,10 +27,12 @@ const authenticateToken = (req, res, next) => {
       }
       if (user.viewAs) {
         // an Owner looking through someone's eyes: read-only, nothing private, and only while they are still an Owner
-        const refusal = viewAsRefusal(req.method, req.originalUrl);
-        if (refusal) return res.status(403).json({ error: refusal, viewAs: true });
         const owner = await query('SELECT 1 FROM users WHERE id = $1 AND is_superadmin = TRUE AND deactivated_at IS NULL', [user.viewAs]);
         if (!owner.rows.length) return res.status(403).json({ error: 'Session expired; sign in again' });
+        // the testing mode (private messages shown, still read-only) exists only while the workspace is Pre-launch
+        const live = await query('SELECT go_live FROM moderation_settings WHERE id = 1');
+        const refusal = viewAsRefusal(req.method, req.originalUrl, { full: !(live.rows[0] && live.rows[0].go_live) });
+        if (refusal) return res.status(403).json({ error: refusal, viewAs: true });
       }
       req.user = user;
       next();
