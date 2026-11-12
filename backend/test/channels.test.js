@@ -59,6 +59,7 @@ const API = () => (sql, params = []) => {
     if (String(params[2] ?? 'member') === 'moderator') moderators.add(key);
     return { rows: [{ role: params[2] ?? 'member' }] };
   }
+  if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: [] }] };
   throw new Error(`Unexpected channels query: ${sql}`);
 };
 

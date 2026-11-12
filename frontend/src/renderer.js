@@ -950,6 +950,21 @@ function connectSocket() {
     }
     if (state.section === 'moderation') loadModerationView();
   });
+  // Roles or channel permissions changed: re-read what this person can see and do (debounced: a burst of edits is one refresh).
+  let permissionsTimer = null;
+  state.socket.on('permissions_updated', () => {
+    clearTimeout(permissionsTimer);
+    permissionsTimer = setTimeout(async () => {
+      await loadChannels();
+      await loadModerationAccess();
+      if (state.currentChannelId && !state.channels.some((c) => Number(c.id) === Number(state.currentChannelId))) {
+        state.currentChannelId = null;
+        if (state.channels.length) await openChannel(state.channels[0].id);
+        showToast('A channel is no longer available to you.', 'info');
+      }
+      if (state.section === 'moderation' && !document.getElementById('role-modal-overlay')) loadModerationView();
+    }, 400);
+  });
   state.socket.on('channel_access_revoked', async ({ channelId }) => {
     state.channels = state.channels.filter((channel) => Number(channel.id) !== Number(channelId));
     delete state.messages[channelId];

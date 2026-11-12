@@ -7,6 +7,7 @@ const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { ensureFileAccess } = require('../security');
+const { can } = require('../permissions');
 const { mimeForFilename } = require('../uploadContent');
 
 // List files shared in channels the user is a member of, and any direct
@@ -145,7 +146,8 @@ router.delete('/:id', authenticateToken, async (req, res) => {
          )`,
         [file.channel_id, req.user.userId]
       );
-      if (moderator.rows.length === 0) {
+      // a role granting manage_messages may delete files too
+      if (moderator.rows.length === 0 && !(await can(query, req.user.userId, 'manage_messages', { channelId: file.channel_id }))) {
         const error = new Error('Only the uploader or a channel moderator can delete this file');
         error.status = 403;
         throw error;

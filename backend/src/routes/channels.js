@@ -3,7 +3,7 @@ const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership } = require('../security');
-const { viewableChannels } = require('../permissions');
+const { viewableChannels, can } = require('../permissions');
 const { ensureNotGuest } = require('../guests');
 
 // Get all channels (with member count)
@@ -116,7 +116,7 @@ router.patch('/:channelId', authenticateToken, async (req, res) => {
       [channelId, req.user.userId]
     );
 
-    if (permission.rows.length === 0) {
+    if (permission.rows.length === 0 && !(await can(query, req.user.userId, 'manage_channels'))) {
       return res.status(403).json({ error: 'Only the channel creator, a channel moderator or the Superadmin can edit the channel description' });
     }
 

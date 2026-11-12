@@ -530,7 +530,8 @@ router.delete('/channels/:channelId', async (req, res) => {
     const channel = (await query('SELECT id, name, created_by FROM channels WHERE id = $1', [channelId])).rows[0];
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
-    const allowed = Boolean(actor && actor.is_superadmin) || Number(channel.created_by) === Number(req.user.userId);
+    const allowed = Boolean(actor && actor.is_superadmin) || Number(channel.created_by) === Number(req.user.userId)
+      || await can(query, req.user.userId, 'manage_channels');
     if (!allowed) return res.status(403).json({ error: 'Only the Superadmin or the person who created the channel can delete it' });
 
     const members = (await query('SELECT user_id FROM channel_members WHERE channel_id = $1', [channelId])).rows.map((r) => r.user_id);

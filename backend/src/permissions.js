@@ -14,7 +14,7 @@ const PERMISSIONS = [
   ['send_messages', 'Send messages'],
   ['attach_files', 'Attach files'],
   ['add_reactions', 'Add reactions'],
-  ['mention_everyone', 'Use @channel, @here and @everyone'],
+  ['mention_everyone', 'Use @channel, @here and @everyone (reserved: not available yet)'],
   ['create_channels', 'Create channels'],
   ['manage_channels', 'Edit and delete any channel'],
   ['manage_messages', 'Delete or pin other people\'s messages'],

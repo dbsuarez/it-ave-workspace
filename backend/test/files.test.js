@@ -79,6 +79,10 @@ require.cache[dbPath] = {
   exports: {
     query: async (sql) => {
       if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
+      if (sql.includes('SELECT is_superadmin, is_hr, account_type FROM users')) return { rows: [{ is_superadmin: false, is_hr: false, account_type: 'member' }] };
+      if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: [] }] };
+      if (sql.includes('FROM channel_overrides')) return { rows: [] };
+      if (sql.includes("role = 'moderator'") && sql.includes('FROM channel_members')) return { rows: [] };
       throw new Error(`Unexpected files query: ${sql}`);
     },
     pool: { connect: async () => createClient() },
