@@ -4565,18 +4565,23 @@ async function openCanvas2(kind, extra = {}) {
     if (!res.ok) throw new Error(data.error || 'Could not open the canvas');
     canvas2State.activeId = data.canvas.id;
     canvas2State.kind = data.canvas.kind;
+    // guests can read a channel or direct message canvas but not change it: say so, and lock it
+    const sheetCanEdit = data.canvas.myRole !== 'viewer';
+    els.canvasSheetTitle.readOnly = !sheetCanEdit;
+    els.canvasSheetEditor.readOnly = !sheetCanEdit;
     els.canvasSheetTitle.value = data.canvas.title || '';
     els.canvasSheetEditor.value = data.canvas.content || '';
     canvas2State.revision = data.canvas.revision ?? null;
     canvas2State.savedTitle = els.canvasSheetTitle.value;
     canvas2State.savedContent = els.canvasSheetEditor.value;
     if (els.canvasSheetStatus) {
-      els.canvasSheetStatus.textContent = 'Saved';
+      els.canvasSheetStatus.textContent = sheetCanEdit ? 'Saved' : 'View only';
       els.canvasSheetStatus.dataset.state = 'saved';
+      els.canvasSheetStatus.title = sheetCanEdit ? '' : 'Guest accounts can read this canvas but not change it';
     }
     sheet.setAttribute('aria-hidden', 'false');
     if (state.socket) state.socket.emit('join_canvas', data.canvas.id);
-    canvasViewOpened('sheet', { canEdit: true, hasContent: Boolean(els.canvasSheetEditor.value.trim()) });
+    canvasViewOpened('sheet', { canEdit: sheetCanEdit, hasContent: Boolean(els.canvasSheetEditor.value.trim()) });
   } catch (err) {
     console.error('Open canvas error:', err);
     showToast(err.message || 'Could not open the canvas.', 'error');

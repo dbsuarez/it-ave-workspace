@@ -35,6 +35,7 @@ const API = () => (sql, params = []) => {
     const id = Number(params[0]);
     return { rows: [{ id }] };
   }
+  if (sql.includes('SELECT name FROM channels WHERE id = $1')) return { rows: [{ name: `chan-${params[0]}` }] };
   if (sql.includes('SELECT account_type FROM users WHERE id = $1')) {
     return { rows: [{ account_type: guests.has(Number(params[0])) ? 'guest' : 'member' }] };
   }

@@ -323,6 +323,9 @@ module.exports = [
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_file VARCHAR(255)',
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMP WITH TIME ZONE',
 
+  // A channel canvas used to be titled with the channel's number ("#23"); give it the channel's name
+  "UPDATE canvases c SET title = '#' || ch.name FROM channels ch WHERE c.kind = 'channel' AND c.channel_id = ch.id AND c.title ~ '^#[0-9]+$'",
+
   // Job title shown on profile cards (for example when someone is mentioned in a canvas)
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) NOT NULL DEFAULT ''",
 

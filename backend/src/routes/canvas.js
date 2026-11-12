@@ -167,12 +167,14 @@ async function getDmCanvas(a, b) {
 async function getOrCreateChannelCanvas(channelId, userId) {
   let canvas = await getChannelCanvas(channelId);
   if (canvas) return canvas;
+  const channel = await query('SELECT name FROM channels WHERE id = $1', [channelId]);
+  const title = '#' + ((channel.rows[0] && channel.rows[0].name) || channelId);
   const result = await query(
     `INSERT INTO canvases (kind, channel_id, title, content, created_by)
      VALUES ('channel', $1, $2, '', $3)
      ON CONFLICT (channel_id) WHERE kind = 'channel' DO NOTHING
      RETURNING id, kind, channel_id, dm_user_low, dm_user_high, title, content, created_by, created_at, updated_at, revision, owner_id`,
-    [channelId, '#' + channelId, userId]
+    [channelId, title, userId]
   );
   if (result.rows[0]) return result.rows[0];
   canvas = await getChannelCanvas(channelId);
@@ -213,6 +215,12 @@ function mapCanvas(c, extras = {}) {
   };
 }
 
+// Guests may read channel and DM canvases but not change them (see security.js), so the app can say so.
+async function sheetRole(userId) {
+  const result = await query('SELECT account_type FROM users WHERE id = $1', [userId]);
+  return result.rows[0] && result.rows[0].account_type === 'guest' ? 'viewer' : 'editor';
+}
+
 // GET /api/canvas/channel/:channelId - primary channel canvas (auto-created lazily)
 router.get('/channel/:channelId', authenticateToken, async (req, res) => {
   try {
@@ -220,7 +228,7 @@ router.get('/channel/:channelId', authenticateToken, async (req, res) => {
     if (channelId === null) return res.status(400).json({ error: 'A valid channel ID is required' });
     await ensureChannelMembership(query, req.user.userId, channelId);
     const canvas = await getOrCreateChannelCanvas(channelId, req.user.userId);
-    res.json({ canvas: mapCanvas(canvas) });
+    res.json({ canvas: mapCanvas(canvas, { myRole: await sheetRole(req.user.userId) }) });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Channel canvas read error:', err);
@@ -235,7 +243,7 @@ router.get('/dm/:userId', authenticateToken, async (req, res) => {
     if (otherId === null) return res.status(400).json({ error: 'A valid user ID is required' });
     await ensureDirectMessageAccess(query, req.user.userId, otherId);
     const canvas = await getOrCreateDmCanvas(req.user.userId, otherId);
-    res.json({ canvas: mapCanvas(canvas) });
+    res.json({ canvas: mapCanvas(canvas, { myRole: await sheetRole(req.user.userId) }) });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('DM canvas read error:', err);
