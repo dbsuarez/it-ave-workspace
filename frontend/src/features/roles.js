@@ -40,11 +40,70 @@ function renderRolesPanel() {
       <div class="role-list">${rows || emptyRecordMarkup('No roles yet', 'Create one with New role.')}</div>
     </div>
     <div class="moderation-card roles-card">
-      <h2>Give roles to a person</h2>
-      <p class="moderation-help">Owner and HR are set on the person's record (Superadmin and HR switches). Pick a person to choose their other roles.</p>
-      <div class="role-assign"><select id="role-assign-person" aria-label="Person"><option value="">Choose a person…</option>${rolesState.people.map((p) => `<option value="${p.id}">${escapeHtml(personName(p))}</option>`).join('')}</select></div>
-      <div id="role-assign-box"></div>
+      <h2>Who has which role</h2>
+      <p class="moderation-help">Tick a box to give or take a role; it saves at once. Owner and HR are shown for reference: they are set on the person's record (Superadmin and HR switches).</p>
+      <div class="role-table-tools"><input id="role-table-search" type="search" placeholder="Search people" aria-label="Search people"></div>
+      <div class="role-table-wrap" id="role-table-host"><div class="loading-state">Loading…</div></div>
     </div>`;
+  loadRoleTable();
+}
+
+const roleTable = { assignments: {}, owners: [], hr: [], query: '' };
+
+async function loadRoleTable() {
+  try {
+    const res = await api('/api/roles/assignments');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load assignments');
+    roleTable.assignments = data.assignments || {};
+    roleTable.owners = data.owners || [];
+    roleTable.hr = data.hr || [];
+    renderRoleTable();
+  } catch (err) {
+    const host = document.getElementById('role-table-host');
+    if (host) host.innerHTML = `<p class="role-error">${escapeHtml(err.message || 'Could not load assignments')}</p>`;
+  }
+}
+
+function renderRoleTable() {
+  const host = document.getElementById('role-table-host');
+  if (!host) return;
+  const custom = rolesState.roles.filter((role) => !role.builtin);
+  const q = roleTable.query.trim().toLowerCase();
+  const people = rolesState.people.filter((p) => !q || [personName(p), p.username, p.jobTitle, p.department].some((v) => String(v || '').toLowerCase().includes(q)));
+  const head = `<tr><th>Person</th><th class="role-col">Owner</th><th class="role-col">HR</th>${custom.map((r) => `<th class="role-col">${roleDot(r)} ${escapeHtml(r.name)}</th>`).join('')}</tr>`;
+  const rows = people.map((p) => {
+    const held = new Set(roleTable.assignments[p.id] || []);
+    return `<tr data-role-person="${p.id}">
+      <td><strong>${escapeHtml(personName(p))}</strong><small>${escapeHtml(p.jobTitle || '')}</small></td>
+      <td class="role-col">${roleTable.owners.includes(p.id) ? '&#10003;' : ''}</td>
+      <td class="role-col">${roleTable.hr.includes(p.id) ? '&#10003;' : ''}</td>
+      ${custom.map((r) => `<td class="role-col"><input type="checkbox" data-role-toggle="${r.id}" aria-label="${escapeHtml(r.name)} for ${escapeHtml(personName(p))}"${held.has(r.id) ? ' checked' : ''}${r.canManage ? '' : ' disabled'}></td>`).join('')}
+    </tr>`;
+  }).join('');
+  host.innerHTML = custom.length
+    ? `<table class="role-table"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="3">No one matches.</td></tr>'}</tbody></table>`
+    : '<p class="moderation-help">Create a role first, then come back to give it to people.</p>';
+}
+
+async function toggleRoleFor(row, box) {
+  const personId = Number(row.dataset.rolePerson);
+  const roleIds = [...row.querySelectorAll('input[data-role-toggle]:checked')].map((input) => Number(input.dataset.roleToggle));
+  const res = await api(`/api/roles/users/${personId}`, { method: 'PUT', body: JSON.stringify({ roleIds }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    box.checked = !box.checked; // put it back
+    showToast(data.error || 'Could not save the role.', 'error');
+    return;
+  }
+  roleTable.assignments[personId] = roleIds;
+  const counts = {};
+  Object.values(roleTable.assignments).forEach((list) => list.forEach((id) => { counts[id] = (counts[id] || 0) + 1; }));
+  rolesState.roles.filter((role) => !role.builtin).forEach((role) => {
+    role.memberCount = counts[role.id] || 0;
+    const el = document.querySelector(`.role-row[data-role-id="${role.id}"] small`);
+    if (el) el.textContent = `${roleSummary(role)} · ${role.memberCount} ${role.memberCount === 1 ? 'person' : 'people'}`;
+  });
 }
 
 // Just the data (no panel): the role list the person's record needs.
@@ -166,7 +225,7 @@ async function showPersonRoles(personId, boxId = 'role-assign-box') {
     <div class="role-assign-list">${custom.map((r) => `
       <label class="role-perm"><input type="checkbox" name="assign" value="${r.id}"${held.has(r.id) ? ' checked' : ''}${r.canManage ? '' : ' disabled'}>
         <span>${roleDot(r)} <strong>${escapeHtml(r.name)}</strong></span></label>`).join('')}</div>
-    <button type="button" class="btn primary" data-role-assign-save data-person="${personId}" data-box="${boxId}">Save roles</button>`
+    <button type="button" class="btn primary" data-role-assign-save data-role-person-id="${personId}" data-box="${boxId}">Save roles</button>`
     : '<p class="moderation-help">Create a role first.</p>';
 }
 
@@ -185,11 +244,10 @@ async function handleRolesClick(event) {
   const save = target.closest('[data-role-assign-save]');
   if (save) {
     const roleIds = [...document.querySelectorAll(`#${save.dataset.box || 'role-assign-box'} input[name="assign"]:checked`)].map((box) => Number(box.value));
-    const res = await api(`/api/roles/users/${save.dataset.person}`, { method: 'PUT', body: JSON.stringify({ roleIds }) });
+    const res = await api(`/api/roles/users/${save.dataset.rolePersonId}`, { method: 'PUT', body: JSON.stringify({ roleIds }) });
     const data = await res.json().catch(() => ({}));
     showToast(res.ok ? 'Roles saved.' : (data.error || 'Could not save the roles.'), res.ok ? 'success' : 'error');
-    if (res.ok && save.dataset.box === 'emp-roles-box') { await loadRolesList(); showPersonRoles(save.dataset.person, 'emp-roles-box'); }
-    else if (res.ok) loadRolesPanel().then(() => { const select = document.getElementById('role-assign-person'); if (select) { select.value = save.dataset.person; showPersonRoles(save.dataset.person); } });
+    if (res.ok) { await loadRolesList(); showPersonRoles(save.dataset.rolePersonId, save.dataset.box || 'emp-roles-box'); }
     return true;
   }
   return false;
@@ -197,7 +255,11 @@ async function handleRolesClick(event) {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('change', (event) => {
-    if (event.target && event.target.id === 'role-assign-person') showPersonRoles(event.target.value);
+    const box = event.target && event.target.closest ? event.target.closest('input[data-role-toggle]') : null;
+    if (box) toggleRoleFor(box.closest('tr'), box);
+  });
+  document.addEventListener('input', (event) => {
+    if (event.target && event.target.id === 'role-table-search') { roleTable.query = event.target.value; renderRoleTable(); }
   });
   document.addEventListener('click', (event) => {
     if (event.target.closest && event.target.closest('#moderation-roles')) handleRolesClick(event);

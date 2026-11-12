@@ -4,6 +4,7 @@ const {
   ensureChannelMembership,
   ensureNotTimedOut,
   ensureCanPostToChannel,
+  ensureChannelPermission,
   ensureDirectMessageAccess,
 } = require('../security');
 const { findMentionedUsers } = require('../mentions');
@@ -434,6 +435,9 @@ module.exports = (io, socket) => {
     try {
       const { query } = require('../db');
       await ensureCanPostToChannel(query, currentUserId, channelId);
+      if (attachmentRequest.ids.length) {
+        await ensureChannelPermission(query, currentUserId, channelId, 'attach_files', 'You cannot attach files in this channel');
+      }
 
       let replyToMessage = null;
       let parentAuthorId = null;

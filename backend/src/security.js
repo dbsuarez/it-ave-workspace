@@ -1,4 +1,4 @@
-const { can } = require('./permissions');
+const { can, needsCheckSql } = require('./permissions');
 const { ensureGuestCanReach } = require('./guests');
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -86,7 +86,7 @@ async function ensureChannelMembership(query, userId, channelId) {
   }
 
   const result = await query(
-    `SELECT 1 FROM channels c
+    `SELECT 1, ${needsCheckSql('view_channel', '$1')} AS needs_check FROM channels c
      CROSS JOIN users u
      WHERE c.id = $1 AND u.id = $2
        AND (u.is_superadmin = TRUE OR EXISTS (
@@ -98,6 +98,24 @@ async function ensureChannelMembership(query, userId, channelId) {
 
   if (result.rows.length === 0) {
     const err = new Error('Access denied');
+    err.status = 403;
+    throw err;
+  }
+  // a channel setting (or an edited Everyone role) may take viewing away from this person
+  if (result.rows[0].needs_check && !(await can(query, userId, 'view_channel', { channelId }))) {
+    const err = new Error('Access denied');
+    err.status = 403;
+    throw err;
+  }
+}
+
+// The channel-level permission check for send_messages, attach_files and add_reactions: a no-op in channels with no
+// setting for it (see needsCheckSql), otherwise the full check. Throws 403 with `message`.
+async function ensureChannelPermission(query, userId, channelId, permission, message) {
+  const flag = await query(`SELECT ${needsCheckSql(permission, '$1')} AS needs_check`, [channelId]);
+  if (!flag.rows[0] || !flag.rows[0].needs_check) return;
+  if (!(await can(query, userId, permission, { channelId }))) {
+    const err = new Error(message || 'You do not have permission to do that in this channel');
     err.status = 403;
     throw err;
   }
@@ -150,13 +168,18 @@ async function ensureCanPostToChannel(query, userId, channelId) {
   if (account.rows[0]?.is_superadmin) return;
 
   const channel = await query(
-    `SELECT c.slowmode_seconds, cm.last_message_at
+    `SELECT c.slowmode_seconds, cm.last_message_at, ${needsCheckSql('send_messages', '$1')} AS needs_post_check
      FROM channels c
      LEFT JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
      WHERE c.id = $1`,
     [channelId, userId]
   );
   if (!channel.rows.length) return;
+  if (channel.rows[0].needs_post_check && !(await can(query, userId, 'send_messages', { channelId }))) {
+    const err = new Error('You cannot send messages in this channel');
+    err.status = 403;
+    throw err;
+  }
   const { slowmode_seconds: seconds, last_message_at: lastMessageAt } = channel.rows[0];
   if (seconds > 0) {
     if (!lastMessageAt) {
@@ -368,6 +391,7 @@ async function ensureFileAccess(query, userId, fileId) {
 module.exports = {
   getUploadValidationError,
   ensureChannelMembership,
+  ensureChannelPermission,
   ensureChannelModerator,
   ensureNotTimedOut,
   ensureCanPostToChannel,

@@ -7,6 +7,7 @@ const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
 const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel } = require('../security');
+const { can, needsCheckSql } = require('../permissions');
 
 const emojiSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -501,7 +502,7 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
     }
 
     const messageCheck = await query(
-      'SELECT channel_id, user_id, content FROM messages WHERE id = $1',
+      `SELECT m.channel_id, m.user_id, m.content, ${needsCheckSql('add_reactions', 'm.channel_id')} AS needs_react_check FROM messages m WHERE m.id = $1`,
       [messageId]
     );
     if (messageCheck.rows.length === 0) {
@@ -549,6 +550,9 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
       );
       res.json({ message: 'Reaction removed', reactions: await broadcastReactions() });
     } else {
+      if (messageCheck.rows[0].needs_react_check && !(await can(query, req.user.userId, 'add_reactions', { channelId }))) {
+        return res.status(403).json({ error: 'You cannot add reactions in this channel' });
+      }
       await query(
         'DELETE FROM reactions WHERE message_id = $1 AND user_id = $2',
         [messageId, req.user.userId]

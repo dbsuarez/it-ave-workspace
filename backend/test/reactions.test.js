@@ -30,7 +30,7 @@ require.cache[dbPath] = {
     query: async (sql, params = []) => {
       queryCalls.push({ sql, params });
       if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
-      if (sql.includes('FROM messages WHERE id = $1')) {
+      if (sql.includes('FROM messages WHERE id = $1') || sql.includes('FROM messages m WHERE m.id = $1')) {
         return { rows: [{ channel_id: 7, user_id: 2, content: 'original message' }] };
       }
       if (sql.includes('FROM channels c CROSS JOIN users u')) {

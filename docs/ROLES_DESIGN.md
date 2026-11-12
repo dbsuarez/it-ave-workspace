@@ -101,3 +101,12 @@ permission checklist, and "Give roles to a person". Still to do in phase 2: role
 showing the Roles tab to anyone whose role grants `manage_roles`. Phase 3 (channel overrides screen) is next.
 
 **Phase 2 finished:** the Roles tab now shows for anyone whose role grants `manage_roles` (the access answer carries `canManageRoles`), and a person's employee record has a Roles section to give or take custom roles.
+
+**Phase 3 done:** channel overrides. `GET/PUT /api/channels/:id/permissions` (creator, Owner or a role with
+`manage_channels`), a Permissions card on each channel in Moderation (rows for roles and people, Inherit/Allow/Deny per
+permission, saves at once), and enforcement of `view_channel` (opening the channel, history, and the channel lists),
+`send_messages`, `attach_files` and `add_reactions`. Ordinary channels cost no extra queries: the check only runs when a
+channel has a setting for that permission or the Everyone role no longer grants it. The Roles tab's "Give roles to a
+person" is now a table of everyone against the custom roles (tick to save). Not yet: open clients refreshing live when
+permissions change (the `permissions_updated` socket event is sent but the app does not listen yet), `mention_everyone`
+enforcement, and phase 4 (role mentions, colors on names, badges).

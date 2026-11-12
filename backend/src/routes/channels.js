@@ -3,6 +3,7 @@ const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership } = require('../security');
+const { viewableChannels } = require('../permissions');
 const { ensureNotGuest } = require('../guests');
 
 // Get all channels (with member count)
@@ -24,7 +25,7 @@ router.get('/', authenticateToken, async (req, res) => {
     `, [req.user.userId]);
 
     res.json({
-      channels: result.rows.map((ch) => ({
+      channels: (await viewableChannels(query, req.user.userId, result.rows)).map((ch) => ({
         id: ch.id,
         name: ch.name,
         topic: ch.topic,
@@ -66,7 +67,7 @@ router.get('/my', authenticateToken, async (req, res) => {
     `, [req.user.userId]);
 
     res.json({
-      channels: result.rows.map((ch) => ({
+      channels: (await viewableChannels(query, req.user.userId, result.rows)).map((ch) => ({
         id: ch.id,
         name: ch.name,
         topic: ch.topic,

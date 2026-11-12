@@ -2559,6 +2559,7 @@ async function loadModerationChannel(channelId) {
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
       </div>
+      <div id="moderation-channel-permissions"></div>
       ${state.moderation.isSuperadmin ? `
         <form class="moderation-card moderation-inline" data-moderation-form="add-member">
           <h2>Add channel access</h2>
@@ -2579,6 +2580,7 @@ async function loadModerationChannel(channelId) {
       <div class="moderation-card"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
         <div class="moderation-row"><span>${escapeHtml(entry.actorUsername || 'former user')} · ${escapeHtml(entry.action)}${entry.targetUsername ? ` · ${escapeHtml(entry.targetUsername)}` : ''} ${entry.details ? ` ${escapeHtml(JSON.stringify(entry.details))}` : ''}</span><time>${escapeHtml(new Date(entry.createdAt).toLocaleString())}</time></div>
       `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
+    loadChannelPermissionsCard(channelId);
     await loadChannelWebhooks(channelId);
   } catch (err) {
     console.error('Load channel moderation error:', err);

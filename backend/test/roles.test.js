@@ -163,3 +163,14 @@ test('giving a role takes effect at once, and deleting a role removes it from ev
   assert.equal(await can(query, ids.ann, 'manage_messages'), false);
   assert.equal((await call(ids.boss, 'GET', `/users/${ids.ann}`)).json.roleIds.length, 0);
 });
+
+test('the assignment table data lists every person\'s custom roles and who is Owner or HR', async (t) => {
+  if (skip(t)) return;
+  const made = await call(ids.boss, 'POST', '/', { name: 'Table role', permissions: ['send_messages'] });
+  await call(ids.boss, 'PUT', `/users/${ids.bob}`, { roleIds: [made.json.role.id] });
+  const data = await call(ids.boss, 'GET', '/assignments');
+  assert.equal(data.status, 200);
+  assert.deepEqual(data.json.assignments[ids.bob], [made.json.role.id]);
+  assert.deepEqual(data.json.owners, [ids.boss]);
+  assert.equal((await call(ids.ann, 'GET', '/assignments')).status, 403);
+});

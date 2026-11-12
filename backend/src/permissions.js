@@ -121,7 +121,32 @@ async function requirePermission(query, userId, permission, options = {}) {
   }
 }
 
+// SQL for "does this channel need the full permission check for this permission?": true when a channel override mentions
+// it, or when the Everyone role no longer grants it. Otherwise every member has it and the check can be skipped, which
+// keeps ordinary channels at zero extra queries. `permission` is one of PERMISSION_KEYS; `channelParam` is like '$1'.
+function needsCheckSql(permission, channelParam) {
+  if (!isPermission(permission)) throw new Error(`Unknown permission: ${permission}`);
+  return `(EXISTS (SELECT 1 FROM channel_overrides co WHERE co.channel_id = ${channelParam}
+            AND ('${permission}' = ANY(co.allow) OR '${permission}' = ANY(co.deny)))
+          OR COALESCE((SELECT NOT ('${permission}' = ANY(r.permissions)) FROM roles r WHERE r.builtin_key = 'everyone'), false))`;
+}
+
+// Of these channel rows ({ id, ... }), the ones this person may see: a channel whose settings (or an edited Everyone role)
+// take viewing away from them is left out. Ordinary channels cost one cheap query for the whole list.
+async function viewableChannels(query, userId, rows) {
+  if (!rows.length) return rows;
+  const flagged = (await query(
+    `SELECT c.id FROM channels c WHERE c.id = ANY($1::int[]) AND ${needsCheckSql('view_channel', 'c.id')}`, [rows.map((r) => r.id)]
+  )).rows.map((r) => Number(r.id));
+  if (!flagged.length) return rows;
+  const hidden = new Set();
+  for (const id of flagged) if (!(await can(query, userId, 'view_channel', { channelId: id }))) hidden.add(id);
+  return rows.filter((r) => !hidden.has(Number(r.id)));
+}
+
 module.exports = {
+  viewableChannels,
+  needsCheckSql,
   PERMISSIONS, PERMISSION_KEYS, EVERYONE_DEFAULTS, HR_DEFAULTS, isPermission,
   resolvePermission, loadAccess, can, requirePermission,
 };

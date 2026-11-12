@@ -27,6 +27,7 @@ const reminderRoutes = require('./src/routes/reminders');
 const adminRoutes = require('./src/routes/admin');
 const hrRoutes = require('./src/routes/hr');
 const rolesRoutes = require('./src/routes/roles');
+const channelPermissionRoutes = require('./src/routes/channelPermissions');
 const leaveRoutes = require('./src/routes/leave');
 const attendanceRoutes = require('./src/routes/attendance');
 const scheduledRoutes = require('./src/routes/scheduled');
@@ -81,6 +82,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/channels', channelLinkRoutes);
+app.use('/api/channels', channelPermissionRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/messages', messageEditRoutes);
 app.use('/api/users', userRoutes);

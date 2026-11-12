@@ -184,6 +184,18 @@ router.put('/users/:userId', async (req, res) => {
   } catch (err) { sendError(res, err, 'Assign roles error'); }
 });
 
+// Everyone's custom roles at once, for the assignment table: { assignments: { userId: [roleId] }, owners: [id], hr: [id] }.
+router.get('/assignments', async (req, res) => {
+  try {
+    await requireRoleManager(req.user.userId);
+    const held = (await query('SELECT user_id, role_id FROM user_roles')).rows;
+    const assignments = {};
+    for (const row of held) (assignments[row.user_id] = assignments[row.user_id] || []).push(row.role_id);
+    const flags = (await query("SELECT id, is_superadmin, is_hr FROM users WHERE account_type = 'member' AND deactivated_at IS NULL")).rows;
+    res.json({ assignments, owners: flags.filter((u) => u.is_superadmin).map((u) => u.id), hr: flags.filter((u) => u.is_hr).map((u) => u.id) });
+  } catch (err) { sendError(res, err, 'Role assignments error'); }
+});
+
 // The custom roles someone holds (for the person's record).
 router.get('/users/:userId', async (req, res) => {
   try {

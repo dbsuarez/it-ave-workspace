@@ -6918,3 +6918,17 @@ h4.cv-h { font-size: 15px; }
 .role-assign { margin: 8px 0 12px; }
 .role-assign select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
 .role-modal .modal-footer { display: flex; align-items: center; gap: 8px; }
+
+.role-table-tools { margin: 8px 0; }
+.role-table-tools input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; min-width: 240px; }
+.role-table-wrap { overflow-x: auto; }
+.role-table { width: 100%; border-collapse: collapse; }
+.role-table th, .role-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.role-table th { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.role-table td small { display: block; color: var(--text-muted); }
+.role-table .role-col { text-align: center; }
+
+.perm-select { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
+.perm-select.perm-allow { border-color: #16a34a; color: #16a34a; }
+.perm-select.perm-deny { border-color: #dc2626; color: #dc2626; }
+.perm-add { margin-top: 12px; }
