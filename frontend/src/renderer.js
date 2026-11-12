@@ -3618,6 +3618,8 @@ function handleAccountAction(action) {
     openStatusModal();
   } else if (action === 'profile') {
     openProfileModal();
+  } else if (action === 'manage-profile' && state.user?.isSuperadmin && typeof openAdminDetails === 'function') {
+    openAdminDetails();
   } else if (action === 'preferences') {
     openPreferencesModal();
   } else if (action === 'account') {

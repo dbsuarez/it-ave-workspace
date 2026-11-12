@@ -151,10 +151,28 @@ function renderEmployeeManagement(body) {
 
 // ---- one employee's record ---------------------------------------------------------------------
 
+async function openAdminDetails() {
+  if (!state.user?.isSuperadmin) return;
+  try {
+    const [self, departments, schedules] = await Promise.all([
+      hrApi('/api/hr/employees/self'),
+      hrApi('/api/hr/departments'),
+      hrApi('/api/attendance/schedules'),
+    ]);
+    employeeState.departments = departments.departments;
+    employeeState.schedules = schedules.schedules;
+    employeeState.list = [self.employee, ...employeeState.list.filter((item) => Number(item.id) !== Number(self.employee.id))];
+    openEmployeeEditor(self.employee.id);
+  } catch (err) {
+    showToast(err.message || 'Could not open the Superadmin record.', 'error');
+  }
+}
+
 function openEmployeeEditor(id) {
   const e = employeeState.list.find((item) => item.id === id);
   const modal = document.getElementById('employee-modal');
   if (!e || !modal) return;
+  const editingSelf = Number(e.id) === Number(state.user?.id);
   employeeState.editingId = id;
   const option = (value, label, current) => `<option value="${escapeText(String(value))}"${String(current) === String(value) ? ' selected' : ''}>${escapeText(label)}</option>`;
   modal.innerHTML = `
@@ -201,14 +219,14 @@ function openEmployeeEditor(id) {
         <div id="emp-tasks" class="emp-tasks"><p class="pp-muted">Loading…</p></div>
         <h4 class="modal-section-title">Account</h4>
         <div class="emp-account">
-          ${e.deactivatedAt
+          ${editingSelf ? '<p class="form-note">Use Account settings to change your password. Your own Superadmin account cannot be deactivated here.</p>' : e.deactivatedAt
     ? `<p class="form-note">Deactivated ${escapeText(new Date(e.deactivatedAt).toLocaleDateString())}. They cannot sign in. Their messages and files stay.</p><button type="button" class="btn" data-emp-reactivate="${e.id}">Reactivate account</button>`
     : `<button type="button" class="btn" data-emp-reset="${e.id}">Reset password</button><button type="button" class="btn danger" data-emp-deactivate="${e.id}">Deactivate account…</button>`}
         </div>
         <div id="emp-account-note" aria-live="polite"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn" type="button" data-emp-page="${e.id}">Open their page</button>
+        <button class="btn" type="button" data-emp-page="${e.id}">${editingSelf ? 'Open my page' : 'Open their page'}</button>
         <button class="btn" type="button" data-emp-close>Cancel</button>
         <button class="btn primary" type="submit">Save</button>
       </div>

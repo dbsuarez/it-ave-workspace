@@ -73,6 +73,16 @@ test('only the Superadmin and HR reach employee records; everyone else is refuse
   assert.equal((await call(ids.ann, 'GET', '/hr/me')).json.canManage, false);
 });
 
+test('only the Superadmin can load their own hidden employee record', async (t) => {
+  if (skip(t)) return;
+  assert.equal((await call(ids.hr, 'GET', '/hr/employees/self')).status, 403);
+  const self = await call(ids.boss, 'GET', '/hr/employees/self');
+  assert.equal(self.status, 200);
+  assert.equal(self.json.employee.id, ids.boss);
+  assert.equal(self.json.employee.username, 'boss');
+  assert.equal(self.json.employee.isSuperadmin, true);
+});
+
 test('a record is edited field by field, and bad values are refused', async (t) => {
   if (skip(t)) return;
   const dept = (await call(ids.hr, 'POST', '/hr/departments', { name: 'Finance' })).json.department;

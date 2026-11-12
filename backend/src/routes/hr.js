@@ -98,6 +98,18 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// GET /api/hr/employees/self - the hidden Superadmin can edit their full employee record.
+router.get('/employees/self', async (req, res) => {
+  try {
+    await requireSuperadmin(req.user.userId);
+    const row = (await query(`${EMPLOYEE_SELECT} WHERE u.id = $1 AND u.account_type = 'member'`, [req.user.userId])).rows[0];
+    if (!row) throw fail(404, 'Superadmin record not found');
+    res.json({ employee: mapEmployee(row) });
+  } catch (err) {
+    sendError(res, err, 'Get Superadmin record error');
+  }
+});
+
 // GET /api/hr/employees - every member's record
 router.get('/employees', async (req, res) => {
   try {
