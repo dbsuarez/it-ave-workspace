@@ -233,7 +233,7 @@ function temporaryPassword() {
 }
 
 // POST /api/admin/users - create one or many accounts at once.
-// { accounts: [{ username, email, password? }], accountType, channelIds }
+// { accounts: [{ username, email, password?, lastName?, firstName?, middleName? }], accountType, channelIds }
 // A missing password is generated. Each person must replace it at their first sign-in.
 // The passwords are returned once; only hashes are stored.
 router.post('/users', async (req, res) => {
@@ -270,13 +270,21 @@ router.post('/users', async (req, res) => {
       if (password === undefined || password === null || password === '') password = temporaryPassword();
       const problem = passwordProblem(password, username);
       if (problem) { skipped.push({ username, reason: problem }); continue; }
+      const names = {};
+      let nameProblem = null;
+      for (const [field, label] of [['lastName', 'Last name'], ['firstName', 'First name'], ['middleName', 'Middle name']]) {
+        const value = entry[field] === undefined || entry[field] === null ? '' : entry[field];
+        if (typeof value !== 'string' || value.trim().length > 100) nameProblem = `${label} can be at most 100 characters`;
+        names[field] = typeof value === 'string' ? value.trim() : '';
+      }
+      if (nameProblem) { skipped.push({ username, reason: nameProblem }); continue; }
       const exists = await query('SELECT 1 FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2', [username.toLowerCase(), email.toLowerCase()]);
       if (exists.rows.length) { skipped.push({ username, reason: 'That username or email already exists' }); continue; }
       const hash = await bcrypt.hash(password, 10);
       const inserted = await query(
-        `INSERT INTO users (username, email, password_hash, account_type, must_change_password)
-         VALUES ($1, $2, $3, $4, true) RETURNING id`,
-        [username, email, hash, accountType]
+        `INSERT INTO users (username, email, password_hash, account_type, must_change_password, last_name, first_name, middle_name)
+         VALUES ($1, $2, $3, $4, true, $5, $6, $7) RETURNING id`,
+        [username, email, hash, accountType, names.lastName, names.firstName, names.middleName]
       );
       const userId = inserted.rows[0].id;
       for (const channelId of joinIds) {

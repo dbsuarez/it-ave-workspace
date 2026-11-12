@@ -89,12 +89,17 @@ function adminCreatedHtml(result) {
 function parseBulkLines(text) {
   return String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
     const parts = (line.includes('\t') ? line.split('\t') : line.split(/[,;]/)).map((part) => part.trim());
-    return { username: parts[0] || '', email: parts[1] || '', password: parts[2] || '' };
+    const account = { username: parts[0] || '', email: parts[1] || '', password: parts[2] || '' };
+    if (parts[3]) account.lastName = parts[3];
+    if (parts[4]) account.firstName = parts[4];
+    if (parts[5]) account.middleName = parts[5];
+    return account;
   });
 }
 
 function bulkLine(account) {
-  const fields = [account.username, account.email, account.password].filter((value, index) => index < 2 || value);
+  const fields = [account.username, account.email, account.password || '', account.lastName || '', account.firstName || '', account.middleName || ''];
+  while (fields.length > 2 && !fields[fields.length - 1]) fields.pop();
   return fields.some((value) => value.includes(',')) ? fields.join('\t') : fields.join(', ');
 }
 
@@ -153,7 +158,7 @@ function renderWorkspaceAdmin() {
           </select>
         </label>
       </div>
-      <label class="admin-bulk-label">One person per line: <code>username, email</code> and optionally <code>, password</code>. Leave the password out and one is made for you.
+      <label class="admin-bulk-label">One person per line: <code>username, email, password, last name, first name, middle name</code>. Only the username and email are needed; leave the password empty and one is made for you (for example <code>ann, ann@company.com, , Lee, Ann, Marie</code>).
         <textarea name="bulk" id="admin-bulk" rows="6" spellcheck="false" placeholder="ann, ann@company.com&#10;bob, bob@company.com">${escapeHtml(admin.bulkText || '')}</textarea>
       </label>
       <div class="admin-channel-picks">

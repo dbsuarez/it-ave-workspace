@@ -377,7 +377,7 @@ handleTrusted('admin:saveCsv', async (event, kind, created) => {
   const { credentialsCsv } = require('./accounts-import');
   let text;
   if (kind === 'template') {
-    text = ['username,email,password', 'ann,ann@example.com,', 'bob,bob@example.com,', ''].join('\r\n');
+    text = ['username,email,password,last name,first name,middle name', 'ann,ann@example.com,,Lee,Ann,Marie', 'bob,bob@example.com,,Cruz,Bob,', ''].join('\r\n');
   } else {
     if (!Array.isArray(created) || created.length > 500 || created.some((c) => !c || [c.username, c.email, c.password].some((v) => typeof v !== 'string'))) {
       throw new Error('Invalid file contents');

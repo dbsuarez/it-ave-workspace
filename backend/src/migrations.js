@@ -318,6 +318,11 @@ module.exports = [
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL',
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}'::jsonb",
   'CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id) WHERE manager_id IS NOT NULL',
+  // An employee's real name, apart from the username they sign in with
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(100) NOT NULL DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(100) NOT NULL DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS middle_name VARCHAR(100) NOT NULL DEFAULT ''",
+
   // Accounts the Superadmin creates start with a temporary password the person is asked to replace
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false',
 

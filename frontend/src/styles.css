@@ -6585,18 +6585,29 @@ h4.cv-h { font-size: 15px; }
 .org-card-text span { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .org-card-text em { font-size: 11px; font-style: normal; color: var(--purple); }
 
+.org-card { position: relative; }
+.org-card.has-team { padding-bottom: 24px; }
+.org-team-count { position: absolute; right: 10px; bottom: 5px; font-size: 11px; color: var(--text-muted); }
 .org-toggle {
-  align-self: center;
-  padding: 1px 10px;
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  transform: translateX(-50%);
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--muted-bg);
+  border-radius: 50%;
+  background: var(--surface);
   color: var(--text-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 16px;
   font-weight: 700;
+  line-height: 1;
   cursor: pointer;
 }
+.org-toggle:hover { background: var(--muted-bg); color: var(--text); }
 
 .org-manager-select { width: 100%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
 
@@ -6620,6 +6631,9 @@ h4.cv-h { font-size: 15px; }
 .pp-mini { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .pp-mini span { display: flex; flex-direction: column; min-width: 0; }
 .pp-mini em { font-size: 12px; font-style: normal; color: var(--text-muted); }
+.pp-edit-triple { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pp-name-edit { display: grid; gap: 8px; }
+.pp-name-edit input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
 .admin-help { margin: 6px 0; font-size: 12px; color: var(--text-muted); }
 .admin-note { margin: 6px 0; font-size: 12px; color: var(--purple); }
 .admin-bulk-label { display: block; margin-top: 10px; font-size: 13px; }

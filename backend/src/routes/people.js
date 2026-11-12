@@ -11,7 +11,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 const LIMITS = {
-  department: 100, location: 100, phone: 40, jobTitle: 100, about: 1500,
+  department: 100, location: 100, phone: 40, jobTitle: 100, about: 1500, name: 100,
   sections: 8, sectionTitle: 60, sectionBody: 1500, links: 8, linkLabel: 40, linkUrl: 300,
 };
 
@@ -47,6 +47,9 @@ function text(value, max, label) {
 // Turns what the person typed into what is stored, or throws a 400 with the reason.
 function cleanProfile(body) {
   const out = {};
+  if (body.lastName !== undefined) out.lastName = text(body.lastName, LIMITS.name, 'Last name');
+  if (body.firstName !== undefined) out.firstName = text(body.firstName, LIMITS.name, 'First name');
+  if (body.middleName !== undefined) out.middleName = text(body.middleName, LIMITS.name, 'Middle name');
   if (body.department !== undefined) out.department = text(body.department, LIMITS.department, 'Department');
   if (body.location !== undefined) out.location = text(body.location, LIMITS.location, 'Location');
   if (body.jobTitle !== undefined) out.jobTitle = text(body.jobTitle, LIMITS.jobTitle, 'Job title');
@@ -86,7 +89,7 @@ function cleanProfile(body) {
   return { columns: out, extra };
 }
 
-const PERSON_COLUMNS = `u.id, u.username, u.email, u.avatar_color, u.status, u.status_text, u.status_emoji, u.job_title,
+const PERSON_COLUMNS = `u.id, u.username, u.last_name, u.first_name, u.middle_name, u.email, u.avatar_color, u.status, u.status_text, u.status_emoji, u.job_title,
   u.department, u.location, u.manager_id, u.photo_file, u.photo_updated_at, u.profile, u.created_at, u.account_type,
   COALESCE((SELECT array_agg(sm.manager_id ORDER BY sm.position, sm.manager_id) FROM user_secondary_managers sm WHERE sm.user_id = u.id), '{}') AS secondary_manager_ids`;
 
@@ -101,6 +104,9 @@ function mapPerson(row, viewerId, { full = false } = {}) {
   const person = {
     id: row.id,
     username: row.username,
+    lastName: row.last_name || '',
+    firstName: row.first_name || '',
+    middleName: row.middle_name || '',
     avatarColor: row.avatar_color,
     photoVersion: photoVersion(row),
     status: row.status,
@@ -151,8 +157,11 @@ router.put('/me', async (req, res) => {
     if (extra.hide) merged.hide = { ...((current && current.profile && current.profile.hide) || {}), ...extra.hide };
     await query(
       `UPDATE users SET department = COALESCE($1, department), location = COALESCE($2, location),
-              job_title = COALESCE($3, job_title), profile = $4::jsonb WHERE id = $5`,
-      [columns.department ?? null, columns.location ?? null, columns.jobTitle ?? null, JSON.stringify(merged), me.id]
+              job_title = COALESCE($3, job_title), profile = $4::jsonb,
+              last_name = COALESCE($6, last_name), first_name = COALESCE($7, first_name), middle_name = COALESCE($8, middle_name)
+       WHERE id = $5`,
+      [columns.department ?? null, columns.location ?? null, columns.jobTitle ?? null, JSON.stringify(merged), me.id,
+        columns.lastName ?? null, columns.firstName ?? null, columns.middleName ?? null]
     );
     const row = (await query(`SELECT ${PERSON_COLUMNS} FROM users u WHERE u.id = $1`, [me.id])).rows[0];
     res.json({ person: mapPerson(row, me.id, { full: true }) });
@@ -198,6 +207,29 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Get person error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/people/:id/names - the Superadmin fills in or corrects someone's name (people can also edit their own)
+router.put('/:id/names', async (req, res) => {
+  try {
+    const me = await requireMember(req.user.userId);
+    if (!me.is_superadmin) throw fail(403, 'Only the Superadmin can change someone else\'s name');
+    const id = parseId(req.params.id);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    const { columns } = cleanProfile({ lastName: req.body && req.body.lastName, firstName: req.body && req.body.firstName, middleName: req.body && req.body.middleName });
+    const result = await query(
+      `UPDATE users SET last_name = COALESCE($1, last_name), first_name = COALESCE($2, first_name), middle_name = COALESCE($3, middle_name)
+       WHERE id = $4 AND ${MEMBERS_ONLY.replace(/u\./g, '')} RETURNING id`,
+      [columns.lastName ?? null, columns.firstName ?? null, columns.middleName ?? null, id]
+    );
+    if (!result.rows.length) throw fail(404, 'Person not found');
+    const row = (await query(`SELECT ${PERSON_COLUMNS} FROM users u WHERE u.id = $1`, [id])).rows[0];
+    res.json({ person: mapPerson(row, me.id, { full: true }) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Set names error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

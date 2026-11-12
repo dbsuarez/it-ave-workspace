@@ -143,3 +143,16 @@ test('a person replaces the temporary password in their account settings; other 
   assert.equal((await call('POST', '/auth/login', { username: 'ivy', password })).status, 401);
   assert.equal((await call('POST', '/auth/login', { username: 'ivy', password: 'A-new-password-1' })).json.user.mustChangePassword, false);
 });
+
+test('accounts can be created with last, first and middle names', async (t) => {
+  if (skip(t)) return;
+  const made = await call('POST', '/admin/users', { accounts: [
+    { username: 'named1', email: 'named1@x.test', lastName: 'Lee', firstName: 'Ann', middleName: 'Marie' },
+    { username: 'named2', email: 'named2@x.test', lastName: 'x'.repeat(101) },
+  ] }, bearer(ids.boss));
+  assert.equal(made.status, 201);
+  assert.deepEqual(made.json.created.map((c) => c.username), ['named1']);
+  assert.match(made.json.skipped[0].reason, /Last name/);
+  const row = (await admin.query("SELECT last_name, first_name, middle_name FROM users WHERE username = 'named1'")).rows[0];
+  assert.deepEqual(row, { last_name: 'Lee', first_name: 'Ann', middle_name: 'Marie' });
+});

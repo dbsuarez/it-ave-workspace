@@ -53,3 +53,10 @@ test('the credentials file quotes cells and defuses spreadsheet formulas', () =>
   assert.equal(csv.split('\r\n')[1], 'ann,a@x.test,"p,w""1"');
   assert.equal(csv.split('\r\n')[2], "'=cmd,b@x.test,+1");
 });
+
+test('last, first and middle name columns are read, in any order and by common names', () => {
+  const { accounts } = accountsFromRows([['Surname', 'Given Name', 'Middle', 'Email', 'Username'], ['Lee', 'Ann', 'Marie', 'ann@x.test', 'ann'], ['Cruz', 'Bob', '', 'bob@x.test', 'bob']]);
+  assert.deepEqual(accounts[0], { username: 'ann', email: 'ann@x.test', password: '', lastName: 'Lee', firstName: 'Ann', middleName: 'Marie' });
+  assert.deepEqual(accounts[1], { username: 'bob', email: 'bob@x.test', password: '', lastName: 'Cruz', firstName: 'Bob' }, 'an empty name is left out');
+  assert.equal(accountsFromRows([['ann', 'a@x.test', '', 'Lee', 'Ann', 'M']]).accounts[0].firstName, 'Ann', 'no header: the sixth columns are the names');
+});

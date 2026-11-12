@@ -1,7 +1,8 @@
 // Reading a list of people to create accounts for, from a CSV or an Excel (.xlsx) file.
 // Pure parsing lives here (covered by test/accounts-import.test.js); main.js shows the file dialog.
 //
-// Columns are found by their header: username (or user, login, name), email (or e-mail), password (optional).
+// Columns are found by their header: username (or user, login, name), email (or e-mail), password (optional),
+// and optionally last name (surname), first name (given name) and middle name.
 // Without a header row the order is username, email, password. With an email but no username column, the
 // username is made from the part of the email before the @.
 const fs = require('fs');
@@ -48,6 +49,9 @@ function parseCsv(text) {
 const USERNAME_HEADERS = ['username', 'user name', 'user', 'login', 'name'];
 const EMAIL_HEADERS = ['email', 'e-mail', 'email address', 'e-mail address', 'mail'];
 const PASSWORD_HEADERS = ['password', 'temporary password', 'temp password', 'initial password'];
+const LAST_HEADERS = ['last name', 'lastname', 'last', 'surname', 'family name'];
+const FIRST_HEADERS = ['first name', 'firstname', 'first', 'given name'];
+const MIDDLE_HEADERS = ['middle name', 'middlename', 'middle', 'middle initial'];
 
 const cell = (value) => (value === null || value === undefined ? '' : String(value).trim());
 
@@ -66,14 +70,17 @@ function accountsFromRows(rows) {
   let emailCol = find(EMAIL_HEADERS);
   let userCol = find(USERNAME_HEADERS);
   let passCol = find(PASSWORD_HEADERS);
-  const hasHeader = emailCol !== -1 || userCol !== -1 || passCol !== -1;
+  let lastCol = find(LAST_HEADERS);
+  let firstCol = find(FIRST_HEADERS);
+  let middleCol = find(MIDDLE_HEADERS);
+  const hasHeader = [emailCol, userCol, passCol, lastCol, firstCol, middleCol].some((index) => index !== -1);
   let body = filled;
   if (hasHeader) {
     body = filled.slice(1);
   } else {
-    userCol = 0; emailCol = 1; passCol = 2;
+    userCol = 0; emailCol = 1; passCol = 2; lastCol = 3; firstCol = 4; middleCol = 5;
     // a single column of email addresses
-    if (filled.every((row) => row.length === 1 && row[0].includes('@'))) { userCol = -1; emailCol = 0; passCol = -1; }
+    if (filled.every((row) => row.length === 1 && row[0].includes('@'))) { userCol = -1; emailCol = 0; passCol = -1; lastCol = -1; firstCol = -1; middleCol = -1; }
   }
   if (emailCol === -1) return { accounts: [], notes: ['No email column was found. Add a header row with "username" and "email".'] };
   if (userCol === -1) notes.push('There is no username column, so usernames are made from the email addresses.');
@@ -86,7 +93,12 @@ function accountsFromRows(rows) {
     const email = cell(row[emailCol]);
     const username = userCol === -1 ? usernameFromEmail(email) : cell(row[userCol]);
     const password = passCol === -1 ? '' : cell(row[passCol]);
-    return { username, email, password };
+    const account = { username, email, password };
+    const name = (col) => (col === -1 ? '' : cell(row[col]));
+    if (name(lastCol)) account.lastName = name(lastCol);
+    if (name(firstCol)) account.firstName = name(firstCol);
+    if (name(middleCol)) account.middleName = name(middleCol);
+    return account;
   });
   return { accounts, notes };
 }

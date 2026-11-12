@@ -99,3 +99,22 @@ test('making someone the main manager removes them from the extra ones', async (
   assert.equal(page.manager.id, ids.bob);
   assert.deepEqual(page.person.secondaryManagerIds, []);
 });
+
+test('first, middle and last names: people edit their own, the Superadmin fills in others, and accounts can be created with them', async (t) => {
+  if (skip(t)) return;
+  const mine = await call(ids.ann, 'PUT', '/me', { lastName: ' Lee ', firstName: 'Ann', middleName: 'Marie' });
+  assert.equal(mine.status, 200);
+  assert.deepEqual([mine.json.person.lastName, mine.json.person.firstName, mine.json.person.middleName], ['Lee', 'Ann', 'Marie']);
+  assert.equal((await call(ids.ann, 'PUT', '/me', { jobTitle: 'Analyst' })).json.person.lastName, 'Lee', 'saving something else keeps the name');
+  assert.equal((await call(ids.ann, 'PUT', '/me', { middleName: '' })).json.person.middleName, '', 'a name can be cleared');
+  assert.equal((await call(ids.ann, 'PUT', '/me', { firstName: 'x'.repeat(101) })).status, 400);
+  const list = (await call(ids.bob, 'GET', '')).json.people;
+  assert.equal(list.find((p) => p.id === ids.ann).firstName, 'Ann', 'everyone sees it in the directory');
+
+  assert.equal((await call(ids.ann, 'PUT', `/${ids.bob}/names`, { lastName: 'Cruz' })).status, 403);
+  const set = await call(ids.boss, 'PUT', `/${ids.bob}/names`, { lastName: 'Cruz', firstName: 'Bob' });
+  assert.equal(set.status, 200);
+  assert.equal(set.json.person.lastName, 'Cruz');
+  assert.equal((await call(ids.boss, 'PUT', `/${ids.guest}/names`, { lastName: 'Nope' })).status, 404, 'members only');
+
+});

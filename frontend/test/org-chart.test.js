@@ -60,3 +60,17 @@ test('searching keeps the managers above a match', () => {
   assert.deepEqual(filterOrgTree(tree, 'nobody'), []);
   assert.equal(filterOrgTree(tree, '  '), tree, 'an empty search shows everything');
 });
+
+test('people are called by their full name, and sorted by last name', () => {
+  const { personFullName, personName, buildOrgTree, filterOrgTree } = require('../src/features/org-chart');
+  assert.equal(personFullName({ firstName: 'Ann', middleName: 'Marie', lastName: 'Lee' }), 'Ann Marie Lee');
+  assert.equal(personFullName({ firstName: ' Ann ', lastName: 'Lee' }), 'Ann Lee');
+  assert.equal(personName({ username: 'ann' }), 'ann', 'the username until a name is given');
+  const people = [
+    { id: 1, username: 'a', firstName: 'Zed', lastName: 'Abad' },
+    { id: 2, username: 'b', firstName: 'Amy', lastName: 'Zamora' },
+    { id: 3, username: 'c', firstName: 'Bea', lastName: 'Cruz' },
+  ];
+  assert.deepEqual(buildOrgTree(people).map((n) => n.person.lastName), ['Abad', 'Cruz', 'Zamora']);
+  assert.equal(filterOrgTree(buildOrgTree(people), 'amy zamora').length, 1, 'search matches the full name');
+});

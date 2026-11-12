@@ -14,7 +14,7 @@ const peopleState = {
 const escapeText = (value) => escapeHtml(String(value === undefined || value === null ? '' : value));
 
 function peopleAvatar(person, size = 'md') {
-  const initial = escapeText((person.username || '?').charAt(0).toUpperCase());
+  const initial = escapeText((personName(person) || '?').charAt(0).toUpperCase());
   const color = /^#[0-9a-fA-F]{6}$/.test(person.avatarColor || '') ? person.avatarColor : '#6B21A8';
   return `<span class="pp-avatar pp-avatar-${size}" style="background:${color}" data-photo-id="${Number(person.id)}" data-photo-version="${Number(person.photoVersion) || ''}">${initial}</span>`;
 }
@@ -60,7 +60,7 @@ function renderPeople() {
   const actions = document.getElementById('people-actions');
   if (!title || !actions) return;
   if (peopleState.pageId !== null) {
-    title.textContent = peopleState.page ? peopleState.page.person.username : 'Person';
+    title.textContent = peopleState.page ? personName(peopleState.page.person) : 'Person';
     sub.textContent = 'Employee page';
     actions.innerHTML = '<button type="button" class="btn" data-people-back>← People</button>';
     renderPersonPage();
@@ -96,7 +96,7 @@ function renderPeopleBody() {
 
 function matchesPeopleQuery(person, query) {
   const q = query.trim().toLowerCase();
-  return !q || [person.username, person.jobTitle, person.department, person.location].some((v) => String(v || '').toLowerCase().includes(q));
+  return !q || [person.username, personFullName(person), person.jobTitle, person.department, person.location].some((v) => String(v || '').toLowerCase().includes(q));
 }
 
 function renderDirectory(body) {
@@ -111,7 +111,7 @@ function renderDirectory(body) {
     <button type="button" class="pp-card" data-person="${p.id}">
       ${peopleAvatar(p, 'lg')}
       <span class="pp-card-body">
-        <span class="pp-card-name">${escapeText(p.username)} ${presenceDot(p)}</span>
+        <span class="pp-card-name">${escapeText(personName(p))} ${presenceDot(p)}</span>
         <span class="pp-card-title">${escapeText(p.jobTitle) || '<span class="pp-muted">No title yet</span>'}</span>
         ${p.department ? `<span class="pp-card-meta">${escapeText(p.department)}</span>` : ''}
         ${p.location ? `<span class="pp-card-meta">${escapeText(p.location)}</span>` : ''}
@@ -132,22 +132,23 @@ function orgNodeHtml(node, editable, everyone) {
   const size = orgTeamSize(node);
   const collapsed = peopleState.collapsed.has(p.id);
   const card = `
-    <div class="org-card${node.matched ? ' matched' : ''}" data-org-card="${p.id}"${also.length ? ` title="Also reports to ${escapeText(also.map((o) => o.username).join(', '))} (dotted line)"` : ''}>
+    <div class="org-card${node.matched ? ' matched' : ''}${node.children.length ? ' has-team' : ''}" data-org-card="${p.id}"${also.length ? ` title="Also reports to ${escapeText(also.map((o) => personName(o)).join(', '))} (dotted line)"` : ''}>
       <button type="button" class="org-card-main" data-person="${p.id}">
         ${peopleAvatar(p, 'md')}
         <span class="org-card-text">
-          <strong>${escapeText(p.username)}</strong>
+          <strong>${escapeText(personName(p))}</strong>
           <span>${escapeText(p.jobTitle) || ''}</span>
           ${p.department ? `<em>${escapeText(p.department)}</em>` : ''}
         </span>
       </button>
       ${editable ? `<select class="org-manager-select" data-org-manager="${p.id}" aria-label="Reports to">
-        <option value="">No manager</option>${everyone.filter((o) => o.id !== p.id).map((o) => `<option value="${o.id}"${o.id === p.managerId ? ' selected' : ''}>${escapeText(o.username)}</option>`).join('')}</select>
+        <option value="">No manager</option>${everyone.filter((o) => o.id !== p.id).map((o) => `<option value="${o.id}"${o.id === p.managerId ? ' selected' : ''}>${escapeText(personName(o))}</option>`).join('')}</select>
         <div class="org-also-edit">
-          ${also.map((o) => `<span class="org-chip">${escapeText(o.username)}<button type="button" data-secondary-remove="${p.id}:${o.id}" aria-label="Remove ${escapeText(o.username)} as an extra manager">×</button></span>`).join('')}
-          ${(p.secondaryManagerIds || []).length < 5 ? `<select class="org-manager-select" data-org-secondary-add="${p.id}" aria-label="Add an extra manager"><option value="">+ Also reports to…</option>${everyone.filter((o) => o.id !== p.id && o.id !== p.managerId && !(p.secondaryManagerIds || []).includes(o.id)).map((o) => `<option value="${o.id}">${escapeText(o.username)}</option>`).join('')}</select>` : ''}
+          ${also.map((o) => `<span class="org-chip">${escapeText(personName(o))}<button type="button" data-secondary-remove="${p.id}:${o.id}" aria-label="Remove ${escapeText(personName(o))} as an extra manager">×</button></span>`).join('')}
+          ${(p.secondaryManagerIds || []).length < 5 ? `<select class="org-manager-select" data-org-secondary-add="${p.id}" aria-label="Add an extra manager"><option value="">+ Also reports to…</option>${everyone.filter((o) => o.id !== p.id && o.id !== p.managerId && !(p.secondaryManagerIds || []).includes(o.id)).map((o) => `<option value="${o.id}">${escapeText(personName(o))}</option>`).join('')}</select>` : ''}
         </div>` : ''}
-      ${node.children.length ? `<button type="button" class="org-toggle" data-org-toggle="${p.id}" title="${collapsed ? 'Show' : 'Hide'} the team" aria-expanded="${!collapsed}">${collapsed ? '+' : '−'} ${size}</button>` : ''}
+      ${node.children.length ? `<span class="org-team-count">${size} ${size === 1 ? 'member' : 'members'}</span>
+      <button type="button" class="org-toggle" data-org-toggle="${p.id}" title="${collapsed ? 'Show' : 'Hide'} the team (${size} ${size === 1 ? 'member' : 'members'})" aria-label="${collapsed ? 'Show' : 'Hide'} the team" aria-expanded="${!collapsed}">${collapsed ? '+' : '−'}</button>` : ''}
     </div>`;
   const kids = node.children.length && !collapsed
     ? `<ul class="org-children">${node.children.map((child) => orgNodeHtml(child, editable, everyone)).join('')}</ul>` : '';
@@ -339,15 +340,15 @@ function renderPersonPage() {
   const mine = Number(person.id) === Number(state.user.id);
   const color = /^#[0-9a-fA-F]{6}$/.test(person.avatarColor || '') ? person.avatarColor : '#6B21A8';
   const empty = !person.about && !person.sections.length && !person.links.length;
-  const personCard = (p) => `<button type="button" class="pp-mini" data-person="${p.id}">${peopleAvatar(p, 'sm')}<span><strong>${escapeText(p.username)}</strong><em>${escapeText(personLine(p))}</em></span></button>`;
+  const personCard = (p) => `<button type="button" class="pp-mini" data-person="${p.id}">${peopleAvatar(p, 'sm')}<span><strong>${escapeText(personName(p))}</strong><em>${escapeText(personLine(p))}</em></span></button>`;
   body.innerHTML = `
     <div class="pp-cover" style="background:${color}"></div>
     <div class="pp-hero">
       ${peopleAvatar(person, 'xl')}
       <div class="pp-hero-text">
-        <h2>${escapeText(person.username)} ${presenceDot(person)}</h2>
+        <h2>${escapeText(personName(person))} ${presenceDot(person)}</h2>
         <p>${escapeText(personLine(person)) || '<span class="pp-muted">No title yet</span>'}</p>
-        <p class="pp-muted">${[person.location, [person.statusEmoji, person.statusText].filter(Boolean).join(' ')].filter(Boolean).map(escapeText).join(' · ')}</p>
+        <p class="pp-muted">${[personFullName(person) ? '@' + person.username : '', person.location, [person.statusEmoji, person.statusText].filter(Boolean).join(' ')].filter(Boolean).map(escapeText).join(' · ')}</p>
       </div>
       <div class="pp-hero-actions">
         ${mine ? '<button type="button" class="btn primary" data-edit-page>Edit my page</button>'
@@ -358,9 +359,18 @@ function renderPersonPage() {
       <div class="pp-main">
         ${person.about ? `<section class="pp-section"><h3>About</h3><p class="pp-text">${escapeText(person.about)}</p></section>` : ''}
         ${person.sections.map((s) => `<section class="pp-section"><h3>${escapeText(s.title)}</h3><p class="pp-text">${escapeText(s.body)}</p></section>`).join('')}
-        ${empty ? emptyRecordMarkup(mine ? 'Your page is empty' : `${person.username} has not added anything yet`, mine ? 'Use "Edit my page" to add an about text, sections and links.' : 'Their title and contact details show on the right.', 'compact') : ''}
+        ${empty ? emptyRecordMarkup(mine ? 'Your page is empty' : `${personName(person)} has not added anything yet`, mine ? 'Use "Edit my page" to add an about text, sections and links.' : 'Their title and contact details show on the right.', 'compact') : ''}
       </div>
       <aside class="pp-side">
+        ${canSetManager && !mine ? `<section class="pp-section">
+          <h3>Name</h3>
+          <div class="pp-name-edit">
+            <input id="page-last" type="text" maxlength="100" placeholder="Last name" aria-label="Last name" value="${escapeText(person.lastName)}">
+            <input id="page-first" type="text" maxlength="100" placeholder="First name" aria-label="First name" value="${escapeText(person.firstName)}">
+            <input id="page-middle" type="text" maxlength="100" placeholder="Middle name" aria-label="Middle name" value="${escapeText(person.middleName)}">
+            <button type="button" class="btn" data-page-save-names="${person.id}">Save name</button>
+          </div>
+        </section>` : ''}
         <section class="pp-section">
           <h3>Contact</h3>
           ${contactRow('Email', person.email, person.email ? `mailto:${person.email}` : '')}
@@ -374,9 +384,9 @@ function renderPersonPage() {
           <h3>Reports to</h3>
           ${manager ? personCard(manager) : '<p class="pp-muted">No manager set</p>'}
           ${secondaryManagers.length || canSetManager ? '<h4 class="pp-subhead">Also reports to</h4>' : ''}
-          ${secondaryManagers.map((m) => `<div class="pp-secondary-row">${personCard(m)}${canSetManager ? `<button type="button" class="btn" data-page-remove-secondary="${m.id}" aria-label="Remove ${escapeText(m.username)} as an extra manager">Remove</button>` : ''}</div>`).join('')}
-          ${canSetManager ? `<div class="pp-manager-edit"><select id="page-manager" aria-label="Reports to"><option value="">No manager</option>${peopleState.list.filter((p) => p.id !== person.id).map((p) => `<option value="${p.id}"${manager && manager.id === p.id ? ' selected' : ''}>${escapeText(p.username)}</option>`).join('')}</select><button type="button" class="btn" data-page-set-manager="${person.id}">Save</button></div>
-          ${secondaryManagers.length < 5 ? `<div class="pp-manager-edit"><select id="page-secondary" aria-label="Add an extra manager"><option value="">Add an extra manager…</option>${peopleState.list.filter((p) => p.id !== person.id && !(manager && manager.id === p.id) && !secondaryManagers.some((m) => m.id === p.id)).map((p) => `<option value="${p.id}">${escapeText(p.username)}</option>`).join('')}</select><button type="button" class="btn" data-page-add-secondary="${person.id}">Add</button></div>` : ''}` : ''}
+          ${secondaryManagers.map((m) => `<div class="pp-secondary-row">${personCard(m)}${canSetManager ? `<button type="button" class="btn" data-page-remove-secondary="${m.id}" aria-label="Remove ${escapeText(personName(m))} as an extra manager">Remove</button>` : ''}</div>`).join('')}
+          ${canSetManager ? `<div class="pp-manager-edit"><select id="page-manager" aria-label="Reports to"><option value="">No manager</option>${peopleState.list.filter((p) => p.id !== person.id).map((p) => `<option value="${p.id}"${manager && manager.id === p.id ? ' selected' : ''}>${escapeText(personName(p))}</option>`).join('')}</select><button type="button" class="btn" data-page-set-manager="${person.id}">Save</button></div>
+          ${secondaryManagers.length < 5 ? `<div class="pp-manager-edit"><select id="page-secondary" aria-label="Add an extra manager"><option value="">Add an extra manager…</option>${peopleState.list.filter((p) => p.id !== person.id && !(manager && manager.id === p.id) && !secondaryManagers.some((m) => m.id === p.id)).map((p) => `<option value="${p.id}">${escapeText(personName(p))}</option>`).join('')}</select><button type="button" class="btn" data-page-add-secondary="${person.id}">Add</button></div>` : ''}` : ''}
         </section>
         <section class="pp-section">
           <h3>Direct reports${reports.length ? ` (${reports.length})` : ''}</h3>
@@ -418,6 +428,11 @@ function openPageEditor() {
     <form id="people-editor-form">
       <div class="modal-body pp-editor-body">
         <p class="form-note">Your photo and avatar color are in Profile. Everything here is shown to other employees on your page.</p>
+        <div class="pp-edit-triple">
+          <div class="form-group"><label for="pe-last">Last name</label><input id="pe-last" type="text" maxlength="100" value="${escapeText(p.lastName)}"></div>
+          <div class="form-group"><label for="pe-first">First name</label><input id="pe-first" type="text" maxlength="100" value="${escapeText(p.firstName)}"></div>
+          <div class="form-group"><label for="pe-middle">Middle name</label><input id="pe-middle" type="text" maxlength="100" value="${escapeText(p.middleName)}"></div>
+        </div>
         <div class="form-group"><label for="pe-title">Job title</label><input id="pe-title" type="text" maxlength="100" value="${escapeText(p.jobTitle)}"></div>
         <div class="pp-edit-pair">
           <div class="form-group"><label for="pe-department">Department</label><input id="pe-department" type="text" maxlength="100" value="${escapeText(p.department)}"></div>
@@ -452,6 +467,7 @@ async function savePageEditor(event) {
     label: row.querySelector('[data-edit-link-label]').value, url: row.querySelector('[data-edit-link-url]').value,
   })).filter((l) => l.label.trim() || l.url.trim());
   const body = {
+    lastName: value('pe-last'), firstName: value('pe-first'), middleName: value('pe-middle'),
     jobTitle: value('pe-title'), department: value('pe-department'), location: value('pe-location'), phone: value('pe-phone'),
     about: value('pe-about'), sections, links,
     hide: { email: modal.querySelector('#pe-hide-email').checked, phone: modal.querySelector('#pe-hide-phone').checked, location: modal.querySelector('#pe-hide-location').checked },
@@ -504,6 +520,24 @@ if (typeof document !== 'undefined') {
       const value = document.getElementById('page-manager').value;
       const ok = await setPersonManager(Number(setManager.dataset.pageSetManager), value === '' ? null : Number(value));
       if (ok) { showToast('Reporting line saved.', 'success'); openPersonPage(Number(setManager.dataset.pageSetManager)); }
+      return;
+    }
+    const saveNames = t.closest('[data-page-save-names]');
+    if (saveNames) {
+      const personId = Number(saveNames.dataset.pageSaveNames);
+      try {
+        const res = await api(`/api/people/${personId}/names`, { method: 'PUT', body: JSON.stringify({
+          lastName: document.getElementById('page-last').value, firstName: document.getElementById('page-first').value, middleName: document.getElementById('page-middle').value,
+        }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not save the name');
+        const listed = peopleState.list.find((p) => p.id === personId);
+        if (listed) Object.assign(listed, { lastName: data.person.lastName, firstName: data.person.firstName, middleName: data.person.middleName });
+        showToast('Name saved.', 'success');
+        openPersonPage(personId);
+      } catch (err) {
+        showToast(err.message || 'Could not save the name.', 'error');
+      }
       return;
     }
     const addSecondary = t.closest('[data-page-add-secondary]');

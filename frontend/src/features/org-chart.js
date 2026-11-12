@@ -4,8 +4,20 @@
 // whose manager is missing or would make a loop) are roots, so a bad record can never hide anyone or hang
 // the page.
 
+// A person's full name as written on their page: first, middle, last. Empty until they fill it in.
+function personFullName(person) {
+  return [person.firstName, person.middleName, person.lastName].map((part) => String(part || '').trim()).filter(Boolean).join(' ');
+}
+
+// What to call someone on screen: their full name, or their username when they have not given one.
+function personName(person) {
+  return personFullName(person) || String(person.username || '');
+}
+
+// Sorted by last name then first name when there is one, otherwise by username.
 function orgSortKey(person) {
-  return String(person.username || '').toLowerCase();
+  const last = String(person.lastName || '').trim();
+  return (last ? `${last} ${person.firstName || ''} ${person.middleName || ''}` : String(person.username || '')).toLowerCase();
 }
 
 // [{ person, children: [...] }] for the roots, everyone placed exactly once, siblings sorted by name.
@@ -69,7 +81,7 @@ function orgTeamSize(node) {
 function filterOrgTree(roots, query) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return roots;
-  const matches = (p) => [p.username, p.jobTitle, p.department, p.location].some((v) => String(v || '').toLowerCase().includes(q));
+  const matches = (p) => [p.username, personFullName(p), p.jobTitle, p.department, p.location].some((v) => String(v || '').toLowerCase().includes(q));
   const visit = (node) => {
     const kept = node.children.map(visit).filter(Boolean);
     return matches(node.person) || kept.length ? { person: node.person, children: kept, matched: matches(node.person) } : null;
@@ -78,5 +90,5 @@ function filterOrgTree(roots, query) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { buildOrgTree, orgPathAbove, orgTeamSize, filterOrgTree };
+  module.exports = { buildOrgTree, orgPathAbove, orgTeamSize, filterOrgTree, personFullName, personName };
 }
