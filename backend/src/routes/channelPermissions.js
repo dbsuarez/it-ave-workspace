@@ -95,7 +95,7 @@ router.put('/:channelId/permissions', async (req, res) => {
       'INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES ($1, $2, $3, $4, $5)',
       [channelId, req.user.userId, subjectType === 'user' ? subjectId : null, 'channel_permissions_changed', JSON.stringify({ channel: channel.name, subjectType, subjectId, allow, deny })]
     );
-    if (req.io) req.io.emit('permissions_updated', { channelId });
+    if (req.io) req.io.emit('permissions_updated', { channelId, byUserId: req.user.userId });
     res.json({ ok: true });
   } catch (err) { sendError(res, err, 'Set channel permissions error'); }
 });

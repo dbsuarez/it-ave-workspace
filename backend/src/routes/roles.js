@@ -195,7 +195,7 @@ router.put('/users/:userId', async (req, res) => {
     for (const id of toAdd) await query('INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, id, req.user.userId]);
     for (const id of toRemove) await query('DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2', [userId, id]);
     if (toAdd.length || toRemove.length) await audit(req.user.userId, 'roles_assigned', userId, { added: toAdd, removed: toRemove });
-    if (req.io) req.io.emit('permissions_updated', { userId });
+    if (req.io) req.io.emit('permissions_updated', { userId, byUserId: req.user.userId });
     res.json({ roleIds: [...want] });
   } catch (err) { sendError(res, err, 'Assign roles error'); }
 });

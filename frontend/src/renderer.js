@@ -953,8 +953,9 @@ function connectSocket() {
   });
   // Roles or channel permissions changed: re-read what this person can see and do (debounced: a burst of edits is one refresh).
   let permissionsTimer = null;
-  state.socket.on('permissions_updated', () => {
+  state.socket.on('permissions_updated', (info) => {
     clearTimeout(permissionsTimer);
+    const mine = Boolean(info && Number(info.byUserId) === Number(state.user && state.user.id));
     permissionsTimer = setTimeout(async () => {
       await loadChannels();
       await loadModerationAccess();
@@ -966,7 +967,14 @@ function connectSocket() {
         if (state.channels.length) await openChannel(state.channels[0].id);
         showToast('A channel is no longer available to you.', 'info');
       }
-      if (state.section === 'moderation' && !document.getElementById('role-modal-overlay')) loadModerationView();
+      // the screen of the person who made the change is already up to date; for anyone else, rebuild it where they were
+      if (state.section === 'moderation' && !mine && !document.getElementById('role-modal-overlay')) {
+        const scroller = document.getElementById('moderation-content');
+        const top = scroller ? scroller.scrollTop : 0;
+        await loadModerationView();
+        const after = document.getElementById('moderation-content');
+        if (after) after.scrollTop = top;
+      }
     }, 400);
   });
   state.socket.on('channel_access_revoked', async ({ channelId }) => {
