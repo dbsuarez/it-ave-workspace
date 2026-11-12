@@ -401,3 +401,7 @@ HR role, employee records, departments, deactivate/reactivate, password reset, o
 ## Profile photos: position and store at 512 (2026-11-12)
 
 Choosing a photo opens "Position your photo": a round window over the picture, drag to move, scroll or the slider to zoom (1x to 4x), arrow keys to nudge, with a center cross and an eye line as guides. What is inside the window is cut out as a square and saved as a 512x512 JPEG (quality 0.9, usually 40 to 100 KB; the server limit is 2 MB). 512 is about five times the largest place a photo is shown (96 px), so it stays sharp on high-density screens and for a future ID card or print. Photos saved before this are 256 px and keep working. The math is in `frontend/src/features/photo-crop.js` (tests in `frontend/test/photo-crop.test.js`).
+
+## Thumbnails for picture files (2026-11-12)
+
+The Files view and Saved items show a small thumbnail for PNG, JPEG, GIF, WebP and BMP files (other files keep their icon). The picture is fetched with the sign-in, shrunk in the app to 320 px on its long side and cached for the session; only cards that scroll into view load, two at a time. Server-side thumbnails would save bandwidth for very large pictures; not needed on a LAN. Code: `frontend/src/features/file-thumbnails.js`.

@@ -3582,7 +3582,7 @@ function renderFiles(files) {
     card.className = 'card file-card';
     const where = f.channelName ? '#' + f.channelName : 'Direct message';
     card.innerHTML = `
-      <div class="preview file-preview-icon">${fileIconSvg(fileIcon(f.mimeType))}</div>
+      <div class="preview file-preview-icon" data-thumb-file="${escapeHtml(String(f.id))}" data-thumb-mime="${escapeHtml(f.mimeType || '')}" role="img" aria-label="${escapeHtml(f.name)}">${fileIconSvg(fileIcon(f.mimeType))}</div>
       <div class="title" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
       <div class="meta">${escapeHtml(humanSize(f.size))} · ${escapeHtml(where)}</div>
       <div class="meta">Shared by ${escapeHtml(f.uploaderUsername)} · ${shortTime(f.uploadedAt)}</div>
@@ -3603,6 +3603,7 @@ function renderFiles(files) {
     decorateFileCard(card, f);
     grid.appendChild(card);
   });
+  hydrateThumbnails(grid); // pictures show a thumbnail instead of the icon, as they scroll into view
 }
 
 function canModerateChannel(channelId) {

@@ -327,7 +327,7 @@ function renderLaterView() {
         <button class="btn" type="button" data-remove-saved="${item.id}">Remove</button>
       </div>` : `
       <div class="later-item" data-open-saved="${item.id}">
-        <span class="later-file-icon">${fileIconSvg(fileIcon(item.mimeType))}</span>
+        <span class="later-file-icon" data-thumb-file="${escapeHtml(String(item.fileId))}" data-thumb-mime="${escapeHtml(item.mimeType || '')}">${fileIconSvg(fileIcon(item.mimeType))}</span>
         <span class="later-item-body">
           <span class="later-item-title"><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(humanSize(item.size))}</span>
           <span class="later-item-text">File shared by ${escapeHtml(item.username)} in #${escapeHtml(item.channelName)}</span>
@@ -336,6 +336,7 @@ function renderLaterView() {
         <button class="btn" type="button" data-remove-saved="${item.id}">Remove</button>
       </div>`)).join('')
       : emptyRecordMarkup('Nothing saved yet', 'Use Save on a message or a file to keep it here. Only you can see this list.');
+    hydrateThumbnails(body);
     return;
   }
 

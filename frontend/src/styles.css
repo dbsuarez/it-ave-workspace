@@ -6891,3 +6891,8 @@ h4.cv-h { font-size: 15px; }
 .photo-crop-zoom input { flex: 1; }
 .photo-crop-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .photo-crop-spacer { flex: 1; }
+
+/* Thumbnails of picture files */
+.file-card .preview { height: 130px; }
+.file-card .preview.has-thumb { background-size: cover; background-position: center; background-repeat: no-repeat; }
+.later-file-icon.has-thumb { display: inline-block; width: 44px; height: 44px; border-radius: 8px; background-size: cover; background-position: center; }
