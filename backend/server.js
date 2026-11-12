@@ -56,6 +56,16 @@ const io = new Server(server, {
 // The Electron desktop client is loaded from file:// - its Origin is `null`, which the policy allows.
 app.use(cors(corsPolicy));
 app.use(securityHeaders);
+
+// The phone app (a web app installed from /m/). It is plain files served by this same server, so it needs its own,
+// looser page policy than the API's "nothing may load" one: scripts, styles, pictures and the socket from this server only.
+const MOBILE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; "
+  + "manifest-src 'self'; worker-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+app.use('/m', (req, res, next) => {
+  res.setHeader('Content-Security-Policy', MOBILE_CSP);
+  res.setHeader('Cache-Control', 'no-cache'); // always check for a new version; the service worker handles offline
+  next();
+}, express.static(require('path').join(__dirname, 'public', 'm')));
 if (config.LOG_REQUESTS) app.use(requestLogger());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
