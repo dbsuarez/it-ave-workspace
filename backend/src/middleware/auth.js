@@ -1,5 +1,6 @@
 const { query } = require('../db');
 const { viewAsRefusal } = require('../viewAs');
+const { demoResponse } = require('../viewAsDemo');
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -31,8 +32,14 @@ const authenticateToken = (req, res, next) => {
         if (!owner.rows.length) return res.status(403).json({ error: 'Session expired; sign in again' });
         // the testing mode (private messages shown, still read-only) exists only while the workspace is Pre-launch
         const live = await query('SELECT go_live FROM moderation_settings WHERE id = 1');
-        const refusal = viewAsRefusal(req.method, req.originalUrl, { full: !(live.rows[0] && live.rows[0].go_live) });
+        const full = !(live.rows[0] && live.rows[0].go_live);
+        const refusal = viewAsRefusal(req.method, req.originalUrl, { full });
         if (refusal) return res.status(403).json({ error: refusal, viewAs: true });
+        if (!full) {
+          // Live: content comes from fixed samples, never from the database (src/viewAsDemo.js)
+          const demo = await demoResponse(req.originalUrl, { userId: user.userId, query });
+          if (demo) return res.status(demo.status).json(demo.body);
+        }
       }
       req.user = user;
       next();

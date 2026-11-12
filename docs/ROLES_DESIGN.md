@@ -154,3 +154,9 @@ including their direct messages, notes, saved items, leave and attendance, still
 no presence, no acting as them); the orange bar says so and the audit entry records `includesPrivate`. The moment the
 workspace goes Live this mode ends and View as returns to what their roles decide (channels, people, lists, channel canvases),
 so employees' private messages are not open to anyone looking through their eyes. (`viewAsRefusal(..., { full })`.)
+
+**View as with sample content after go-live (2026-11-12):** once the workspace is Live, View as keeps the person's real
+structure (their channels, tabs, people, what is allowed) but channel messages, threads, pins, reactions, channel canvases
+and lists come from fixed made-up samples (`backend/src/viewAsDemo.js`, applied in `middleware/auth.js`), never from the
+database; a channel the person cannot open is still refused. The sidebar items for direct messages, notes, saved items and
+activity stay hidden in this mode (their content would have to be invented too). Pre-launch keeps the real-data testing view.

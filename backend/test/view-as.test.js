@@ -62,6 +62,9 @@ test.before(async () => {
   app.use('/api/roles', require('../src/routes/roles'));
   app.use('/api/people', require('../src/routes/people'));
   app.use('/api/conversations', require('../src/routes/conversations'));
+  app.use('/api/messages', require('../src/routes/messages'));
+  app.use('/api/canvas', require('../src/routes/canvas'));
+  app.use('/api/lists', require('../src/routes/lists'));
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -127,6 +130,19 @@ test('once the workspace is Live, View as goes back to what the roles decide and
     assert.match(dms.json.error, /private/);
     const fresh = await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.ann });
     assert.equal(fresh.json.full, false);
+    // real content never comes back: channel messages are made-up samples, and a channel the person is not in is still refused
+    const inChannel = (await admin.query("INSERT INTO channels (name) VALUES ('demo-room') RETURNING id")).rows[0].id;
+    const outChannel = (await admin.query("INSERT INTO channels (name) VALUES ('demo-secret') RETURNING id")).rows[0].id;
+    await admin.query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)', [inChannel, ids.ann]);
+    await admin.query("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, 'REAL PRIVATE TEXT')", [inChannel, ids.ann]);
+    const sample = await call(fresh.json.token, 'GET', `/api/messages/${inChannel}`);
+    assert.equal(sample.status, 200);
+    assert.ok(sample.json.messages.length >= 6);
+    assert.ok(sample.json.messages.every((m) => m.id < 0 && !JSON.stringify(m).includes('REAL PRIVATE TEXT')), 'only samples');
+    assert.equal((await call(fresh.json.token, 'GET', `/api/messages/${outChannel}`)).status, 403, 'their access still decides what opens');
+    const canvas = await call(fresh.json.token, 'GET', `/api/canvas/channel/${inChannel}`);
+    assert.match(canvas.json.canvas.title, /sample/i);
+    assert.equal((await call(fresh.json.token, 'GET', '/api/lists')).json.lists.length, 0);
   } finally {
     await admin.query('UPDATE moderation_settings SET go_live = FALSE WHERE id = 1');
   }
