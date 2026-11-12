@@ -182,14 +182,24 @@ function renderChannelNav() {
     }
   });
 
+  // What is left is split in two built-in groups: Channels, and Personal channels (yours, and nobody else is in them yet)
   const rest = state.channels.filter((channel) => !placed.has(Number(channel.id)));
-  if (sections.length && rest.length) {
+  const { shared, personal } = splitPersonalChannels(rest, state.user && state.user.id);
+  if (sections.length && shared.length) {
     const label = document.createElement('h4');
     label.className = 'nav-label';
     label.textContent = 'Channels';
     list.appendChild(label);
   }
-  rest.forEach((channel) => list.appendChild(channelNavItem(channel)));
+  shared.forEach((channel) => list.appendChild(channelNavItem(channel)));
+  if (personal.length) {
+    const label = document.createElement('h4');
+    label.className = 'nav-label nav-personal-label';
+    label.textContent = 'Personal channels';
+    label.title = 'Channels you created that nobody else is in yet. They move up to Channels when someone joins.';
+    list.appendChild(label);
+    personal.forEach((channel) => list.appendChild(channelNavItem(channel)));
+  }
 }
 
 async function toggleSidebarSection(sectionId) {

@@ -180,6 +180,10 @@ function openEmployeeEditor(id) {
           <div class="form-group"><label for="emp-manager">Reports to</label><select id="emp-manager"><option value="">No manager</option>${employeeState.list.filter((o) => o.id !== e.id).map((o) => option(o.id, employeeFullName(o), e.managerId || '')).join('')}</select></div>
           <div class="form-group"><label for="emp-location">Location</label><input id="emp-location" type="text" maxlength="100" value="${escapeText(e.location)}"></div>
         </div>
+        <div class="pp-edit-pair">
+          <div class="form-group"><label for="emp-level">Position level</label><select id="emp-level"><option value="rank_and_file"${e.jobLevel !== 'managerial' ? ' selected' : ''}>Rank and file (earns overtime)</option><option value="managerial"${e.jobLevel === 'managerial' ? ' selected' : ''}>Managerial (no overtime)</option></select></div>
+          <label class="preference-toggle emp-remote"><input type="checkbox" id="emp-remote"${e.remoteClock ? ' checked' : ''}><span>Can clock in from anywhere (not only the office network)</span></label>
+        </div>
         <div class="form-group"><label for="emp-schedule">Work schedule</label><select id="emp-schedule"><option value="">Default${(employeeState.schedules.find((s) => s.isDefault) || {}).name ? ` (${escapeText(employeeState.schedules.find((s) => s.isDefault).name)})` : ''}</option>${employeeState.schedules.filter((s) => !s.isDefault).map((s) => option(s.id, `${s.name} (${s.start}–${s.end})`, e.scheduleId || '')).join('')}</select></div>
         <div class="pp-edit-triple">
           <div class="form-group"><label for="emp-status">Status</label><select id="emp-status">${Object.entries(EMPLOYEE_STATUSES).map(([k, l]) => option(k, l, e.employmentStatus)).join('')}</select></div>
@@ -220,6 +224,7 @@ async function saveEmployeeRecord(event) {
     lastName: value('emp-last'), firstName: value('emp-first'), middleName: value('emp-middle'),
     employeeNo: value('emp-no'), employmentType: value('emp-type'), jobTitle: value('emp-title'), location: value('emp-location'),
     departmentId: value('emp-department') === '' ? null : Number(value('emp-department')),
+    jobLevel: value('emp-level'), remoteClock: document.getElementById('emp-remote').checked,
     employmentStatus: value('emp-status'), hireDate: value('emp-hired') || null, separationDate: value('emp-lastday') || null,
   };
   const usernameField = document.getElementById('emp-username');

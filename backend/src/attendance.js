@@ -8,6 +8,7 @@
 //   overtime  : clocked out after the end       -> minutes past the end, once at least overtimeMinMinutes
 //   worked    : out - in, minus the break when the stay is longer than five hours
 //   Work on a rest day or a holiday is counted as worked time on a premium day (for payroll), not as overtime.
+//   Managerial staff (overtimeEligible false) earn neither overtime nor premium time; their hours are still counted.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -32,35 +33,56 @@ function eachDay(from, to) {
 // 0 = Sunday ... 6 = Saturday, matching the schedule's work_days.
 const weekdayOf = (day) => parseDay(day).getUTCDay();
 
-// record: { clockIn: Date, clockOut: Date | null } or null
-// schedule: { workDays: [1..5], breakMinutes, graceMinutes, overtimeMinMinutes, start: Date, end: Date } (start/end for that date; only needed with a record)
+// punches: [{ clockIn: Date, clockOut: Date | null }] in order (empty or missing: no record that day)
+// schedule: { workDays: [1..5], breakMinutes, graceMinutes, overtimeMinMinutes, start: Date, end: Date } (start/end for that date; needed only with punches)
 // leave: days of approved leave on this date (0, 0.5 or 1)
-function evaluateDay({ date, today, record, schedule, isHoliday = false, leave = 0 }) {
+// overtimeEligible: false for managerial staff: no overtime and no rest-day/holiday premium, though the hours are still counted
+//
+// People clock in and out several times a day (in 8:00, out 12:00 for lunch, in 13:00, out 17:00). Worked time is the sum
+// of the stretches. A stay of more than five hours in one stretch had no break punched, so the scheduled break comes off.
+// Time away between stretches over the break allowance (plus grace) is "over break".
+function evaluateDay({ date, today, punches, schedule, isHoliday = false, leave = 0, overtimeEligible = true }) {
   const isWorkDay = schedule.workDays.includes(weekdayOf(date));
   const result = {
     date, status: 'rest', isWorkDay, isHoliday, leave,
-    lateMinutes: 0, undertimeMinutes: 0, workedMinutes: 0, overtimeMinutes: 0, premiumMinutes: 0, absentDays: 0,
+    lateMinutes: 0, undertimeMinutes: 0, workedMinutes: 0, overtimeMinutes: 0, afterHoursMinutes: 0, premiumMinutes: 0,
+    overBreakMinutes: 0, absentDays: 0, overtimeEligible,
   };
+  const list = (punches || []).filter((p) => p && p.clockIn);
 
-  if (record && record.clockIn) {
+  if (list.length) {
     const premium = isHoliday || !isWorkDay;
-    if (!premium && record.clockIn.getTime() > schedule.start.getTime() + schedule.graceMinutes * 60000) {
-      result.lateMinutes = minutesBetween(schedule.start, record.clockIn);
+    const first = list[0];
+    const open = list.some((p) => !p.clockOut);
+    const closed = list.filter((p) => p.clockOut);
+    if (!premium && first.clockIn.getTime() > schedule.start.getTime() + schedule.graceMinutes * 60000) {
+      result.lateMinutes = minutesBetween(schedule.start, first.clockIn);
     }
-    if (record.clockOut) {
-      const stay = minutesBetween(record.clockIn, record.clockOut);
-      result.workedMinutes = stay > 300 ? Math.max(0, stay - schedule.breakMinutes) : stay;
-      if (premium) {
-        result.premiumMinutes = result.workedMinutes;
-      } else {
-        if (record.clockOut.getTime() < schedule.end.getTime()) result.undertimeMinutes = minutesBetween(record.clockOut, schedule.end);
-        const past = minutesBetween(schedule.end, record.clockOut);
-        if (record.clockOut.getTime() > schedule.end.getTime() && past >= schedule.overtimeMinMinutes) result.overtimeMinutes = past;
-      }
-      result.status = 'present';
-    } else {
+    let worked = closed.reduce((sum, p) => sum + minutesBetween(p.clockIn, p.clockOut), 0);
+    if (list.length === 1 && closed.length === 1 && worked > 300) worked = Math.max(0, worked - schedule.breakMinutes);
+    result.workedMinutes = worked;
+    // time away between stretches
+    let away = 0;
+    for (let i = 1; i < list.length; i += 1) {
+      if (list[i - 1].clockOut) away += minutesBetween(list[i - 1].clockOut, list[i].clockIn);
+    }
+    if (list.length > 1 && !premium && away > schedule.breakMinutes + schedule.graceMinutes) result.overBreakMinutes = away - schedule.breakMinutes;
+
+    if (open) {
       result.status = date < today ? 'incomplete' : 'working';
+      return result;
     }
+    const last = closed[closed.length - 1];
+    if (premium) {
+      if (overtimeEligible) result.premiumMinutes = worked;
+    } else {
+      if (last.clockOut.getTime() < schedule.end.getTime()) result.undertimeMinutes = minutesBetween(last.clockOut, schedule.end);
+      const past = minutesBetween(schedule.end, last.clockOut);
+      if (last.clockOut.getTime() > schedule.end.getTime() && past >= schedule.overtimeMinMinutes) {
+        if (overtimeEligible) result.overtimeMinutes = past; else result.afterHoursMinutes = past;
+      }
+    }
+    result.status = 'present';
     return result;
   }
 
@@ -79,7 +101,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 function totalsFor(days, { paidLeave = new Map(), unpaidLeave = new Map() } = {}) {
   const t = {
     scheduledDays: 0, presentDays: 0, absentDays: 0, paidLeaveDays: 0, unpaidLeaveDays: 0, holidays: 0,
-    lateMinutes: 0, lateCount: 0, undertimeMinutes: 0, workedMinutes: 0, overtimeMinutes: 0, premiumMinutes: 0, incompleteDays: 0,
+    lateMinutes: 0, lateCount: 0, undertimeMinutes: 0, workedMinutes: 0, overtimeMinutes: 0, afterHoursMinutes: 0, premiumMinutes: 0, overBreakMinutes: 0, incompleteDays: 0,
   };
   for (const d of days) {
     if (d.status === 'n/a') continue;
@@ -93,7 +115,9 @@ function totalsFor(days, { paidLeave = new Map(), unpaidLeave = new Map() } = {}
     t.undertimeMinutes += d.undertimeMinutes;
     t.workedMinutes += d.workedMinutes;
     t.overtimeMinutes += d.overtimeMinutes;
+    t.afterHoursMinutes += d.afterHoursMinutes || 0;
     t.premiumMinutes += d.premiumMinutes;
+    t.overBreakMinutes += d.overBreakMinutes || 0;
     t.paidLeaveDays += paidLeave.get(d.date) || 0;
     t.unpaidLeaveDays += unpaidLeave.get(d.date) || 0;
   }

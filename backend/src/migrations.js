@@ -612,7 +612,7 @@ $$`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_work_schedules_name ON work_schedules (LOWER(name))`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_work_schedules_default ON work_schedules (is_default) WHERE is_default`,
   `INSERT INTO work_schedules (name, start_time, end_time, is_default)
-   SELECT 'Regular (9:00 to 18:00)', '09:00', '18:00', true
+   SELECT 'Regular (8:00 to 17:00)', '08:00', '17:00', true
    WHERE NOT EXISTS (SELECT 1 FROM schema_markers WHERE name = 'work_schedule_v1')`,
   `INSERT INTO schema_markers (name) VALUES ('work_schedule_v1') ON CONFLICT DO NOTHING`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS schedule_id INTEGER REFERENCES work_schedules(id) ON DELETE SET NULL`,
@@ -620,14 +620,73 @@ $$`,
      id SERIAL PRIMARY KEY,
      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
      work_date DATE NOT NULL,
-     clock_in TIMESTAMP WITH TIME ZONE NOT NULL,
-     clock_out TIMESTAMP WITH TIME ZONE,
-     source VARCHAR(8) NOT NULL DEFAULT 'self' CHECK (source IN ('self', 'hr')),
+     source VARCHAR(10) NOT NULL DEFAULT 'self' CHECK (source IN ('self', 'hr', 'correction')),
      note VARCHAR(200) NOT NULL DEFAULT '',
      edited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     UNIQUE (user_id, work_date),
-     CHECK (clock_out IS NULL OR clock_out >= clock_in)
+     UNIQUE (user_id, work_date)
    )`,
   `CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(work_date)`,
+
+  // Attendance v2: several clock-ins a day (punches), office networks, devices, position level, corrections
+  `CREATE TABLE IF NOT EXISTS attendance_punches (
+     id SERIAL PRIMARY KEY,
+     record_id INTEGER NOT NULL REFERENCES attendance_records(id) ON DELETE CASCADE,
+     clock_in TIMESTAMP WITH TIME ZONE NOT NULL,
+     clock_out TIMESTAMP WITH TIME ZONE,
+     in_ip VARCHAR(64) NOT NULL DEFAULT '',
+     out_ip VARCHAR(64) NOT NULL DEFAULT '',
+     in_device VARCHAR(64) NOT NULL DEFAULT '',
+     out_device VARCHAR(64) NOT NULL DEFAULT '',
+     CHECK (clock_out IS NULL OR clock_out >= clock_in)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_attendance_punches_record ON attendance_punches(record_id, clock_in)`,
+  `DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'attendance_records' AND column_name = 'clock_in') THEN
+    INSERT INTO attendance_punches (record_id, clock_in, clock_out) SELECT id, clock_in, clock_out FROM attendance_records;
+    ALTER TABLE attendance_records DROP COLUMN clock_in;
+    ALTER TABLE attendance_records DROP COLUMN clock_out;
+    ALTER TABLE attendance_records DROP CONSTRAINT IF EXISTS attendance_records_source_check;
+    ALTER TABLE attendance_records ALTER COLUMN source TYPE VARCHAR(10);
+    ALTER TABLE attendance_records ADD CONSTRAINT attendance_records_source_check CHECK (source IN ('self', 'hr', 'correction'));
+  END IF;
+END
+$$`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS job_level VARCHAR(16) NOT NULL DEFAULT 'rank_and_file' CHECK (job_level IN ('rank_and_file', 'managerial'))`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS remote_clock BOOLEAN NOT NULL DEFAULT false`,
+  `CREATE TABLE IF NOT EXISTS attendance_networks (
+     id SERIAL PRIMARY KEY,
+     label VARCHAR(80) NOT NULL,
+     cidr VARCHAR(64) NOT NULL UNIQUE
+   )`,
+  `CREATE TABLE IF NOT EXISTS attendance_settings (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     network_only BOOLEAN NOT NULL DEFAULT false
+   )`,
+  `INSERT INTO attendance_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS user_devices (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     device_id VARCHAR(64) NOT NULL,
+     name VARCHAR(120) NOT NULL DEFAULT '',
+     first_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     trusted BOOLEAN NOT NULL DEFAULT false,
+     trusted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     UNIQUE (user_id, device_id)
+   )`,
+  `CREATE TABLE IF NOT EXISTS attendance_corrections (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     work_date DATE NOT NULL,
+     punches JSONB NOT NULL,
+     reason VARCHAR(300) NOT NULL,
+     status VARCHAR(12) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+     decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     decided_at TIMESTAMP WITH TIME ZONE,
+     decision_note VARCHAR(300) NOT NULL DEFAULT '',
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_attendance_corrections_status ON attendance_corrections(status, work_date)`,
 ];

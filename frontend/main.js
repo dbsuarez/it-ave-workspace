@@ -348,6 +348,17 @@ async function printHtmlToPdf(html) {
   }
 }
 
+// This installation's identity for attendance: a random id made once, and a readable name. It is sent with every
+// clock-in and clock-out so HR can see when someone clocks in from a device they have not used before.
+handleTrusted('device:get', () => {
+  let id = store.get('deviceId');
+  if (typeof id !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(id)) {
+    id = require('crypto').randomUUID();
+    store.set('deviceId', id);
+  }
+  return { id, name: `${require('os').hostname()} (${process.platform})` };
+});
+
 // Creating accounts from a spreadsheet: the person picks a .csv or .xlsx file, it is read here (never by the page)
 // and only the rows go back. For automated tests only, IAV_TEST_IMPORT_FILE names the file and no dialog is shown.
 handleTrusted('admin:importAccounts', async (event) => {

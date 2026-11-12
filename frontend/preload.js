@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTraySetting: (enabled) => ipcRenderer.invoke('tray:set', enabled),
   showWindow: () => ipcRenderer.invoke('app:showWindow'),
 
+  // This installation's id and name, sent with clock-ins so HR can tell when a new device is used
+  getDevice: () => ipcRenderer.invoke('device:get'),
+
   // Creating accounts from a CSV or Excel file, and saving the issued passwords
   importAccountsFile: () => ipcRenderer.invoke('admin:importAccounts'),
   saveAccountsCsv: (kind, created) => ipcRenderer.invoke('admin:saveCsv', kind, created),

@@ -6828,3 +6828,12 @@ h4.cv-h { font-size: 15px; }
 #moderation-content:not([data-tab="people"]) [data-mod-tab="people"],
 #moderation-content:not([data-tab="signup"]) [data-mod-tab="signup"],
 #moderation-content:not([data-tab="rules"]) [data-mod-tab="rules"] { display: none; }
+
+.nav-personal-label { margin-top: 14px; }
+
+.att-punches { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.att-punch { padding: 2px 10px; border-radius: 999px; background: var(--muted-bg); font-size: 13px; font-weight: 600; }
+.att-warn { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: rgba(245, 158, 11, 0.15); color: #b45309; font-size: 13px; }
+.att-punch-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.att-punch-row input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.emp-remote { align-self: end; }

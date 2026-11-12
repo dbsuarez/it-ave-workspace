@@ -43,7 +43,7 @@ function dateOrNull(value, label) {
 
 const EMPLOYEE_SELECT = `
   SELECT u.id, u.username, u.email, u.last_name, u.first_name, u.middle_name, u.job_title, u.location,
-         u.department_id, u.department, u.manager_id, u.schedule_id, u.employee_no,
+         u.department_id, u.department, u.manager_id, u.schedule_id, u.job_level, u.remote_clock, u.employee_no,
          to_char(u.hire_date, 'YYYY-MM-DD') AS hire_date, to_char(u.separation_date, 'YYYY-MM-DD') AS separation_date,
          u.employment_status, u.employment_type, u.is_hr, u.is_superadmin, u.last_seen, u.created_at,
          u.profile->>'phone' AS phone, u.deactivated_at, u.photo_file, u.photo_updated_at,
@@ -68,6 +68,8 @@ function mapEmployee(row) {
     department: row.department || '',
     managerId: row.manager_id || null,
     scheduleId: row.schedule_id || null,
+    jobLevel: row.job_level,
+    remoteClock: Boolean(row.remote_clock),
     employeeNo: row.employee_no || '',
     hireDate: row.hire_date || null,
     separationDate: row.separation_date || null,
@@ -140,6 +142,14 @@ router.put('/employees/:id', async (req, res) => {
     if (body.employmentStatus !== undefined) {
       if (!STATUSES.includes(body.employmentStatus)) throw fail(400, 'Status must be active, on_leave or resigned');
       set('employment_status', body.employmentStatus);
+    }
+    if (body.jobLevel !== undefined) {
+      if (!['rank_and_file', 'managerial'].includes(body.jobLevel)) throw fail(400, 'Position level must be rank_and_file or managerial');
+      set('job_level', body.jobLevel);
+    }
+    if (body.remoteClock !== undefined) {
+      if (typeof body.remoteClock !== 'boolean') throw fail(400, 'remoteClock must be true or false');
+      set('remote_clock', body.remoteClock);
     }
     if (body.employmentType !== undefined) {
       if (!TYPES.includes(body.employmentType)) throw fail(400, 'Unknown employment type');

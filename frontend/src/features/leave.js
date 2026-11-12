@@ -85,8 +85,9 @@ async function refreshLeaveSummary() {
 function updateLeaveBadges() {
   const badge = document.getElementById('people-badge');
   if (badge) {
-    badge.hidden = !leaveState.waiting;
-    badge.textContent = String(leaveState.waiting);
+    const waiting = leaveState.waiting + (typeof attendanceState !== 'undefined' ? attendanceState.waiting : 0); // leave requests and corrections waiting for me
+    badge.hidden = !waiting;
+    badge.textContent = String(waiting);
   }
 }
 
