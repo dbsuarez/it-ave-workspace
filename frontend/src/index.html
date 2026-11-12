@@ -470,6 +470,7 @@
               <input id="canvas2-editor-title" type="text" maxlength="160" placeholder="Untitled canvas" aria-label="Canvas title">
               <div class="canvas2-editor-actions">
                 <span class="canvas2-status" id="canvas2-status" aria-live="polite">Saved</span>
+                <button class="btn canvas-mode-btn" id="btn-canvas2-request-access" type="button" title="Ask the owner to let you edit this canvas" hidden>Request edit access</button>
                 <button class="btn canvas-mode-btn" id="btn-canvas2-mode" type="button" title="Edit the Markdown source">Markdown</button>
                 <button class="btn canvas-mode-btn" id="btn-canvas2-comments" type="button" title="Comments">Comments</button>
                 <button class="btn canvas-mode-btn" id="btn-canvas2-history" type="button" title="Earlier versions">History</button>
@@ -977,6 +978,7 @@
             <input id="canvas2-share-username" type="text" placeholder="Username to add" aria-label="Username to add as collaborator" autocomplete="off" required>
             <select id="canvas2-share-role" aria-label="Collaborator role">
               <option value="editor">Editor</option>
+              <option value="commenter">Commenter</option>
               <option value="viewer">Viewer</option>
             </select>
             <button class="btn primary" type="submit">Add</button>
@@ -989,6 +991,7 @@
             <select id="canvas2-channel-select" aria-label="Channel to share with"></select>
             <select id="canvas2-channel-role" aria-label="Role for channel members">
               <option value="viewer">Can view</option>
+              <option value="commenter">Can comment</option>
               <option value="editor">Can edit</option>
             </select>
             <button class="btn primary" type="submit">Share</button>

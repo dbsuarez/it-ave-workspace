@@ -29,12 +29,12 @@ function ccBodyHtml(text) {
   return escapeHtml(text).replace(/\n/g, '<br>');
 }
 
-function ccCommentHtml(comment, canEdit) {
+function ccCommentHtml(comment, canComment) {
   const mine = comment.author && state.user && Number(comment.author.id) === Number(state.user.id);
   const who = comment.author ? comment.author.username : 'Deleted user';
   return `<div class="cc-comment">
     <div class="cc-meta"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(ccTime(comment.createdAt))}</span>
-      ${mine && canEdit ? `<button type="button" class="cc-link" data-cc-delete="${comment.id}">Delete</button>` : ''}
+      ${mine && canComment ? `<button type="button" class="cc-link" data-cc-delete="${comment.id}">Delete</button>` : ''}
     </div>
     <div class="cc-body">${ccBodyHtml(comment.body)}</div>
   </div>`;
@@ -45,30 +45,31 @@ function ccRender() {
   const list = document.getElementById('canvas-comments-list');
   if (!view || !list) return;
   const canEdit = view.canEdit;
+  const canComment = view.canComment;
   const all = ccThreads(ccState.comments);
   const shown = all.filter((t) => (ccState.filter === 'all' ? true : ccState.filter === 'resolved' ? t.root.resolved : !t.root.resolved));
   document.getElementById('canvas-comments-filter').value = ccState.filter;
   const composer = document.getElementById('canvas-comments-composer');
-  composer.hidden = !canEdit;
+  composer.hidden = !canComment;
   const anchor = document.getElementById('canvas-comments-anchor');
   anchor.hidden = !ccState.anchor;
   anchor.querySelector('span').textContent = ccState.anchor;
   if (ccState.loading) { list.innerHTML = '<p class="cc-empty">Loading…</p>'; return; }
   if (!shown.length) {
     const none = ccState.filter === 'resolved' ? 'No resolved threads' : ccState.filter === 'all' ? 'No comments yet' : 'No open comments';
-    list.innerHTML = emptyRecordMarkup(none, canEdit && ccState.filter !== 'resolved' ? 'Write the first one above.' : 'Resolved threads show here.', 'compact');
+    list.innerHTML = emptyRecordMarkup(none, canComment && ccState.filter !== 'resolved' ? 'Write the first one above.' : 'Resolved threads show here.', 'compact');
     return;
   }
   list.innerHTML = shown.map(({ root, replies }) => `
     <article class="cc-thread${root.resolved ? ' resolved' : ''}" data-cc-thread="${root.id}">
       ${root.anchor ? `<blockquote class="cc-anchor">${escapeHtml(root.anchor)}</blockquote>` : ''}
-      ${ccCommentHtml(root, canEdit)}
-      ${replies.map((r) => ccCommentHtml(r, canEdit)).join('')}
+      ${ccCommentHtml(root, canComment)}
+      ${replies.map((r) => ccCommentHtml(r, canComment)).join('')}
       ${root.resolved ? `<div class="cc-resolved">Resolved${root.resolvedBy ? ` by ${escapeHtml(root.resolvedBy.username)}` : ''}</div>` : ''}
-      ${canEdit ? `<form class="cc-reply" data-cc-reply="${root.id}">
+      ${canComment ? `<form class="cc-reply" data-cc-reply="${root.id}">
           <input type="text" maxlength="2000" placeholder="Reply…" aria-label="Reply">
           <button class="btn" type="submit">Reply</button>
-          <button class="btn" type="button" data-cc-resolve="${root.id}" data-resolved="${root.resolved ? '1' : '0'}">${root.resolved ? 'Reopen' : 'Resolve'}</button>
+          ${canEdit ? `<button class="btn" type="button" data-cc-resolve="${root.id}" data-resolved="${root.resolved ? '1' : '0'}">${root.resolved ? 'Reopen' : 'Resolve'}</button>` : ''}
         </form>` : ''}
     </article>`).join('');
 }
@@ -123,7 +124,7 @@ async function ccOpen(which, anchor = '') {
     ccState.counts[which] = ccThreads(ccState.comments).filter((t) => !t.root.resolved).length;
     ccUpdateCount(which);
     ccRender();
-    if (view.canEdit) document.getElementById('canvas-comments-input').focus();
+    if (view.canComment) document.getElementById('canvas-comments-input').focus();
   } catch (err) {
     ccState.loading = false;
     document.getElementById('canvas-comments-list').innerHTML = `<p class="cc-empty">${escapeHtml(err.message || 'Could not load comments.')}</p>`;
@@ -146,7 +147,7 @@ async function ccPost(body, parentId) {
 
 // The reading view gets a comment bubble on each block (shown on hover); it quotes that block.
 function ccDecorate(which, container) {
-  if (!canvasViews[which].canEdit) return; // viewers read threads from the header button
+  if (!canvasViews[which].canComment) return; // readers see threads from the header button
   container.querySelectorAll('.cv-block').forEach((block) => {
     if (block.querySelector('.cv-comment-btn')) return;
     const text = (block.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);

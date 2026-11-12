@@ -501,7 +501,7 @@ router.post('/:canvasId/comments', authenticateToken, async (req, res) => {
   try {
     const canvasId = parseId(req.params.canvasId);
     if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
-    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'commenter');
     const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
     if (!body || body.length > MAX_COMMENT_LENGTH) {
       return res.status(400).json({ error: `A comment must be 1 to ${MAX_COMMENT_LENGTH} characters` });
@@ -585,7 +585,7 @@ router.delete('/:canvasId/comments/:commentId', authenticateToken, async (req, r
     const canvasId = parseId(req.params.canvasId);
     const commentId = parseId(req.params.commentId);
     if (canvasId === null || commentId === null) return res.status(400).json({ error: 'Canvas and comment IDs must be valid' });
-    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'commenter');
     const found = await query('SELECT id, user_id FROM canvas_comments WHERE id = $1 AND canvas_id = $2', [commentId, canvasId]);
     if (found.rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
     const me = Number(req.user.userId);
@@ -699,7 +699,7 @@ router.post('/:canvasId/collaborators', authenticateToken, async (req, res) => {
     if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
     const username = typeof req.body?.username === 'string' ? req.body.username.trim().toLowerCase() : null;
     if (!username) return res.status(400).json({ error: 'Username is required' });
-    const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
+    const role = req.body?.role === 'viewer' ? 'viewer' : req.body?.role === 'commenter' ? 'commenter' : 'editor';
     const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
     if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases can have collaborators' });
     if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can add collaborators' });
@@ -883,8 +883,8 @@ router.put('/:canvasId/channels/:channelId', authenticateToken, async (req, res)
     const canvasId = parseId(req.params.canvasId);
     const channelId = parseId(req.params.channelId);
     if (canvasId === null || channelId === null) return res.status(400).json({ error: 'Canvas and channel IDs must be valid numbers' });
-    const role = req.body?.role === 'editor' ? 'editor' : req.body?.role === 'viewer' ? 'viewer' : null;
-    if (!role) return res.status(400).json({ error: 'role must be viewer or editor' });
+    const role = ['viewer', 'commenter', 'editor'].includes(req.body?.role) ? req.body.role : null;
+    if (!role) return res.status(400).json({ error: 'role must be viewer, commenter or editor' });
     const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'editor');
     if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only standalone canvases are shared with channels' });
     if (canvasOwnerId(canvas) !== Number(req.user.userId)) return res.status(403).json({ error: 'Only the owner can share this canvas with a channel' });
@@ -1001,6 +1001,35 @@ router.delete('/:canvasId/shares/:shareId', authenticateToken, async (req, res) 
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Revoke share error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/canvas/:id/access-request - someone who can only read (or comment on) a canvas asks its owner for edit access.
+// The owner gets it in Activity. One request per person per canvas per hour.
+router.post('/:canvasId/access-request', authenticateToken, async (req, res) => {
+  try {
+    const canvasId = parseId(req.params.canvasId);
+    if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
+    const canvas = await ensureCanvasAccess(query, req.user.userId, canvasId, 'viewer');
+    if (canvas.kind !== 'standalone') return res.status(400).json({ error: 'Only personal canvases have owners who can grant access' });
+    const role = await getStandaloneCanvasRole(query, req.user.userId, canvas);
+    if (role === 'owner' || role === 'editor') return res.status(400).json({ error: 'You can already edit this canvas' });
+    const ownerId = canvasOwnerId(canvas);
+    if (!ownerId) return res.status(400).json({ error: 'This canvas has no owner to ask' });
+    const recent = await query(
+      "SELECT 1 FROM canvas_mentions WHERE canvas_id = $1 AND actor_id = $2 AND source = 'access' AND created_at > NOW() - INTERVAL '1 hour' LIMIT 1",
+      [canvasId, req.user.userId]
+    );
+    if (recent.rows.length > 0) return res.status(429).json({ error: 'You already asked the owner a moment ago' });
+    const note = typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 160) : '';
+    await canvasMentions.deliver({
+      query, io: req.io, canvas, actorId: req.user.userId, userIds: [ownerId], source: 'access', snippet: note,
+    });
+    res.json({ requested: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Canvas access request error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

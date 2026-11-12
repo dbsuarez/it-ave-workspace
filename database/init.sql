@@ -386,7 +386,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_canvases_dm ON canvases(dm_user_low, dm_us
 CREATE TABLE IF NOT EXISTS canvas_collaborators (
      canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-     role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'editor')),
+     role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'commenter', 'editor')),
      granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      PRIMARY KEY (canvas_id, user_id)
@@ -406,7 +406,7 @@ CREATE INDEX IF NOT EXISTS idx_canvas_shares_token ON canvas_shares(token);
 CREATE TABLE IF NOT EXISTS canvas_channel_grants (
      canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
      channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-     role VARCHAR(16) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'editor')),
+     role VARCHAR(16) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'commenter', 'editor')),
      granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      PRIMARY KEY (canvas_id, channel_id)

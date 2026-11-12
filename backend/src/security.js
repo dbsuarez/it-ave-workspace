@@ -226,7 +226,8 @@ function canvasOwnerId(canvas) {
   return id === null || id === undefined ? null : Number(id);
 }
 
-const CANVAS_ROLE_RANK = { viewer: 1, editor: 2, owner: 3 };
+// viewer reads; commenter reads and comments; editor also changes the page; owner also shares and deletes
+const CANVAS_ROLE_RANK = { viewer: 1, commenter: 2, editor: 3, owner: 4 };
 
 async function isGuestAccount(query, userId) {
   const result = await query('SELECT account_type FROM users WHERE id = $1', [userId]);
@@ -250,7 +251,7 @@ async function getStandaloneCanvasRole(query, userId, canvas) {
   );
   let channelRole = null;
   if (granted.rows.length > 0) {
-    channelRole = granted.rows.some((row) => row.role === 'editor') ? 'editor' : 'viewer';
+    channelRole = granted.rows.map((row) => row.role).reduce((best, role) => (CANVAS_ROLE_RANK[role] > CANVAS_ROLE_RANK[best] ? role : best));
     if (channelRole === 'editor' && await isGuestAccount(query, userId)) channelRole = 'viewer';
   }
   const roles = [personal.rows[0]?.role, channelRole].filter(Boolean);
@@ -259,7 +260,7 @@ async function getStandaloneCanvasRole(query, userId, canvas) {
 }
 
 // Returns the canvas row when userId meets the access requirements.
-// neededRole is 'viewer' (default) or 'editor'.
+// neededRole is 'viewer' (default), 'commenter' or 'editor'.
 async function ensureCanvasAccess(query, userId, canvasId, neededRole = 'viewer') {
   if (!userId || !canvasId) {
     const err = new Error('Missing canvas information');
@@ -275,8 +276,8 @@ async function ensureCanvasAccess(query, userId, canvasId, neededRole = 'viewer'
       err.status = 404;
       throw err;
     }
-    // Guests may read channel and DM canvases but not change them.
-    if (neededRole === 'editor' && await isGuestAccount(query, userId)) {
+    // Guests may read channel and DM canvases but not change or comment on them.
+    if ((neededRole === 'editor' || neededRole === 'commenter') && await isGuestAccount(query, userId)) {
       const err = new Error('Guests have view-only access to canvases');
       err.status = 403;
       throw err;
@@ -289,8 +290,8 @@ async function ensureCanvasAccess(query, userId, canvasId, neededRole = 'viewer'
     err.status = 404;
     throw err;
   }
-  if (neededRole === 'editor' && role === 'viewer') {
-    const err = new Error('Viewer access only');
+  if (CANVAS_ROLE_RANK[role] < (CANVAS_ROLE_RANK[neededRole] || 1)) {
+    const err = new Error(neededRole === 'commenter' ? 'You can only read this canvas' : role === 'commenter' ? 'Comment access only' : 'Viewer access only');
     err.status = 403;
     throw err;
   }

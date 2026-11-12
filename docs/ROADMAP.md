@@ -376,3 +376,7 @@ board view for Lists and per-list access levels were deliberately left out (see 
 - Desktop app must be launched via `D:\Development\itavenue-workspace\frontend\start.cmd`,
   never via plain `npm start` (Electron would run as Node.js).
 - `--remote-debugging-port=9222` on the Electron launch line enables CDP-driven testing.
+
+## Canvas comment-only role and edit-access requests (2026-11-12)
+
+Canvas roles are now viewer, commenter, editor, owner. A commenter reads and comments (cannot edit, resolve threads or share); it can be granted to a person or a channel. A reader can press **Request edit access** and the owner gets it in Activity (one request per person per canvas per hour). Guests stay view-only on channel and direct-message canvases. Share links stay viewer/editor. Tests: `backend/test/canvas-commenter.test.js`. Board view for Lists and per-list access levels remain deliberately out of scope.

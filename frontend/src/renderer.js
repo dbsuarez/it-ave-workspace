@@ -4763,7 +4763,7 @@ function renderCanvas2StandaloneList() {
     if (Number(canvas2StandaloneState.activeId) === Number(canvas.id)) btn.classList.add('active');
     btn.dataset.canvas2Id = String(canvas.id);
     btn.innerHTML = `<div class="canvas2-list-item-title">${escapeHtml(canvas.title || 'Untitled canvas')}</div>
-      <div class="canvas2-list-item-meta">${escapeHtml(canvas.myRole === 'owner' ? 'Private' : canvas.myRole === 'editor' ? 'Editor' : 'Viewer')} · ${shortTime(canvas.updatedAt)}</div>`;
+      <div class="canvas2-list-item-meta">${escapeHtml(canvas.myRole === 'owner' ? 'Private' : canvas.myRole === 'editor' ? 'Editor' : canvas.myRole === 'commenter' ? 'Commenter' : 'Viewer')} · ${shortTime(canvas.updatedAt)}</div>`;
     listEl.appendChild(btn);
   }
 }
@@ -4801,9 +4801,9 @@ async function openCanvas2Standalone(id) {
     if (editor) editor.readOnly = !canEdit;
     showCanvas2EditorPane();
     renderCanvas2StandaloneList();
-    setCanvas2StandaloneStatus(canEdit ? 'Saved' : 'Read-only');
+    setCanvas2StandaloneStatus(canEdit ? 'Saved' : canvas.myRole === 'commenter' ? 'Comment only' : 'Read-only');
     if (state.socket) state.socket.emit('join_canvas', canvas.id);
-    canvasViewOpened('standalone', { canEdit, hasContent: Boolean((editor ? editor.value : '').trim()) });
+    canvasViewOpened('standalone', { canEdit, canComment: canEdit || canvas.myRole === 'commenter', canRequest: !canEdit, hasContent: Boolean((editor ? editor.value : '').trim()) });
   } catch (err) {
     console.error('Open standalone canvas error:', err);
     showToast(err.message || 'Could not open the canvas.', 'error');
@@ -4966,7 +4966,7 @@ async function loadCanvas2ChannelGrants(isOwner) {
     for (const g of granted) {
       const row = document.createElement('li');
       row.className = 'canvas2-share-row';
-      row.innerHTML = `<span class="canvas2-share-row-name">#${escapeHtml(g.name)}</span><span class="canvas2-share-row-role">${g.role === 'editor' ? 'can edit' : 'can view'}</span>${isOwner ? `<button class="canvas2-share-row-remove" type="button" data-canvas2-remove-channel="${g.channelId}">Remove</button>` : ''}`;
+      row.innerHTML = `<span class="canvas2-share-row-name">#${escapeHtml(g.name)}</span><span class="canvas2-share-row-role">${g.role === 'editor' ? 'can edit' : g.role === 'commenter' ? 'can comment' : 'can view'}</span>${isOwner ? `<button class="canvas2-share-row-remove" type="button" data-canvas2-remove-channel="${g.channelId}">Remove</button>` : ''}`;
       list.appendChild(row);
     }
     if (select) {
@@ -5278,6 +5278,19 @@ document.addEventListener('click', (event) => {
     event.stopPropagation();
     copyCanvas2ShareLink();
     return;
+  }
+});
+
+document.getElementById('btn-canvas2-request-access')?.addEventListener('click', async () => {
+  const id = canvas2StandaloneState.activeId;
+  if (!id) return;
+  try {
+    const res = await api(`/api/canvas/${id}/access-request`, { method: 'POST', body: JSON.stringify({}) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not send the request');
+    showToast('Asked the owner for edit access.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Could not send the request.', 'error');
   }
 });
 

@@ -18,6 +18,7 @@ const canvasViews = {
     flush: () => clearTimeout(canvas2State.saveTimer),
     saving: () => canvas2State.saving,
     canEdit: true,
+    canComment: true,
   },
   standalone: {
     mode: 'edit', revision: null,
@@ -31,6 +32,7 @@ const canvasViews = {
     flush: () => clearTimeout(canvas2StandaloneState.saveTimer),
     saving: () => canvas2StandaloneState.saving,
     canEdit: true,
+    canComment: true,
   },
 };
 
@@ -59,9 +61,12 @@ async function cvwLoadImages(container) {
 
 // Called by renderer.js when a canvas has just been opened in one of the editors.
 // The canvas opens as the editable page (features/canvas-wysiwyg.js); the button switches to the Markdown source.
-function canvasViewOpened(which, { canEdit }) {
+function canvasViewOpened(which, { canEdit, canComment = canEdit, canRequest = false }) {
   const view = canvasViews[which];
   view.canEdit = canEdit;
+  view.canComment = canComment; // a comment-only role can write comments but not change the page
+  const request = document.getElementById('btn-canvas2-request-access');
+  if (which === 'standalone' && request) request.hidden = !canRequest;
   const button = view.modeButton();
   if (button) button.hidden = !canEdit;
   cvwShow(which, 'read');

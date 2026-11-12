@@ -177,6 +177,7 @@ function activityCanvasSentence(item, html) {
   const wrap = (text) => (html ? `<strong>${escapeHtml(text)}</strong>` : text);
   const actor = wrap(item.actorUsername || 'Someone');
   const label = wrap(activityCanvasLabel(item));
+  if (item.source === 'access') return `${actor} asked for edit access to ${label}`;
   if (item.source === 'reply') return `${actor} replied to your comment on ${label}`;
   if (item.source === 'comment') return `${actor} mentioned you in a comment on ${label}`;
   return `${actor} mentioned you in the canvas ${label}`;

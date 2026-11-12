@@ -140,7 +140,7 @@ module.exports = [
     CREATE TABLE IF NOT EXISTS canvas_collaborators (
       canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'editor')),
+      role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer', 'commenter', 'editor')),
       granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       PRIMARY KEY (canvas_id, user_id)
@@ -361,7 +361,7 @@ module.exports = [
   `CREATE TABLE IF NOT EXISTS canvas_channel_grants (
      canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
      channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-     role VARCHAR(16) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'editor')),
+     role VARCHAR(16) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'commenter', 'editor')),
      granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      PRIMARY KEY (canvas_id, channel_id)
@@ -453,6 +453,20 @@ BEGIN
       ON CONFLICT DO NOTHING;
 
     INSERT INTO schema_markers (name) VALUES ('lists_typed_v1');
+  END IF;
+END
+$$`,
+
+  // A comment-only level between viewer and editor (older databases have the two-value check)
+  `DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'canvas_collaborators_role_check' AND pg_get_constraintdef(oid) NOT LIKE '%commenter%') THEN
+    ALTER TABLE canvas_collaborators DROP CONSTRAINT canvas_collaborators_role_check;
+    ALTER TABLE canvas_collaborators ADD CONSTRAINT canvas_collaborators_role_check CHECK (role IN ('viewer', 'commenter', 'editor'));
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'canvas_channel_grants_role_check' AND pg_get_constraintdef(oid) NOT LIKE '%commenter%') THEN
+    ALTER TABLE canvas_channel_grants DROP CONSTRAINT canvas_channel_grants_role_check;
+    ALTER TABLE canvas_channel_grants ADD CONSTRAINT canvas_channel_grants_role_check CHECK (role IN ('viewer', 'commenter', 'editor'));
   END IF;
 END
 $$`,
