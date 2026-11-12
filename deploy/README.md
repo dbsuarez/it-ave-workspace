@@ -6,6 +6,7 @@ and the backend. Each extra is a Compose **profile** you switch on when you need
 | You want | Turn on | Section |
 |----------|---------|---------|
 | HTTPS (encrypted traffic) | `--profile tls` | [HTTPS](#https) |
+| HTTPS on this computer for development | `--profile tls` + mkcert | [Local HTTPS with mkcert](#local-https-with-mkcert) |
 | Backups that run by themselves | `--profile backup` | [Scheduled backups](#scheduled-backups) |
 | Calls that work across restrictive networks | `--profile turn` | [Calls across firewalls (TURN)](#calls-across-firewalls-turn) |
 | A signed Windows installer | `CSC_LINK` + `npm run dist` | [Signing the installer](#signing-the-installer) |
@@ -39,6 +40,42 @@ docker compose --profile tls up -d proxy
 
 Check it worked: open `https://your-address/api/health` in a browser; it should say `{"status":"ok"}` with a lock
 icon and no warning.
+
+## Local HTTPS with mkcert
+
+For development on your own computer (and a phone on the same Wi-Fi) you can have real, trusted HTTPS without a
+domain. [mkcert](https://github.com/FiloSottile/mkcert) makes a small certificate authority that only this computer
+trusts, and a certificate signed by it. The service worker and web push of the phone app need this, and it is a
+rehearsal for the real domain.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\local-https.ps1
+```
+
+The script installs mkcert (winget), adds its authority to your trust store (Windows asks you to confirm), makes
+`deploy\certs\local.pem` and `local-key.pem` for `localhost`, `127.0.0.1` and this computer's LAN addresses, and prints
+the lines to put in `.env`:
+
+```
+CADDYFILE=./deploy/Caddyfile.local
+LOCAL_SITE_ADDRESSES=https://localhost, https://127.0.0.1, https://192.168.18.63
+PROXY_HTTPS_PORT=8443
+```
+
+Then `docker compose --profile tls up -d proxy` and open `https://localhost:8443/api/health`.
+
+- **Port 8443** is used because something else (XAMPP's Apache here) already holds 443. If 443 is free on your
+  machine, leave `PROXY_HTTPS_PORT` out.
+- **Desktop app:** set the server address on the sign-in window to `https://localhost:8443`. The app uses the Windows
+  trust store, so no warning appears. For development you can also start it with `API_BASE` and `SOCKET_URL` set to
+  that address.
+- **Phone:** the phone does not trust your authority yet. Send it `rootCA.pem` (its folder is printed by
+  `mkcert -CAROOT`), install it as a CA certificate (Android: Settings, Security, Encryption and credentials, Install
+  a certificate, CA certificate; iPhone: open the file, install the profile, then Settings, General, About,
+  Certificate Trust Settings, switch it on), then open `https://<this computer's LAN address>:8443/m/`.
+- **Keep `deploy\certs\local-key.pem` private** (git ignores the folder) and never share `rootCA-key.pem`: whoever has
+  it can make certificates your computer trusts. The certificate lasts about two years; run the script again to renew.
+- This is for development only. Real deployments use the Caddy setup above with a real domain.
 
 ## Scheduled backups
 

@@ -11,3 +11,6 @@ dist/
 build/
 # Local backups (copy them off this machine; never commit)
 backups/
+
+# Local HTTPS certificates made by deploy/local-https.ps1 (private key: never commit)
+deploy/certs/

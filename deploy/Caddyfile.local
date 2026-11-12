@@ -1,0 +1,30 @@
+# HTTPS for development on this machine, with a certificate made by mkcert (see deploy/README.md, "Local HTTPS with mkcert").
+# Used instead of deploy/Caddyfile when CADDYFILE=./deploy/Caddyfile.local is set in .env. The certificate and key are
+# read from deploy/certs/ (made by deploy/local-https.ps1; never committed). The addresses come from LOCAL_SITE_ADDRESSES,
+# for example "https://localhost, https://127.0.0.1, https://192.168.18.63".
+{
+	# the proxy is published on a non-standard port here (PROXY_HTTPS_PORT), so do not redirect http to the standard one
+	auto_https disable_redirects
+	# a client that opens an address like https://192.168.18.63 sends no host name (SNI): serve the same certificate, whose
+	# list of names includes the addresses
+	default_sni localhost
+}
+
+{$LOCAL_SITE_ADDRESSES:https://localhost} {
+	tls /certs/local.pem /certs/local-key.pem
+	encode zstd gzip
+
+	# no Strict-Transport-Security here: browsers apply it to the whole host name (localhost), port included or not,
+	# which would break plain http://localhost:3001 for as long as it is remembered
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	request_body {
+		max_size 60MB
+	}
+
+	reverse_proxy backend:3001
+}
