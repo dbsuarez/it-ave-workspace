@@ -61,10 +61,11 @@ function renderPeople() {
   const tabsRow = document.getElementById('people-tabs-row');
   if (!title || !actions) return;
   if (peopleState.pageId !== null) {
-    if (tabsRow) tabsRow.hidden = true;
+    // the back button sits at the left, under the title, where people look for it
+    if (tabsRow) { tabsRow.hidden = false; tabsRow.innerHTML = '<button type="button" class="btn pp-back" data-people-back>← People</button>'; }
     title.textContent = peopleState.page ? personName(peopleState.page.person) : 'Person';
     sub.textContent = 'Employee page';
-    actions.innerHTML = '<button type="button" class="btn" data-people-back>← People</button>';
+    actions.innerHTML = '';
     renderPersonPage();
     return;
   }
