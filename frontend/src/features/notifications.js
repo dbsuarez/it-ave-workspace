@@ -70,6 +70,8 @@ function notifyUser(kind, text, payload, options = {}) {
       // silent: the app plays its own sound (above), so the system does not add a second one
       const notification = new Notification('IT Avenue Workspace', { body: text, silent: true });
       notification.onclick = () => {
+        // bring the window back, also when it is hidden in the system tray
+        if (window.electronAPI?.showWindow) window.electronAPI.showWindow().catch(() => {});
         window.focus();
         if ((payload?.channelId && payload?.messageId) || payload?.canvasId) openActivityItem(payload);
       };

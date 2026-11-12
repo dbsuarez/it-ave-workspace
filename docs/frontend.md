@@ -177,6 +177,13 @@ computer (`preferences:<id>`). The account setting "Play a sound for notificatio
 turns sounds off, and Do Not Disturb silences them. The system notification is sent silent so the
 app's own sound is not doubled. A burst of messages makes one sound (0.7 s gap).
 
+**Running in the background.** Closing the window hides the app to the **system tray** instead of quitting, so
+messages, mentions and incoming calls keep arriving, and a notification brings the window back. Right-click the
+tray icon for *Open* and *Quit*. It tells you once where the app went. Turn it off in Preferences ("Keep running
+in the system tray when I close the window"); then closing the window quits. Signing out closes it for real, and
+starting the app again brings the running copy forward (`main.js`: `closeToTray` setting, `tray:get` / `tray:set`
+and `app:showWindow`).
+
 ## One-to-one huddles
 
 The **Huddle** button on a profile card (or answering a call) starts a huddle between two people:

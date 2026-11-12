@@ -629,6 +629,12 @@ function openProfileModal() {
 function openPreferencesModal() {
   document.getElementById('preference-theme').value = state.preferences.theme;
   document.getElementById('preference-enter-to-send').checked = state.preferences.enterToSend;
+  if (window.electronAPI?.getTraySetting) {
+    window.electronAPI.getTraySetting().then((tray) => {
+      document.getElementById('preference-close-to-tray').checked = Boolean(tray && tray.enabled);
+      document.getElementById('preference-tray-row').hidden = false;
+    }).catch(() => {});
+  }
   fillNotificationSettingsForm();
   openSettingsModal(els.preferencesModal);
 }
@@ -672,6 +678,10 @@ async function savePreferences(event) {
   };
   try {
     await electronAPI.storeSet(preferenceStorageKey(), state.preferences);
+    const trayRow = document.getElementById('preference-tray-row');
+    if (trayRow && !trayRow.hidden && window.electronAPI?.setTraySetting) {
+      await window.electronAPI.setTraySetting(document.getElementById('preference-close-to-tray').checked);
+    }
     applyPreferences();
     await saveNotificationSettingsFromForm();
     closeSettingsModal();

@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setServerUrl: (url) => ipcRenderer.invoke('config:setServer', url),
   resetServerUrl: () => ipcRenderer.invoke('config:resetServer'),
 
+  // Keep running in the system tray when the window is closed, and bring the window back
+  getTraySetting: () => ipcRenderer.invoke('tray:get'),
+  setTraySetting: (enabled) => ipcRenderer.invoke('tray:set', enabled),
+  showWindow: () => ipcRenderer.invoke('app:showWindow'),
+
   // Canvas export: PDF, Word or Markdown. The main process asks where to save it.
   exportCanvas: (request) => ipcRenderer.invoke('canvas:export', request),
 

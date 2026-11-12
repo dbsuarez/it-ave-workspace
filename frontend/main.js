@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell, desktopCapturer, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, session, shell, desktopCapturer, nativeImage, clipboard, Tray } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const { normalizeServerUrl, resolveServerConfig } = require('./server-config');
@@ -15,6 +15,45 @@ const store = new Store();
 
 let mainWindow;
 let loginWindow;
+let tray = null;
+let quitting = false;        // the app is really closing (Quit, or the system is shutting down)
+let closeForReal = false;    // set while signing out, so the main window closes instead of hiding to the tray
+
+// Closing the window hides the app to the system tray instead of quitting, so messages, mentions and calls
+// keep arriving (and notify) while it is out of sight. Turn this off in Preferences.
+function trayEnabled() {
+  return store.get('closeToTray') !== false;
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  return true;
+}
+
+function ensureTray() {
+  if (tray && !tray.isDestroyed()) return;
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'src', 'assets', 'icon.png')).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip('IT Avenue Workspace');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open IT Avenue Workspace', click: () => { if (!showMainWindow() && store.get('authToken')) createWindow(); } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', () => { if (!showMainWindow() && store.get('authToken')) createWindow(); });
+}
+
+// Only one copy of the app per profile: starting it again brings the running one forward.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => { showMainWindow(); });
+}
+
+app.on('before-quit', () => { quitting = true; });
 
 // Remove the native application menu entirely. All menu functions are exposed
 // through the in-app hamburger menu instead.
@@ -47,6 +86,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // keep receiving messages and ringing while hidden in the tray
     },
     icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
     title: 'IT Avenue Workspace',
@@ -60,6 +100,19 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  ensureTray();
+
+  mainWindow.on('close', (event) => {
+    if (quitting || closeForReal || !trayEnabled()) return;
+    event.preventDefault();
+    mainWindow.hide();
+    // once, say where the app went
+    if (!store.get('trayHintShown') && tray && typeof tray.displayBalloon === 'function') {
+      store.set('trayHintShown', true);
+      tray.displayBalloon({ title: 'IT Avenue Workspace is still running', content: 'It stays in the system tray so you keep getting messages. Right-click the icon to quit.' });
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -252,14 +305,25 @@ handleTrusted('config:resetServer', (event) => {
 handleTrusted('auth:logout', (event) => {
   store.delete('authToken');
   store.delete('user');
+  closeForReal = true; // signing out closes the window for real
 
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
   createLoginWindow();
   setTimeout(() => {
     if (sourceWindow && !sourceWindow.isDestroyed()) sourceWindow.close();
+    closeForReal = false;
   }, 0);
   return true;
 });
+
+// The "keep running in the tray" choice, and bringing the window back (from a notification, for example).
+handleTrusted('tray:get', () => ({ enabled: trayEnabled() }));
+handleTrusted('tray:set', (event, enabled) => {
+  if (typeof enabled !== 'boolean') throw new Error('Expected true or false');
+  store.set('closeToTray', enabled);
+  return { enabled };
+});
+handleTrusted('app:showWindow', () => showMainWindow());
 
 // Prints a self-contained HTML page to PDF in a hidden window with scripts off, no network and no access to
 // the app's session.
