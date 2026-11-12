@@ -3,7 +3,9 @@
 // The Owner gets a one-hour token for that person with a `viewAs` claim (the Owner's own id). Such a token is READ-ONLY and
 // limited to what the roles decide (channels, channel messages, people, lists, channel canvases): anything that writes is
 // refused, and so is everything private to the person (direct messages, notes, saved items, reminders, search, files
-// they sent, their leave and attendance). The live socket refuses these tokens, so nothing is received or marked online
+// they sent, their leave and attendance). The live socket accepts these tokens only as listen-only
+// (sockets/chat.js): the person's channels update live, but nothing comes from their personal room and they are never
+// shown online or acted as.
 // as them. Rules here are pure (test/view-as.test.js); middleware/auth.js applies them.
 
 const VIEW_AS_MINUTES = 60;

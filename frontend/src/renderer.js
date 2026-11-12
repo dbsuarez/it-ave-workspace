@@ -271,6 +271,7 @@ async function init() {
     if (viewing) {
       // View as: read-only, no live connection, and none of the person's private things (see features/view-as.js)
       applyViewAsMode(viewing);
+      connectSocket(); // listen-only: the server joins it to the person's channels, never as them
       loadChannels();
       loadUsers();
       loadModerationAccess();
@@ -1358,6 +1359,8 @@ async function loadChannels() {
     if (!res.ok) throw new Error(data.error || 'Failed to load channels');
 
     state.channels = data.channels;
+    // View as listens to every channel the person is in, so what they see updates live
+    if (state.viewAs && state.socket) state.channels.forEach((channel) => state.socket.emit('join_channel', channel.id));
     renderSidebar();
     renderHuddleView();
     if (state.section === 'lists') populateListsChannelSelect();

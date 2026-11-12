@@ -167,6 +167,10 @@ module.exports = (io, socket) => {
   // The account this connection has claimed. Set before any await so two racing
   // `authenticate` events cannot both succeed as different people.
   let claimedUserId = null;
+  // View as (an Owner looking through someone's eyes): a listen-only connection. It receives the channel rooms the person
+  // is in, so what they see updates live, but it is never signed in as them: no presence, no personal room (their DMs and
+  // notifications), and every action below refuses because currentUserId stays null.
+  let watchUserId = null;
   let huddleChannelId = null;
   let huddleJoining = false;
   let huddleJoinGeneration = 0;
@@ -193,9 +197,17 @@ module.exports = (io, socket) => {
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
       if (decoded.viewAs) {
-        // View as is read-only and never joins the live connection (it would show them online and receive their messages)
-        socket.emit('auth_error', { error: 'View as does not use the live connection' });
-        socket.disconnect();
+        const { query: watchQuery } = require('../db');
+        const owner = await watchQuery('SELECT 1 FROM users WHERE id = $1 AND is_superadmin = TRUE AND deactivated_at IS NULL', [decoded.viewAs]);
+        const person = await watchQuery('SELECT token_version FROM users WHERE id = $1 AND deactivated_at IS NULL', [decoded.userId]);
+        if (!owner.rows.length || !person.rows.length || Number(person.rows[0].token_version || 0) !== Number(decoded.tokenVersion || 0)) {
+          socket.emit('auth_error', { error: 'Session expired; sign in again' });
+          socket.disconnect();
+          return;
+        }
+        watchUserId = decoded.userId;
+        socket.data.watching = decoded.userId;
+        socket.emit('authenticated', { userId: decoded.userId, username: decoded.username, viewAs: true });
         return;
       }
 
@@ -249,10 +261,11 @@ module.exports = (io, socket) => {
 
   // Join a channel room
   socket.on('join_channel', async (channelId) => {
-    if (!currentUserId) return;
+    const actingUser = currentUserId || watchUserId; // a View as connection may listen to the person's channels
+    if (!actingUser) return;
     try {
       const { query } = require('../db');
-      await ensureChannelMembership(query, currentUserId, channelId);
+      await ensureChannelMembership(query, actingUser, channelId);
       socket.join(`channel_${channelId}`);
       socket.emit('joined_channel', { channelId });
     } catch (err) {

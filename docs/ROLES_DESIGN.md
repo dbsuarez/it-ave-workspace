@@ -138,3 +138,13 @@ channels, channel messages, people, groups, lists and channel canvases, and ever
 refuses it, so nothing is received or shown online as them; it stops working if the Owner who started it stops being
 an Owner; starting it is written to the audit log (`view_as_started`). Not available for another Owner. The Owner's own
 sign-in is kept in the `viewAsReturn` store key and restored by Exit.
+
+**View as is live (2026-11-12):** the viewing session keeps a listen-only socket (`watchUserId` in `sockets/chat.js`): it
+joins only the channel rooms the person is in, so new messages, reactions and permission changes appear without
+reloading; it never joins their personal room (DMs, notifications), never marks them online, and every action is refused.
+
+**Go-live switch (2026-11-12):** Moderation > Rules and audit log > Launch mode (`backend/src/launch.js`,
+`/api/admin/launch`). Pre-launch is today's relaxed testing mode; **Go live** (after a confirmation) turns the shared test
+password off and makes everyone choose their own, and limits clocking to the office networks, and it is refused while an
+office network is not listed. The card also lists warnings: not on https, a proxy without TRUST_PROXY, a short or default
+JWT_SECRET, CORS open to every site. Return to pre-launch relaxes clocking but never brings the shared password back.
