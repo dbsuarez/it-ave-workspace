@@ -92,3 +92,10 @@ check `manage_workspace`, `view_audit_log` and `manage_channels`; the HR routes 
 (`requireHr`); channel-moderator checks accept a role with `manage_messages`. Still on the old flags: posting rules,
 message and file deletion, canvases, the places that read `is_hr`/`is_superadmin` directly (leave and attendance scope,
 people), and the sockets.
+
+**Phase 2 done (first version):** `/api/roles` (list, create, edit, delete, move up/down, give custom roles to a person)
+with the hierarchy rules in `backend/src/roles.js` (you manage only roles below your own and grant only permissions you
+hold; Owner is untouchable; HR and Everyone keep their names but their permissions are editable) and an audit entry for
+every change. Moderation has a **Roles** tab (Superadmin only for now): the ranked list, New role / Edit with a
+permission checklist, and "Give roles to a person". Still to do in phase 2: role chips on the person's record, and
+showing the Roles tab to anyone whose role grants `manage_roles`. Phase 3 (channel overrides screen) is next.

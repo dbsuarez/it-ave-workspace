@@ -2457,7 +2457,7 @@ async function loadModerationView() {
     ? Number(state.moderation.channel.id) : Number(channels[0].id);
   // Moderation is split into tabs for the Superadmin; a channel moderator only has Channels.
   const tabs = state.moderation.isSuperadmin
-    ? [['channels', 'Channels'], ['people', 'People and groups'], ['signup', 'Sign-up and invitations'], ['rules', 'Rules and audit log']] : [];
+    ? [['channels', 'Channels'], ['people', 'People and groups'], ['signup', 'Sign-up and invitations'], ['roles', 'Roles'], ['rules', 'Rules and audit log']] : [];
   if (!tabs.some(([key]) => key === state.moderation.tab)) state.moderation.tab = 'channels';
   container.dataset.tab = state.moderation.tab;
   container.innerHTML = `
@@ -2480,7 +2480,8 @@ async function loadModerationView() {
       <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
     </div>` : ''}
     <div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>
-    ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit" data-mod-tab="rules"></div>' : ''}`;
+    ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit" data-mod-tab="rules"></div><div id="moderation-roles" data-mod-tab="roles"></div>' : ''}`;
+  if (state.moderation.isSuperadmin && state.moderation.tab === 'roles') loadRolesPanel();
   if (state.moderation.isSuperadmin) {
     try {
       const response = await api('/api/moderation/settings');
@@ -2595,6 +2596,7 @@ async function handleModerationClick(event) {
     const host = document.getElementById('moderation-content');
     if (host) host.dataset.tab = state.moderation.tab;
     host?.querySelectorAll('[data-mod-tab-button]').forEach((b) => b.classList.toggle('active', b === tabButton));
+    if (state.moderation.tab === 'roles') loadRolesPanel();
     return;
   }
   const button = event.target.closest('[data-action]');

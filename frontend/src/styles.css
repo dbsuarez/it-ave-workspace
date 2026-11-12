@@ -6827,6 +6827,7 @@ h4.cv-h { font-size: 15px; }
 #moderation-content:not([data-tab="channels"]) [data-mod-tab="channels"],
 #moderation-content:not([data-tab="people"]) [data-mod-tab="people"],
 #moderation-content:not([data-tab="signup"]) [data-mod-tab="signup"],
+#moderation-content:not([data-tab="roles"]) [data-mod-tab="roles"],
 #moderation-content:not([data-tab="rules"]) [data-mod-tab="rules"] { display: none; }
 
 .nav-personal-label { margin-top: 14px; }
@@ -6896,3 +6897,24 @@ h4.cv-h { font-size: 15px; }
 .file-card .preview { height: 130px; }
 .file-card .preview.has-thumb { background-size: cover; background-position: center; background-repeat: no-repeat; }
 .later-file-icon.has-thumb { display: inline-block; width: 44px; height: 44px; border-radius: 8px; background-size: cover; background-position: center; }
+
+/* Roles panel (Moderation) */
+.roles-card + .roles-card { margin-top: 16px; }
+.roles-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.role-list { display: grid; gap: 8px; margin-top: 12px; }
+.role-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.role-row-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.role-row-main small { color: var(--text-muted); }
+.role-row-actions { display: flex; gap: 6px; }
+.role-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.role-tag { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2, rgba(128,128,128,.18)); color: var(--text-muted); }
+.role-modal { width: 520px; max-width: 94vw; max-height: 90vh; display: flex; flex-direction: column; }
+.role-modal .modal-body { overflow-y: auto; }
+.role-perms, .role-assign-list { display: grid; gap: 4px; margin: 8px 0 12px; }
+.role-perm { display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.role-perm:hover { background: rgba(128, 128, 128, 0.12); }
+.role-perm small { display: block; color: var(--text-muted); font-size: 11px; }
+.role-error { color: #dc2626; margin: 8px 0 0; }
+.role-assign { margin: 8px 0 12px; }
+.role-assign select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.role-modal .modal-footer { display: flex; align-items: center; gap: 8px; }
