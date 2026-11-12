@@ -1403,6 +1403,7 @@ function renderSidebar() {
 
 async function openChannel(channelId) {
   const previousChannelId = state.currentChannelId;
+  closeCanvasSheetForOtherConversation({ channelId });
 
   // Leave the previous channel room so we stop receiving its messages
   if (state.socket && previousChannelId && previousChannelId !== channelId) {
@@ -1698,6 +1699,7 @@ function renderDmList() {
 }
 
 async function openDM(userId) {
+  closeCanvasSheetForOtherConversation({ userId });
   leaveGroupView();
   state.currentDMId = userId;
   state.currentChannelId = null;
@@ -4793,6 +4795,16 @@ function applyRemoteCanvasUpdate(editorState, event, fields) {
 function debounceCanvas2Save() {
   clearTimeout(canvas2State.saveTimer);
   canvas2State.saveTimer = setTimeout(saveCanvas2, 800);
+}
+
+// The canvas panel belongs to one channel or direct message. When another conversation is opened, close it (saving first)
+// instead of leaving the previous conversation's canvas on screen next to the new one.
+function closeCanvasSheetForOtherConversation({ channelId = null, userId = null } = {}) {
+  const sheet = els.canvasSheet;
+  if (!sheet || sheet.getAttribute('aria-hidden') !== 'false') return;
+  const sameChannel = channelId !== null && canvas2State.kind === 'channel' && Number(canvas2State.channelId) === Number(channelId);
+  const sameDM = userId !== null && canvas2State.kind === 'dm' && Number(canvas2State.otherUserId) === Number(userId);
+  if (!sameChannel && !sameDM) closeCanvas2();
 }
 
 function closeCanvas2() {
