@@ -6668,3 +6668,15 @@ h4.cv-h { font-size: 15px; }
   background-position: center;
   color: transparent;
 }
+
+/* the photo is painted on the span inside the round rail button, so it has to fill it */
+#user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+}
