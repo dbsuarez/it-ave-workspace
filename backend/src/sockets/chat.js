@@ -8,7 +8,7 @@ const {
 } = require('../security');
 const { findMentionedUsers } = require('../mentions');
 const {
-  insertChannelMessage, insertDirectMessage, parseAttachmentId, ATTACHMENT_UNAVAILABLE,
+  insertChannelMessage, insertDirectMessage, parseAttachmentIds, ATTACHMENT_UNAVAILABLE,
 } = require('../attachments');
 
 // Record @mentions for a new channel message and push activity events to the
@@ -420,12 +420,13 @@ module.exports = (io, socket) => {
   socket.on('send_message', async (data) => {
     if (!currentUserId) return;
 
-    const { channelId, content, replyTo, attachmentId } = data;
+    const { channelId, content, replyTo } = data;
     const clientMessageId = typeof data.clientMessageId === 'string'
       ? data.clientMessageId.slice(0, 100)
       : null;
 
-    if (!channelId || (!content && !attachmentId)) {
+    const attachmentRequest = parseAttachmentIds(data);
+    if (!channelId || (!content && !attachmentRequest.ids.length)) {
       socket.emit('message_error', { error: 'Channel ID and content/attachment are required', clientMessageId });
       return;
     }
@@ -457,14 +458,13 @@ module.exports = (io, socket) => {
         };
       }
 
-      const attachment = parseAttachmentId(attachmentId);
-      if (!attachment.ok) {
+      if (!attachmentRequest.ok) {
         socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
         return;
       }
-      // The upload is claimed and the message created in one statement (see attachments.js).
+      // The uploads are claimed and the message created in one statement (see attachments.js).
       const message = await insertChannelMessage(query, {
-        channelId, userId: currentUserId, content, replyTo, attachmentId: attachment.id,
+        channelId, userId: currentUserId, content, replyTo, attachmentIds: attachmentRequest.ids,
       });
       if (!message) {
         socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
@@ -479,7 +479,7 @@ module.exports = (io, socket) => {
 
       const attachmentsResult = await query(
         `SELECT id, filename, original_name, size, mime_type, uploaded_by
-         FROM files WHERE message_id = $1`,
+         FROM files WHERE message_id = $1 ORDER BY id`,
         [message.id]
       );
       const attachments = attachmentsResult.rows.map((f) => ({
@@ -518,12 +518,13 @@ module.exports = (io, socket) => {
   socket.on('send_direct_message', async (data) => {
     if (!currentUserId) return;
 
-    const { receiverId, content, attachmentId } = data;
+    const { receiverId, content } = data;
     const clientMessageId = typeof data.clientMessageId === 'string'
       ? data.clientMessageId.slice(0, 100)
       : null;
 
-    if (!receiverId || (!content && !attachmentId)) {
+    const attachmentRequest = parseAttachmentIds(data);
+    if (!receiverId || (!content && !attachmentRequest.ids.length)) {
       socket.emit('message_error', { error: 'Receiver ID and content/attachment are required', clientMessageId });
       return;
     }
@@ -532,13 +533,12 @@ module.exports = (io, socket) => {
       const { query } = require('../db');
       await ensureDirectMessageAccess(query, currentUserId, receiverId);
 
-      const attachment = parseAttachmentId(attachmentId);
-      if (!attachment.ok) {
+      if (!attachmentRequest.ok) {
         socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
         return;
       }
       const dm = await insertDirectMessage(query, {
-        senderId: currentUserId, receiverId, content, attachmentId: attachment.id,
+        senderId: currentUserId, receiverId, content, attachmentIds: attachmentRequest.ids,
       });
       if (!dm) {
         socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
@@ -553,7 +553,7 @@ module.exports = (io, socket) => {
 
       const attachmentsResult = await query(
         `SELECT id, filename, original_name, size, mime_type, uploaded_by
-         FROM files WHERE dm_message_id = $1`,
+         FROM files WHERE dm_message_id = $1 ORDER BY id`,
         [dm.id]
       );
       const attachments = attachmentsResult.rows.map((f) => ({

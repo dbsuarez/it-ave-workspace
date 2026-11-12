@@ -4,7 +4,7 @@
 // Loaded before renderer.js; defines functions only.
 
 function adminState() {
-  if (!state.admin) state.admin = { users: [], invitations: [], mode: 'open', lastCode: null, lastCreated: null, bulkText: '', importNotes: [], prelaunch: { enabled: false, password: '' } };
+  if (!state.admin) state.admin = { users: [], invitations: [], mode: 'open', lastCode: null, lastCreated: null, bulkText: '', importNotes: [], pending: [], prelaunch: { enabled: false, password: '' } };
   return state.admin;
 }
 
@@ -82,7 +82,25 @@ function adminCreatedHtml(result) {
         ${result.created.map((c) => `<tr><td>${escapeHtml(c.username)}</td><td>${escapeHtml(c.email)}</td><td><code>${escapeHtml(c.password)}</code></td></tr>`).join('')}
       </tbody></table>
       <div class="admin-actions"><button class="btn" type="button" data-admin-action="save-credentials">Save as CSV…</button><button class="btn" type="button" data-admin-action="copy-credentials">Copy all</button></div>` : '<h3>No accounts were created</h3>'}
+    ${result.createdDepartments && result.createdDepartments.length ? `<p class="admin-note">New department${result.createdDepartments.length === 1 ? '' : 's'} created from the list: ${result.createdDepartments.map(escapeHtml).join(', ')}. Check the spelling in People > Manage > Departments.</p>` : ''}
+    ${result.warnings && result.warnings.length ? `<h3>${result.warnings.length} to check</h3><ul class="admin-skipped">${result.warnings.map((w) => `<li><strong>${escapeHtml(w.username)}</strong>: ${escapeHtml(w.warning)}</li>`).join('')}</ul>` : ''}
     ${result.skipped.length ? `<h3>${result.skipped.length} skipped</h3><ul class="admin-skipped">${result.skipped.map((s) => `<li><strong>${escapeHtml(s.username)}</strong>: ${escapeHtml(s.reason)}</li>`).join('')}</ul>` : ''}
+  </div>`;
+}
+
+// The people read from a file, waiting to be created: a short preview with the fields that matter.
+function adminPendingHtml(admin) {
+  const list = admin.pending || [];
+  if (!list.length) return '';
+  const shown = list.slice(0, 8);
+  const level = (a) => (a.jobLevel ? (/manag/i.test(a.jobLevel) ? 'Managerial' : 'Rank and file') : '');
+  return `<div class="admin-pending">
+    <h3>${list.length} ${list.length === 1 ? 'person' : 'people'} ready from the file</h3>
+    <table class="admin-table"><thead><tr><th>Username</th><th>Name</th><th>Employee no.</th><th>Department</th><th>Job title</th><th>Level</th><th>Reports to</th></tr></thead><tbody>
+      ${shown.map((a) => `<tr><td>${escapeHtml(a.username)}<br><small>${escapeHtml(a.email)}</small></td><td>${escapeHtml([a.firstName, a.middleName, a.lastName].filter(Boolean).join(' '))}</td><td>${escapeHtml(a.employeeNo || '')}</td><td>${escapeHtml(a.department || '')}</td><td>${escapeHtml(a.jobTitle || '')}</td><td>${escapeHtml(level(a))}</td><td>${escapeHtml(a.reportsTo || '')}</td></tr>`).join('')}
+    </tbody></table>
+    ${list.length > shown.length ? `<p class="admin-help">…and ${list.length - shown.length} more.</p>` : ''}
+    <div class="admin-actions"><button class="btn" type="button" data-admin-action="clear-pending">Clear this list</button></div>
   </div>`;
 }
 
@@ -119,7 +137,8 @@ function accountsFormHtml(admin, superadmin) {
           </select>
         </label>
       </div>
-      <label class="admin-bulk-label">One person per line: <code>username, email, password, last name, first name, middle name</code>. Only the username and email are needed; leave the password empty and one is made for you (for example <code>ann, ann@company.com, , Lee, Ann, Marie</code>).
+      ${adminPendingHtml(admin)}
+      <label class="admin-bulk-label">${admin.pending && admin.pending.length ? 'Add more people by hand' : 'Type or paste people'}, one per line: <code>username, email, password, last name, first name, middle name</code>. Only the username and email are needed; leave the password empty and one is made for you (for example <code>ann, ann@company.com, , Lee, Ann, Marie</code>). For everything else about an employee (employee number, department, job title, position level, hire date, who they report to...), use <strong>Import</strong> with the template.
         <textarea name="bulk" id="admin-bulk" rows="6" spellcheck="false" placeholder="ann, ann@company.com&#10;bob, bob@company.com">${escapeHtml(admin.bulkText || '')}</textarea>
       </label>
       <div class="admin-channel-picks">
@@ -129,7 +148,7 @@ function accountsFormHtml(admin, superadmin) {
       ${(admin.importNotes || []).map((note) => `<p class="admin-note">${escapeHtml(note)}</p>`).join('')}
       <div class="admin-actions">
         <button class="btn" type="button" data-admin-action="import-accounts">Import CSV or Excel file…</button>
-        <button class="btn" type="button" data-admin-action="accounts-template">Download template</button>
+        <button class="btn" type="button" data-admin-action="accounts-template">Download template (all fields)</button>
         <button class="btn primary" type="submit">Create accounts</button>
       </div>
       ${adminCreatedHtml(admin.lastCreated)}
@@ -268,11 +287,17 @@ async function handleAdminClick(event) {
       const result = await window.electronAPI.importAccountsFile();
       if (!result || result.canceled) return;
       admin.importNotes = result.notes || [];
+      admin.bulkText = document.getElementById('admin-bulk')?.value || admin.bulkText || '';
       if (result.accounts && result.accounts.length) {
-        const existing = (document.getElementById('admin-bulk')?.value || '').trim();
-        admin.bulkText = [existing, ...result.accounts.map(bulkLine)].filter(Boolean).join('\n');
+        admin.pending = [...(admin.pending || []), ...result.accounts].slice(0, 500); // kept whole, with every field from the file
         showToast(`${result.accounts.length} ${result.accounts.length === 1 ? 'person' : 'people'} read from the file. Check the list, then create.`, 'success');
       }
+      refreshAccountsForms();
+      return;
+    } else if (action === 'clear-pending') {
+      admin.pending = [];
+      admin.importNotes = [];
+      admin.bulkText = document.getElementById('admin-bulk')?.value || admin.bulkText || '';
       refreshAccountsForms();
       return;
     } else if (action === 'accounts-template') {
@@ -312,13 +337,15 @@ async function handleAdminAccountsSubmit(form, event) {
   event.preventDefault();
   const admin = adminState();
   const values = new FormData(form);
-  const accounts = parseBulkLines(values.get('bulk'));
+  const typed = parseBulkLines(values.get('bulk'));
+  const fromFile = admin.pending || [];
+  const accounts = [...fromFile, ...typed];
   admin.bulkText = values.get('bulk') || '';
   if (!accounts.length) { showToast('Add at least one person.', 'error'); return; }
   const button = form.querySelector('button[type="submit"]');
   if (button) button.disabled = true;
   try {
-    const result = { created: [], skipped: [] };
+    const result = { created: [], skipped: [], warnings: [], createdDepartments: [] };
     for (let i = 0; i < accounts.length; i += 100) { // the server takes 100 at a time
       const data = await adminApi('/api/admin/users', 'POST', {
         accounts: accounts.slice(i, i + 100),
@@ -327,11 +354,14 @@ async function handleAdminAccountsSubmit(form, event) {
       });
       result.created.push(...data.created);
       result.skipped.push(...data.skipped);
+      result.warnings.push(...(data.warnings || []));
+      (data.createdDepartments || []).forEach((name) => { if (!result.createdDepartments.includes(name)) result.createdDepartments.push(name); });
     }
     admin.lastCreated = result;
     // what was created leaves the box; what was skipped stays so it can be fixed and tried again
     const skippedNames = new Set(result.skipped.map((s) => s.username));
-    admin.bulkText = accounts.filter((a) => skippedNames.has(a.username)).map(bulkLine).join('\n');
+    admin.pending = fromFile.filter((a) => skippedNames.has(a.username));
+    admin.bulkText = typed.filter((a) => skippedNames.has(a.username)).map(bulkLine).join('\n');
     admin.importNotes = [];
     showToast(result.created.length ? `${result.created.length} account${result.created.length === 1 ? '' : 's'} created.` : 'No accounts were created.', result.created.length ? 'success' : 'error');
     refreshAccountsForms();

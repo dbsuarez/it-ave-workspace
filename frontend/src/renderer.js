@@ -566,6 +566,7 @@ function setupEventListeners() {
   on('btn-dm-attach', 'click', () => els.dmFilePicker?.click());
   on('dm-file-picker', 'change', handleDmFilePick);
 
+  setupFileSending();
   setupActivityFeatures();
   setupNotificationFeatures();
   setupProfilePhoto();
@@ -935,6 +936,19 @@ function connectSocket() {
   });
   state.socket.on('channel_error', ({ error }) => {
     showToast(error || 'Channel access denied.', 'error');
+  });
+  // A channel was deleted (by the Superadmin or its creator): drop it from the sidebar and move on if it was open.
+  state.socket.on('channel_deleted', async ({ channelId, name }) => {
+    if (!state.channels.some((channel) => Number(channel.id) === Number(channelId))) return;
+    state.channels = state.channels.filter((channel) => Number(channel.id) !== Number(channelId));
+    delete state.messages[channelId];
+    renderSidebar();
+    showToast(`#${name || 'A channel'} was deleted.`, 'info');
+    if (Number(state.currentChannelId) === Number(channelId)) {
+      state.currentChannelId = null;
+      if (state.channels.length) await openChannel(state.channels[0].id);
+    }
+    if (state.section === 'moderation') loadModerationView();
   });
   state.socket.on('channel_access_revoked', async ({ channelId }) => {
     state.channels = state.channels.filter((channel) => Number(channel.id) !== Number(channelId));
@@ -2270,71 +2284,17 @@ async function addReaction(messageId, emoji) {
 // ============================================================
 // File Attachments
 // ============================================================
+// The paperclip: pick one or several files; they go out together in one message (see features/attachments.js).
 async function handleFilePick(e) {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
-
-  const file = files[0];
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const res = await fetch(`${API_BASE}/api/messages/upload`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${state.token}` },
-      body: formData,
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error || 'Upload failed');
-
-    // Send message with attachment
-    state.socket.emit('send_message', {
-      channelId: state.currentChannelId,
-      content: '',
-      attachmentId: data.fileId,
-      replyTo: state.replyingTo?.id || null,
-    });
-
-    cancelReply();
-    e.target.value = '';
-  } catch (err) {
-    console.error('File upload error:', err);
-    showToast('File upload failed. Is the server running?', 'error');
-  }
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (files.length) await sendFilesTo('channel', files);
 }
 
 async function handleDmFilePick(e) {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
-
-  const file = files[0];
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const res = await fetch(`${API_BASE}/api/messages/upload`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${state.token}` },
-      body: formData,
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error || 'Upload failed');
-
-    state.socket.emit('send_direct_message', {
-      receiverId: state.currentDMId,
-      content: '',
-      attachmentId: data.fileId,
-    });
-
-    e.target.value = '';
-  } catch (err) {
-    console.error('DM file upload error:', err);
-    showToast('File upload failed. Is the server running?', 'error');
-  }
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (files.length) await sendFilesTo('dm', files);
 }
 
 // ============================================================
@@ -2513,6 +2473,12 @@ async function loadModerationView() {
         <label>Maximum timeout (minutes)<input name="maxTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.maxTimeoutMinutes || 10080}" required></label>
         <button class="btn primary" type="submit">Save timeout policy</button>
       </form>` : ''}
+    ${state.moderation.isSuperadmin ? `<div class="moderation-card" data-mod-tab="rules">
+      <h2>Slow mode for all channels</h2>
+      <p class="admin-help">Slow mode makes people wait between messages in a channel. New channels start with the default below; you can also set one value on every channel that already exists.</p>
+      <div class="moderation-inline"><label>Default for new channels (seconds)<input id="slowmode-default" type="number" min="0" max="3600" value="5"></label><button class="btn primary" type="button" data-action="save-default-slowmode">Save default</button></div>
+      <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
+    </div>` : ''}
     <div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>
     ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit" data-mod-tab="rules"></div>' : ''}`;
   if (state.moderation.isSuperadmin) {
@@ -2529,6 +2495,15 @@ async function loadModerationView() {
     } catch (err) {
       console.error('Load moderation settings error:', err);
       showToast(err.message || 'Could not load timeout policy.', 'error');
+    }
+  }
+  if (state.moderation.isSuperadmin) {
+    try {
+      const policy = await (await api('/api/moderation/slowmode-policy')).json();
+      const field = document.getElementById('slowmode-default');
+      if (field && Number.isInteger(policy.defaultSeconds)) field.value = policy.defaultSeconds;
+    } catch (err) {
+      console.error('Load slow mode policy error:', err);
     }
   }
   await loadModerationChannel(selectedId);
@@ -2564,12 +2539,12 @@ async function loadModerationChannel(channelId) {
     state.moderation.channel = data.channel;
     const members = data.members || [];
     const memberRows = members.map((member) => `
-      <div class="moderation-row">
-        <span>${escapeHtml(member.username)}</span>
-        <span>${escapeHtml(member.role)}</span>
+      <div class="moderation-row moderation-member-row">
+        <span class="moderation-member-name">${escapeHtml(member.username)}</span>
+        <span class="moderation-member-role">${escapeHtml(member.role)}</span>
         <div class="moderation-row-actions">
-          ${state.moderation.isSuperadmin ? `<select data-member-role="${member.id}" aria-label="Role for ${escapeHtml(member.username)}"><option value="member"${member.role === 'member' ? ' selected' : ''}>Member</option><option value="moderator"${member.role === 'moderator' ? ' selected' : ''}>Moderator</option></select><button class="btn" data-action="save-role" data-user-id="${member.id}">Save role</button><button class="btn" data-action="remove-member" data-user-id="${member.id}">Remove access</button>` : ''}
-          <button class="btn" data-action="timeout" data-user-id="${member.id}">Timeout</button>
+          ${state.moderation.isSuperadmin ? `<select data-member-role="${member.id}" aria-label="Role for ${escapeHtml(member.username)}"><option value="member"${member.role === 'member' ? ' selected' : ''}>Member</option><option value="moderator"${member.role === 'moderator' ? ' selected' : ''}>Moderator</option></select><button class="btn" data-action="save-role" data-member-id="${member.id}">Save role</button><button class="btn" data-action="remove-member" data-member-id="${member.id}">Remove access</button>` : ''}
+          <button class="btn" data-action="timeout" data-member-id="${member.id}">Timeout</button>
         </div>
       </div>`).join('');
     const memberIds = new Set(members.map((member) => Number(member.id)));
@@ -2590,11 +2565,12 @@ async function loadModerationChannel(channelId) {
         </form>` : ''}
       <div class="moderation-card"><h2>Channel members</h2><div class="moderation-list">${memberRows || '<p>No channel members.</p>'}</div></div>
       <div class="moderation-card"><h2>Active timeouts</h2><div class="moderation-list">${(data.timeouts || []).map((timeout) => `
-        <div class="moderation-row"><span>${escapeHtml(timeout.username)} · until ${escapeHtml(new Date(timeout.expiresAt).toLocaleString())}${timeout.reason ? ` · ${escapeHtml(timeout.reason)}` : ''}</span><button class="btn" data-action="remove-timeout" data-user-id="${timeout.userId}">Remove timeout</button></div>
+        <div class="moderation-row"><span>${escapeHtml(timeout.username)} · until ${escapeHtml(new Date(timeout.expiresAt).toLocaleString())}${timeout.reason ? ` · ${escapeHtml(timeout.reason)}` : ''}</span><button class="btn" data-action="remove-timeout" data-member-id="${timeout.userId}">Remove timeout</button></div>
       `).join('') || '<p>No active timeouts.</p>'}</div></div>
       <div class="moderation-card"><h2>Open reports</h2><div class="moderation-list">${(data.reports || []).map((report) => `
         <div class="moderation-row moderation-report"><span>Message #${report.messageId} · reported by ${escapeHtml(report.reporterUsername || 'former user')} · ${escapeHtml(report.targetUsername)}: ${escapeHtml(report.reason)}</span><div class="moderation-row-actions"><button class="btn" data-action="resolve-report" data-report-id="${report.id}">Resolve</button><button class="btn" data-action="dismiss-report" data-report-id="${report.id}">Dismiss</button></div></div>
       `).join('') || '<p>No open reports.</p>'}</div></div>
+      ${canDeleteChannel(channelId) ? `<div class="moderation-card moderation-danger"><h2>Delete this channel</h2><p class="admin-help">Deletes #${escapeHtml(data.channel.name)} for everyone: its messages, files, canvas, lists and links. This cannot be undone. The audit log keeps a record that it happened.</p><button class="btn danger" type="button" data-action="delete-channel">Delete channel…</button></div>` : ''}
       <div class="moderation-card"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
         <div class="moderation-row"><span>${escapeHtml(entry.actorUsername || 'former user')} · ${escapeHtml(entry.action)}${entry.targetUsername ? ` · ${escapeHtml(entry.targetUsername)}` : ''} ${entry.details ? ` ${escapeHtml(JSON.stringify(entry.details))}` : ''}</span><time>${escapeHtml(new Date(entry.createdAt).toLocaleString())}</time></div>
       `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
@@ -2603,6 +2579,13 @@ async function loadModerationChannel(channelId) {
     console.error('Load channel moderation error:', err);
     dataContainer.innerHTML = `<div class="empty-state"><h2>Could not load moderation data</h2><p>${escapeHtml(err.message || 'Please try again.')}</p><button class="btn" data-action="refresh-channel">Try again</button></div>`;
   }
+}
+
+// The Superadmin, or the person who created the channel, may delete it.
+function canDeleteChannel(channelId) {
+  if (state.moderation.isSuperadmin) return true;
+  const channel = state.channels.find((c) => Number(c.id) === Number(channelId));
+  return Boolean(channel && state.user && Number(channel.createdBy) === Number(state.user.id));
 }
 
 async function handleModerationClick(event) {
@@ -2617,7 +2600,7 @@ async function handleModerationClick(event) {
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const channelId = Number(document.getElementById('moderation-channel-select')?.value);
-  const userId = Number(button.dataset.userId);
+  const userId = Number(button.dataset.memberId ?? button.dataset.userId);
   const action = button.dataset.action;
   try {
     if (action === 'refresh-channel') return loadModerationChannel(channelId);
@@ -2642,6 +2625,26 @@ async function handleModerationClick(event) {
       });
     } else if (action === 'remove-timeout') {
       await checkedApi(`/api/moderation/channels/${channelId}/timeouts/${userId}`, 'DELETE');
+    } else if (action === 'delete-channel') {
+      const name = state.moderation.channel && state.moderation.channel.name;
+      const typed = await askText(`This deletes #${name} and everything in it for good. Type the channel name to confirm.`, { placeholder: name, maxLength: 80 });
+      if (typed === null) return;
+      if (typed.trim() !== name) { showToast('The name did not match, so nothing was deleted.', 'error'); return; }
+      await checkedApi(`/api/moderation/channels/${channelId}`, 'DELETE');
+      state.moderation.channel = null;
+      showToast(`#${name} was deleted.`, 'success');
+      await loadChannels();
+      await loadModerationView();
+      return;
+    } else if (action === 'save-default-slowmode') {
+      await checkedApi('/api/moderation/slowmode-policy', 'PUT', { defaultSeconds: Number(document.getElementById('slowmode-default').value) });
+    } else if (action === 'apply-slowmode-all') {
+      const seconds = Number(document.getElementById('slowmode-all').value);
+      if (!(await confirmAction({ title: 'Slow mode for every channel', message: `Set slow mode to ${seconds} seconds on every existing channel? Each channel's own setting is replaced.`, confirmLabel: 'Apply to all' }))) return;
+      const result = await checkedApi('/api/moderation/slowmode-all', 'POST', { seconds });
+      showToast(`Slow mode is ${seconds} seconds on ${result.channels} channel${result.channels === 1 ? '' : 's'}.`, 'success');
+      await loadModerationChannel(channelId);
+      return;
     } else if (action === 'save-slowmode') {
       await checkedApi(`/api/moderation/channels/${channelId}/slowmode`, 'PATCH', {
         seconds: Number(document.getElementById('moderation-slowmode').value),

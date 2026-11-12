@@ -225,7 +225,7 @@ router.get('/:userId/direct-messages', authenticateToken, async (req, res) => {
     if (dmIds.length > 0) {
       const fileResult = await query(
         `SELECT id, dm_message_id, filename, original_name, size, mime_type, uploaded_by
-         FROM files WHERE dm_message_id = ANY($1)`,
+         FROM files WHERE dm_message_id = ANY($1) ORDER BY id`,
         [dmIds]
       );
       fileResult.rows.forEach((f) => {

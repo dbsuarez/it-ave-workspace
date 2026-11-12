@@ -107,7 +107,7 @@ router.get('/:channelId/pins', authenticateToken, async (req, res) => {
     if (messageIds.length > 0) {
       const files = await query(
         `SELECT id, message_id, original_name, size, mime_type, uploaded_by, uploaded_by
-         FROM files WHERE message_id = ANY($1)`,
+         FROM files WHERE message_id = ANY($1) ORDER BY id`,
         [messageIds]
       );
       for (const file of files.rows) {
@@ -207,7 +207,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
     if (messageIds.length > 0) {
       const fileResult = await query(
         `SELECT id, message_id, filename, original_name, size, mime_type, uploaded_by
-         FROM files WHERE message_id = ANY($1)`,
+         FROM files WHERE message_id = ANY($1) ORDER BY id`,
         [messageIds]
       );
       fileResult.rows.forEach((f) => {

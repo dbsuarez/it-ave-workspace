@@ -318,6 +318,9 @@ module.exports = [
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL',
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}'::jsonb",
   'CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id) WHERE manager_id IS NOT NULL',
+  // Slow mode a new channel starts with (the Superadmin can also apply one value to every channel)
+  'ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS default_slowmode_seconds INTEGER NOT NULL DEFAULT 5 CHECK (default_slowmode_seconds BETWEEN 0 AND 3600)',
+
   // Pre-launch: everyone uses one shared test password until the Superadmin goes live (src/prelaunch.js)
   'ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS prelaunch_password BOOLEAN NOT NULL DEFAULT false',
 

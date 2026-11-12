@@ -167,11 +167,14 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Channel name must be lowercase letters, numbers, and hyphens only' });
     }
 
+    // a new channel starts with the workspace's default slow mode (5 seconds unless the Superadmin changed it)
+    const policy = await query('SELECT default_slowmode_seconds FROM moderation_settings WHERE id = 1');
+    const slowmode = policy.rows[0] && Number.isInteger(policy.rows[0].default_slowmode_seconds) ? policy.rows[0].default_slowmode_seconds : 5;
     const result = await query(
-      `INSERT INTO channels (name, topic, is_private, created_by) 
-       VALUES ($1, $2, $3, $4) 
+      `INSERT INTO channels (name, topic, is_private, created_by, slowmode_seconds) 
+       VALUES ($1, $2, $3, $4, $5) 
        RETURNING id, name, topic, is_private, created_at`,
-      [name, topic || '', isPrivate || false, req.user.userId]
+      [name, topic || '', isPrivate || false, req.user.userId, slowmode]
     );
 
     const channel = result.rows[0];

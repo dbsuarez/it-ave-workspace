@@ -33,8 +33,8 @@ test('claiming an attachment is one statement that requires it to be unattached 
   assert.match(sql, /uploaded_by = \$2/);
   assert.match(sql, /message_id IS NULL AND dm_message_id IS NULL/);
   assert.match(sql, /FOR UPDATE/);
-  assert.match(sql, /WHERE EXISTS \(SELECT 1 FROM claim\)/, 'no claim, no message');
-  assert.deepEqual(params, [1, 2, '', null, 77]);
+  assert.match(sql, /WHERE \(SELECT COUNT\(\*\) FROM claim\) = \$6/, 'every file must be claimed, or no message');
+  assert.deepEqual(params, [1, 2, '', null, [77], 1]);
 });
 
 test('when the file cannot be claimed no message is created and null is returned', async () => {
@@ -51,7 +51,7 @@ test('direct messages claim the file for the sender and link it as a DM attachme
   assert.match(sql, /uploaded_by = \$1/);
   assert.match(sql, /message_id IS NULL AND dm_message_id IS NULL/);
   assert.match(sql, /SET dm_message_id = /);
-  assert.deepEqual(params, [2, 3, 'hello', 8]);
+  assert.deepEqual(params, [2, 3, 'hello', [8], 1]);
 });
 
 test('attachment IDs are validated as positive whole numbers', () => {

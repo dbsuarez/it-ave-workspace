@@ -53,7 +53,48 @@ const LAST_HEADERS = ['last name', 'lastname', 'last', 'surname', 'family name']
 const FIRST_HEADERS = ['first name', 'firstname', 'first', 'given name'];
 const MIDDLE_HEADERS = ['middle name', 'middlename', 'middle', 'middle initial'];
 
-const cell = (value) => (value === null || value === undefined ? '' : String(value).trim());
+// The other fields of an employee record the template can carry, found by their header.
+const FIELD_HEADERS = {
+  employeeNo: ['employee no', 'employee no.', 'employee number', 'employee id', 'emp no', 'emp id', 'id number', 'employee #'],
+  jobTitle: ['job title', 'title', 'position', 'designation', 'job position'],
+  department: ['department', 'dept', 'division'],
+  jobLevel: ['position level', 'level', 'job level', 'rank', 'employee category', 'category', 'classification'],
+  employmentType: ['employment type', 'type of employment', 'nature of employment', 'employment status'],
+  hireDate: ['hire date', 'date hired', 'hired', 'date of hire', 'start date', 'date started'],
+  location: ['location', 'branch', 'office', 'work location'],
+  phone: ['phone', 'phone number', 'mobile', 'mobile number', 'contact number', 'contact no'],
+  reportsTo: ['reports to', 'manager', 'supervisor', 'immediate supervisor', 'immediate head', 'reporting to'],
+  schedule: ['work schedule', 'schedule', 'shift'],
+  remoteClock: ['can clock in from anywhere', 'remote clock', 'remote', 'work from home', 'wfh'],
+};
+
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+// 2026-01-15, 1/15/2026, 15/1/2026, 15-Jan-2026, Jan 15, 2026 -> 2026-01-15. Anything else is left for the server to refuse.
+function normalizeDate(text) {
+  const t = String(text || '').trim();
+  if (!t || /^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const pad = (n) => String(n).padStart(2, '0');
+  let m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const [month, day] = a > 12 ? [b, a] : [a, b]; // a first number above 12 can only be the day
+    return `${m[3]}-${pad(month)}-${pad(day)}`;
+  }
+  m = t.match(/^(\d{1,2})[\s-]([A-Za-z]{3})[a-z]*[\s-,]+(\d{4})$/);
+  if (m && MONTHS[m[2].toLowerCase()]) return `${m[3]}-${pad(MONTHS[m[2].toLowerCase()])}-${pad(m[1])}`;
+  m = t.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (m && MONTHS[m[1].toLowerCase()]) return `${m[3]}-${pad(MONTHS[m[1].toLowerCase()])}-${pad(m[2])}`;
+  return t;
+}
+
+// A spreadsheet date cell arrives as a Date: keep the calendar day, whatever the computer's time zone.
+const cell = (value) => {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : value.toISOString().slice(0, 10);
+  return String(value).trim();
+};
 
 function usernameFromEmail(email) {
   return email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 50);
@@ -73,7 +114,9 @@ function accountsFromRows(rows) {
   let lastCol = find(LAST_HEADERS);
   let firstCol = find(FIRST_HEADERS);
   let middleCol = find(MIDDLE_HEADERS);
-  const hasHeader = [emailCol, userCol, passCol, lastCol, firstCol, middleCol].some((index) => index !== -1);
+  const extraCols = {};
+  for (const [field, names] of Object.entries(FIELD_HEADERS)) extraCols[field] = find(names);
+  const hasHeader = [emailCol, userCol, passCol, lastCol, firstCol, middleCol, ...Object.values(extraCols)].some((index) => index !== -1);
   let body = filled;
   if (hasHeader) {
     body = filled.slice(1);
@@ -98,6 +141,10 @@ function accountsFromRows(rows) {
     if (name(lastCol)) account.lastName = name(lastCol);
     if (name(firstCol)) account.firstName = name(firstCol);
     if (name(middleCol)) account.middleName = name(middleCol);
+    for (const [field, col] of Object.entries(extraCols)) {
+      const value = col === -1 ? '' : cell(row[col]);
+      if (value) account[field] = field === 'hireDate' ? normalizeDate(value) : value;
+    }
     return account;
   });
   return { accounts, notes };
@@ -111,7 +158,16 @@ async function readAccountFile(filePath) {
   if (stat.size > MAX_FILE_BYTES) throw new Error('That file is larger than 2 MB');
   if (extension === '.xlsx') {
     const readXlsxFile = require('read-excel-file/node');
-    const rows = await readXlsxFile(filePath); // the first worksheet
+    let rows;
+    try {
+      rows = await readXlsxFile(filePath); // the first worksheet
+    } catch (err) {
+      // some generators write cells in a form the reader does not know; a CSV always works
+      if (/inline string|cell value structure/i.test(String(err && err.message))) {
+        throw new Error('This spreadsheet stores its text in a format that cannot be read. Open it in Excel, save it again as .xlsx (or as CSV), and import that.');
+      }
+      throw err;
+    }
     return accountsFromRows(rows);
   }
   return accountsFromRows(parseCsv(fs.readFileSync(filePath, 'utf8')));
@@ -128,4 +184,4 @@ function credentialsCsv(created) {
   return ['username,email,temporary password', ...created.map((c) => [safe(c.username, true), safe(c.email, true), safe(c.password, false)].join(','))].join('\r\n') + '\r\n';
 }
 
-module.exports = { parseCsv, accountsFromRows, readAccountFile, credentialsCsv, MAX_ROWS };
+module.exports = { parseCsv, accountsFromRows, readAccountFile, credentialsCsv, normalizeDate, MAX_ROWS };

@@ -60,3 +60,30 @@ test('last, first and middle name columns are read, in any order and by common n
   assert.deepEqual(accounts[1], { username: 'bob', email: 'bob@x.test', password: '', lastName: 'Cruz', firstName: 'Bob' }, 'an empty name is left out');
   assert.equal(accountsFromRows([['ann', 'a@x.test', '', 'Lee', 'Ann', 'M']]).accounts[0].firstName, 'Ann', 'no header: the sixth columns are the names');
 });
+
+test('the full template: every employee field is read by its header, spreadsheet dates and common date spellings are made ISO', () => {
+  const { accounts } = accountsFromRows([
+    ['Username', 'Email', 'Last Name', 'First Name', 'Employee No.', 'Job Title', 'Department', 'Position Level', 'Employment Type', 'Date Hired', 'Reports To', 'Work Schedule', 'Branch', 'Mobile', 'Can clock in from anywhere'],
+    ['ann', 'ann@x.test', 'Lee', 'Ann', 'E-1', 'Accountant', 'Finance', 'Rank and file', 'Regular', new Date(Date.UTC(2026, 0, 15)), 'boss', 'Regular', 'Lucena', '+63 900 1', 'no'],
+    ['bob', 'bob@x.test', '', '', 'E-2', '', '', 'Managerial', '', '3/9/2025', '', '', '', '', ''],
+    ['cy', 'cy@x.test', '', '', '', '', '', '', '', '15-Jan-2026', '', '', '', '', ''],
+  ]);
+  assert.deepEqual(accounts[0], {
+    username: 'ann', email: 'ann@x.test', password: '', lastName: 'Lee', firstName: 'Ann', employeeNo: 'E-1', jobTitle: 'Accountant', department: 'Finance',
+    jobLevel: 'Rank and file', employmentType: 'Regular', hireDate: '2026-01-15', reportsTo: 'boss', schedule: 'Regular', location: 'Lucena', phone: '+63 900 1', remoteClock: 'no',
+  });
+  assert.deepEqual([accounts[1].jobLevel, accounts[1].hireDate, accounts[1].employeeNo], ['Managerial', '2025-03-09', 'E-2'], 'empty cells are left out');
+  assert.equal(accounts[2].hireDate, '2026-01-15');
+});
+
+test('date spellings', () => {
+  const { normalizeDate } = require('../accounts-import');
+  assert.equal(normalizeDate('2026-01-15'), '2026-01-15');
+  assert.equal(normalizeDate('1/15/2026'), '2026-01-15');
+  assert.equal(normalizeDate('15/1/2026'), '2026-01-15', 'a first number above 12 can only be the day');
+  assert.equal(normalizeDate('15-Jan-2026'), '2026-01-15');
+  assert.equal(normalizeDate('Jan 15, 2026'), '2026-01-15');
+  assert.equal(normalizeDate('January 5 2026'), '2026-01-05');
+  assert.equal(normalizeDate('someday'), 'someday', 'left for the server to refuse');
+  assert.equal(normalizeDate(''), '');
+});

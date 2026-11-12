@@ -390,3 +390,10 @@ Canvas roles are now viewer, commenter, editor, owner. A commenter reads and com
 ## Employee management (2026-11-12)
 
 HR role, employee records, departments, deactivate/reactivate, password reset, onboarding/offboarding checklists, leave (types, balances, requests, approval, calendar, holidays) and Superadmin username changes. See [EMPLOYEE_MANAGEMENT.md](EMPLOYEE_MANAGEMENT.md) for roles, rules and what is left out (attendance, accrual, multi-step approval).
+
+## Channels, import template and files (2026-11-12)
+
+- **Moderation > Channels:** buttons in the member list no longer open a profile menu (they carried `data-user-id`, which the avatar handler treats as a person; they use `data-member-id` now), and name, role and actions line up in columns. The Superadmin or the creator can **delete a channel** (type its name to confirm); its messages, files (also removed from disk), canvas, lists and members go with it, everyone is told live, and the audit log keeps a record.
+- **Slow mode:** new channels start at 5 seconds (`moderation_settings.default_slowmode_seconds`, changeable); **Rules and audit log** has "Slow mode for all channels" to save the default and to apply one value to every existing channel.
+- **Create accounts template:** the template and the import carry every employee field (employee no., job title, department, position level, employment type, hire date, reports to, work schedule, location, phone, can clock in from anywhere), read by their headers; spreadsheet dates and common date spellings are converted; new departments are created from the list, managers in the same file are found, and unknown managers or schedules come back as "to check" instead of blocking the row. People read from a file wait in a preview list until created.
+- **Files:** several files (up to 10) go in one message, from the paperclip or by dragging them onto a channel or a direct message; the message box text becomes the caption; failed uploads are reported and the rest still go. Groups do not take attachments yet.

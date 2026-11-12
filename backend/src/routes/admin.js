@@ -4,6 +4,7 @@ const { query } = require('../db');
 const { passwordProblem } = require('../authLimits');
 const { hrActor, canManageEmployees, temporaryPassword, applyChecklist } = require('../hr');
 const prelaunch = require('../prelaunch');
+const { cleanEmployeeFields } = require('../accountFields');
 const authenticateToken = require('../middleware/auth');
 const {
   newInviteCode, hashInviteCode, invitationProblem, normalizeInviteCode,
@@ -252,7 +253,11 @@ router.post('/users', async (req, res) => {
 
     const created = [];
     const skipped = [];
+    const warnings = [];
+    const createdDepartments = new Set();
+    const managerLinks = []; // [{ userId, username, reportsTo }] resolved once everyone in the batch exists
     const seen = new Set();
+    const seenNumbers = new Set();
     for (const entry of accounts) {
       const username = typeof entry?.username === 'string' ? entry.username.trim() : '';
       const email = typeof entry?.email === 'string' ? entry.email.trim() : '';
@@ -274,6 +279,14 @@ router.post('/users', async (req, res) => {
         names[field] = typeof value === 'string' ? value.trim() : '';
       }
       if (nameProblem) { skipped.push({ username, reason: nameProblem }); continue; }
+      const extra = cleanEmployeeFields(entry);
+      if (extra.problem) { skipped.push({ username, reason: extra.problem }); continue; }
+      const fields = extra.fields;
+      if (fields.employeeNo) {
+        const numberKey = fields.employeeNo.toLowerCase();
+        const numberTaken = seenNumbers.has(numberKey) || (await query('SELECT 1 FROM users WHERE LOWER(employee_no) = $1', [numberKey])).rows.length > 0;
+        if (numberTaken) { skipped.push({ username, reason: `Employee number ${fields.employeeNo} is already used` }); continue; }
+      }
       const exists = await query('SELECT 1 FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2', [username.toLowerCase(), email.toLowerCase()]);
       if (exists.rows.length) { skipped.push({ username, reason: 'That username or email already exists' }); continue; }
       const hash = await bcrypt.hash(password, 10);
@@ -283,6 +296,32 @@ router.post('/users', async (req, res) => {
         [username, email, hash, accountType, names.lastName, names.firstName, names.middleName, !(sharedPassword && password === prelaunch.PASSWORD)]
       );
       const userId = inserted.rows[0].id;
+      if (fields.employeeNo) seenNumbers.add(fields.employeeNo.toLowerCase());
+      // the rest of the HR record: department (created when new), schedule, title, level, dates, phone
+      let departmentId = null;
+      if (fields.department) {
+        let dept = (await query('SELECT id, name FROM departments WHERE LOWER(name) = LOWER($1)', [fields.department])).rows[0];
+        if (!dept) {
+          dept = (await query('INSERT INTO departments (name) VALUES ($1) RETURNING id, name', [fields.department])).rows[0];
+          createdDepartments.add(dept.name); // a department the list introduced
+        }
+        departmentId = dept.id;
+        fields.department = dept.name;
+      }
+      let scheduleId = null;
+      if (fields.schedule) {
+        const schedule = (await query('SELECT id FROM work_schedules WHERE LOWER(name) = LOWER($1)', [fields.schedule])).rows[0];
+        if (schedule) scheduleId = schedule.id; else warnings.push({ username, warning: `Work schedule "${fields.schedule}" was not found, so the default schedule applies` });
+      }
+      await query(
+        `UPDATE users SET employee_no = $2, job_title = $3, location = $4, hire_date = $5, employment_type = $6, job_level = $7, remote_clock = $8,
+                department_id = $9, department = $10, schedule_id = $11,
+                profile = CASE WHEN $12 <> '' THEN jsonb_set(profile, '{phone}', to_jsonb($12::text)) ELSE profile END
+         WHERE id = $1`,
+        [userId, fields.employeeNo || null, fields.jobTitle, fields.location, fields.hireDate, fields.employmentType, fields.jobLevel, fields.remoteClock,
+          departmentId, fields.department || '', scheduleId, fields.phone]
+      );
+      if (fields.reportsTo) managerLinks.push({ userId, username, reportsTo: fields.reportsTo });
       for (const channelId of joinIds) {
         await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, userId]);
       }
@@ -290,7 +329,24 @@ router.post('/users', async (req, res) => {
       await audit(req.user.userId, 'user_created', userId, { accountType, key });
       created.push({ id: userId, username, email, password });
     }
-    res.status(created.length ? 201 : 200).json({ created, skipped });
+    // who reports to whom, now that everyone in the batch exists (a manager may be in the same file)
+    for (const link of managerLinks) {
+      const key = link.reportsTo.toLowerCase();
+      const boss = (await query(
+        "SELECT id FROM users WHERE (LOWER(username) = $1 OR LOWER(email) = $1) AND account_type = 'member' AND deactivated_at IS NULL", [key]
+      )).rows[0];
+      if (!boss) { warnings.push({ username: link.username, warning: `Reports to "${link.reportsTo}" was not found; set it in the employee record` }); continue; }
+      if (boss.id === link.userId) { warnings.push({ username: link.username, warning: 'Nobody can report to themselves' }); continue; }
+      let cursor = boss.id;
+      let loop = false;
+      for (let step = 0; cursor && step < 200; step += 1) {
+        if (cursor === link.userId) { loop = true; break; }
+        cursor = ((await query('SELECT manager_id FROM users WHERE id = $1', [cursor])).rows[0] || {}).manager_id;
+      }
+      if (loop) { warnings.push({ username: link.username, warning: `Reports to "${link.reportsTo}" would make a reporting loop, so it was left empty` }); continue; }
+      await query('UPDATE users SET manager_id = $1 WHERE id = $2', [boss.id, link.userId]);
+    }
+    res.status(created.length ? 201 : 200).json({ created, skipped, warnings, createdDepartments: Array.from(createdDepartments) });
   } catch (err) {
     sendError(res, err, 'Create accounts error');
   }

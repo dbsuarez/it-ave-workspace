@@ -391,7 +391,13 @@ handleTrusted('admin:saveCsv', async (event, kind, created) => {
     if (typeof created !== 'string' || created.length > 5 * 1024 * 1024) throw new Error('Invalid file contents');
     text = created;
   } else if (kind === 'template') {
-    text = ['username,email,password,last name,first name,middle name', 'ann,ann@example.com,,Lee,Ann,Marie', 'bob,bob@example.com,,Cruz,Bob,', ''].join('\r\n');
+    // every field the app keeps about an employee, so HR can fill the sheet in once; only username and email are required
+    text = [
+      'username,email,password,last name,first name,middle name,employee no,job title,department,position level,employment type,hire date,reports to,work schedule,location,phone,can clock in from anywhere',
+      'ann,ann@example.com,,Lee,Ann,Marie,E-0001,Accountant,Finance,Rank and file,Regular,2026-01-15,boss,,Lucena,+63 900 000 0001,no',
+      'boss,boss@example.com,,Cruz,Bob,,E-0002,Finance Manager,Finance,Managerial,Regular,2024-06-03,,,Lucena,+63 900 000 0002,no',
+      '',
+    ].join('\r\n');
   } else {
     if (!Array.isArray(created) || created.length > 500 || created.some((c) => !c || [c.username, c.email, c.password].some((v) => typeof v !== 'string'))) {
       throw new Error('Invalid file contents');

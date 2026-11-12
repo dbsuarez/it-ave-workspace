@@ -167,3 +167,44 @@ test('the account endpoint returns the current names, username and email (the ap
   const later = await call('GET', '/auth/me', undefined, bearer(who));
   assert.deepEqual([later.json.user.email, later.json.user.firstName], ['changed@x.test', 'Anna'], 'always the current record');
 });
+
+test('the import template fields: employee number, department, title, level, hire date, schedule, phone, manager', async (t) => {
+  if (skip(t)) return;
+  const mgr = await call('POST', '/admin/users', { accounts: [{ username: 'mgr1', email: 'mgr1@x.test' }] }, bearer(ids.boss));
+  assert.equal(mgr.status, 201);
+  const made = await call('POST', '/admin/users', { accounts: [
+    { username: 'tpl1', email: 'tpl1@x.test', employeeNo: 'E-500', jobTitle: 'Analyst', department: 'Brand New Dept', location: 'Lucena', phone: '+63 900 111 2222',
+      hireDate: '2026-02-02', employmentType: 'Probationary', jobLevel: 'Rank and file', reportsTo: 'mgr1', schedule: 'Regular (8:00 to 17:00)', remoteClock: 'yes' },
+    { username: 'tpl2', email: 'tpl2@x.test', employeeNo: 'e-500' },
+    { username: 'tpl3', email: 'tpl3@x.test', jobLevel: 'Managerial', department: 'brand new dept', reportsTo: 'tpl1', schedule: 'No such schedule' },
+    { username: 'tpl4', email: 'tpl4@x.test', hireDate: '2026-13-45' },
+    { username: 'tpl5', email: 'tpl5@x.test', employmentType: 'slave' },
+    { username: 'tpl6', email: 'tpl6@x.test', reportsTo: 'nobody-here' },
+    { username: 'tpl7', email: 'tpl7@x.test', reportsTo: 'tpl8' },
+    { username: 'tpl8', email: 'tpl8@x.test', reportsTo: 'tpl7' },
+  ] }, bearer(ids.boss));
+  assert.equal(made.status, 201);
+  assert.deepEqual(made.json.created.map((c) => c.username), ['tpl1', 'tpl3', 'tpl6', 'tpl7', 'tpl8']);
+  const reasons = Object.fromEntries(made.json.skipped.map((s) => [s.username, s.reason]));
+  assert.match(reasons.tpl2, /Employee number e-500 is already used/, 'unique, ignoring case');
+  assert.match(reasons.tpl4, /Hire date/);
+  assert.match(reasons.tpl5, /employment type/i);
+  assert.deepEqual(made.json.createdDepartments, ['Brand New Dept'], 'one new department, not two (names match ignoring case)');
+
+  const row = (name) => admin.query(
+    `SELECT u.*, m.username AS manager, u.profile->>'phone' AS phone, to_char(u.hire_date, 'YYYY-MM-DD') AS hired, s.name AS schedule_name
+     FROM users u LEFT JOIN users m ON m.id = u.manager_id LEFT JOIN work_schedules s ON s.id = u.schedule_id WHERE u.username = $1`, [name]
+  ).then((r) => r.rows[0]);
+  const one = await row('tpl1');
+  assert.deepEqual([one.employee_no, one.job_title, one.department, one.location, one.phone, one.hired, one.employment_type, one.job_level, one.manager, one.schedule_name, one.remote_clock],
+    ['E-500', 'Analyst', 'Brand New Dept', 'Lucena', '+63 900 111 2222', '2026-02-02', 'probationary', 'rank_and_file', 'mgr1', 'Regular (8:00 to 17:00)', true]);
+  const three = await row('tpl3');
+  assert.deepEqual([three.job_level, three.manager, three.department_id === one.department_id], ['managerial', 'tpl1', true], 'a manager listed in the same file is found');
+  assert.ok(made.json.warnings.some((w) => w.username === 'tpl3' && /schedule/i.test(w.warning)));
+  assert.ok(made.json.warnings.some((w) => w.username === 'tpl6' && /not found/.test(w.warning)));
+  assert.equal((await row('tpl6')).manager, null);
+  const loops = made.json.warnings.filter((w) => /loop/.test(w.warning));
+  assert.equal(loops.length, 1, 'of two people naming each other, the second link is refused');
+  const [a, b] = [(await row('tpl7')).manager, (await row('tpl8')).manager];
+  assert.ok((a === 'tpl8') !== (b === 'tpl7'), 'exactly one of the two links was kept');
+});

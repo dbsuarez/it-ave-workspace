@@ -473,4 +473,82 @@ router.delete('/messages/:messageId', async (req, res) => {
   }
 });
 
+// ---- slow mode for the whole workspace (Superadmin) ----
+
+const slowSeconds = (value) => (Number.isInteger(value) && value >= 0 && value <= 3600 ? value : null);
+
+// GET /api/moderation/slowmode-policy - the slow mode new channels start with
+router.get('/slowmode-policy', async (req, res) => {
+  try {
+    await requireSuperadmin(req.user.userId);
+    const row = (await query('SELECT default_slowmode_seconds FROM moderation_settings WHERE id = 1')).rows[0];
+    res.json({ defaultSeconds: row ? row.default_slowmode_seconds : 5 });
+  } catch (err) {
+    sendError(res, err, 'Get slow mode policy error');
+  }
+});
+
+// PUT /api/moderation/slowmode-policy - { defaultSeconds } for channels created from now on
+router.put('/slowmode-policy', async (req, res) => {
+  try {
+    await requireSuperadmin(req.user.userId);
+    const seconds = slowSeconds(req.body && req.body.defaultSeconds);
+    if (seconds === null) return res.status(400).json({ error: 'Slow mode must be whole seconds from 0 to 3600' });
+    await query('UPDATE moderation_settings SET default_slowmode_seconds = $1, updated_by = $2, updated_at = NOW() WHERE id = 1', [seconds, req.user.userId]);
+    await audit(null, req.user.userId, 'default_slowmode_changed', null, { seconds });
+    res.json({ defaultSeconds: seconds });
+  } catch (err) {
+    sendError(res, err, 'Set slow mode policy error');
+  }
+});
+
+// POST /api/moderation/slowmode-all - { seconds }: set the same slow mode on every existing channel
+router.post('/slowmode-all', async (req, res) => {
+  try {
+    await requireSuperadmin(req.user.userId);
+    const seconds = slowSeconds(req.body && req.body.seconds);
+    if (seconds === null) return res.status(400).json({ error: 'Slow mode must be whole seconds from 0 to 3600' });
+    const result = await query('UPDATE channels SET slowmode_seconds = $1 RETURNING id', [seconds]);
+    await audit(null, req.user.userId, 'slowmode_set_for_all_channels', null, { seconds, channels: result.rows.length });
+    res.json({ seconds, channels: result.rows.length });
+  } catch (err) {
+    sendError(res, err, 'Set slow mode for all channels error');
+  }
+});
+
+// ---- removing a channel ----
+
+// DELETE /api/moderation/channels/:channelId - the Superadmin, or the person who created the channel, deletes it.
+// Its messages, files, canvas, lists, links and members go with it; the audit log keeps the record.
+router.delete('/channels/:channelId', async (req, res) => {
+  try {
+    const channelId = parseId(req.params.channelId);
+    if (!channelId) return res.status(400).json({ error: 'A valid channel ID is required' });
+    const channel = (await query('SELECT id, name, created_by FROM channels WHERE id = $1', [channelId])).rows[0];
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
+    const allowed = Boolean(actor && actor.is_superadmin) || Number(channel.created_by) === Number(req.user.userId);
+    if (!allowed) return res.status(403).json({ error: 'Only the Superadmin or the person who created the channel can delete it' });
+
+    const members = (await query('SELECT user_id FROM channel_members WHERE channel_id = $1', [channelId])).rows.map((r) => r.user_id);
+    const files = (await query(
+      `SELECT DISTINCT f.filename FROM files f
+       LEFT JOIN messages m ON m.id = f.message_id
+       LEFT JOIN canvases c ON c.id = f.canvas_id
+       WHERE m.channel_id = $1 OR c.channel_id = $1`,
+      [channelId]
+    )).rows;
+    await audit(null, req.user.userId, 'channel_deleted', null, { channelId, name: channel.name, members: members.length });
+    await query('DELETE FROM channels WHERE id = $1', [channelId]); // everything that belongs to it cascades
+    for (const row of files) {
+      fs.promises.unlink(path.join(config.UPLOAD_DIR, row.filename)).catch(() => {});
+    }
+    members.forEach((id) => req.io?.to(`user_${id}`).emit('channel_deleted', { channelId, name: channel.name }));
+    req.io?.to(`channel_${channelId}`).emit('channel_deleted', { channelId, name: channel.name });
+    res.json({ id: channelId, name: channel.name, filesRemoved: files.length });
+  } catch (err) {
+    sendError(res, err, 'Delete channel error');
+  }
+});
+
 module.exports = router;
