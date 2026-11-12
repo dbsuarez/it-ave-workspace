@@ -131,7 +131,8 @@ function mapPerson(row, viewerId, { full = false } = {}) {
   return person;
 }
 
-const MEMBERS_ONLY = "u.account_type = 'member' AND u.deactivated_at IS NULL";
+// The built-in 'admin' account is a service login, not a person: it never shows in the directory or the org chart.
+const MEMBERS_ONLY = "u.account_type = 'member' AND u.deactivated_at IS NULL AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')";
 
 // GET /api/people - everyone in the directory (and so the whole org chart)
 router.get('/', async (req, res) => {

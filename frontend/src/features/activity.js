@@ -67,13 +67,20 @@ function closeMentionPicker() {
   if (popup) popup.hidden = true;
 }
 
+// What the picker shows for someone: their full name, or the username when they have none. What gets typed is
+// still @username, which is how mentions are matched and notified.
+function mentionLabel(member) {
+  const full = [member.firstName, member.middleName, member.lastName].map((part) => String(part || '').trim()).filter(Boolean).join(' ');
+  return full || member.username;
+}
+
 function renderMentionPicker() {
   const popup = mentionPopup();
   popup.innerHTML = mentionPicker.items.map((member, index) => `
     <div class="mention-option${index === mentionPicker.index ? ' active' : ''}" role="option"
       aria-selected="${index === mentionPicker.index}" data-mention-index="${index}">
-      <span class="avatar-mini" style="background:${escapeHtml(member.avatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(member.id ?? member.userId ?? ''))}">${escapeHtml(member.username.charAt(0).toUpperCase())}</span>
-      <span class="mention-option-name">${escapeHtml(member.username)}</span>
+      <span class="avatar-mini" style="background:${escapeHtml(member.avatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(member.id ?? member.userId ?? ''))}">${escapeHtml(mentionLabel(member).charAt(0).toUpperCase())}</span>
+      <span class="mention-option-name">${escapeHtml(mentionLabel(member))}</span>
       ${member.role === 'moderator' || member.isGroup ? `<span class="mention-option-role">${escapeHtml(member.role)}</span>` : ''}
     </div>`).join('');
   popup.hidden = false;
@@ -96,9 +103,9 @@ async function updateMentionPicker() {
   const others = members
     .filter((member) => Number(member.id) !== Number(state.user.id))
     .concat(groupMentionCandidates());
-  const starts = others.filter((member) => member.username.toLowerCase().startsWith(term));
-  const contains = others.filter((member) => !starts.includes(member)
-    && member.username.toLowerCase().includes(term));
+  const searchable = (member) => `${mentionLabel(member)} ${member.username}`.toLowerCase();
+  const starts = others.filter((member) => mentionLabel(member).toLowerCase().startsWith(term) || member.username.toLowerCase().startsWith(term));
+  const contains = others.filter((member) => !starts.includes(member) && searchable(member).includes(term));
   mentionPicker.items = [...starts, ...contains].slice(0, 8);
   if (!mentionPicker.items.length) {
     closeMentionPicker();

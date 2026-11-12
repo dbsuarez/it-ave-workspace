@@ -250,10 +250,11 @@ router.get('/:channelId/members', authenticateToken, async (req, res) => {
     const { channelId } = req.params;
     await ensureChannelMembership(query, req.user.userId, channelId);
     const result = await query(
-      `SELECT u.id, u.username, u.avatar_color, u.status, cm.role
+      `SELECT u.id, u.username, u.first_name, u.middle_name, u.last_name, u.avatar_color, u.status, cm.role
        FROM channel_members cm
        JOIN users u ON u.id = cm.user_id
        WHERE cm.channel_id = $1 AND u.account_type <> 'bot'
+         AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')
        ORDER BY LOWER(u.username)`,
       [channelId]
     );
@@ -261,6 +262,9 @@ router.get('/:channelId/members', authenticateToken, async (req, res) => {
       members: result.rows.map((row) => ({
         id: row.id,
         username: row.username,
+        firstName: row.first_name || '',
+        middleName: row.middle_name || '',
+        lastName: row.last_name || '',
         avatarColor: row.avatar_color,
         status: row.status,
         role: row.role,

@@ -117,6 +117,7 @@ router.get('/', authenticateToken, async (req, res) => {
        FROM users
        WHERE id != $1
          AND account_type <> 'bot'
+         AND NOT (is_superadmin AND LOWER(username) = 'admin')
          AND deactivated_at IS NULL
          AND (
            NOT EXISTS (SELECT 1 FROM users me WHERE me.id = $1 AND me.account_type = 'guest')
