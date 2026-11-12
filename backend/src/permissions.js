@@ -66,7 +66,7 @@ async function loadAccess(query, userId, channelId) {
   const row = account.rows[0];
   if (!row) return null;
   const rolesResult = await query(
-    `SELECT r.id, r.builtin_key, r.permissions
+    `SELECT r.id, r.name, r.builtin_key, r.permissions
      FROM roles r
      WHERE r.builtin_key = 'everyone'
         OR r.id IN (SELECT role_id FROM user_roles WHERE user_id = $1)
@@ -80,20 +80,21 @@ async function loadAccess(query, userId, channelId) {
     isOwner,
     accountType: row.account_type,
     roleIds: roles.map((r) => Number(r.id)),
-    grants: roles.map((r) => ({ key: r.builtin_key || null, permissions: r.permissions || [] })),
+    grants: roles.map((r) => ({ key: r.builtin_key || null, name: r.name || '', permissions: r.permissions || [] })),
     overrides: null,
     channelModerator: false,
   };
   if (channelId) {
     const everyone = roles.find((r) => r.builtin_key === 'everyone');
     const overrides = await query(
-      `SELECT subject_type, subject_id, allow, deny FROM channel_overrides
-       WHERE channel_id = $1 AND ((subject_type = 'user' AND subject_id = $2) OR (subject_type = 'role' AND subject_id = ANY($3::int[])))`,
+      `SELECT co.subject_type, co.subject_id, co.allow, co.deny, r.name AS role_name FROM channel_overrides co
+       LEFT JOIN roles r ON co.subject_type = 'role' AND r.id = co.subject_id
+       WHERE co.channel_id = $1 AND ((co.subject_type = 'user' AND co.subject_id = $2) OR (co.subject_type = 'role' AND co.subject_id = ANY($3::int[])))`,
       [channelId, userId, access.roleIds]
     );
     access.overrides = { everyone: null, roles: [], user: null };
     for (const o of overrides.rows) {
-      const entry = { allow: o.allow || [], deny: o.deny || [] };
+      const entry = { allow: o.allow || [], deny: o.deny || [], name: o.role_name || '' };
       if (o.subject_type === 'user') access.overrides.user = entry;
       else if (everyone && Number(o.subject_id) === Number(everyone.id)) access.overrides.everyone = entry;
       else access.overrides.roles.push(entry);
@@ -104,6 +105,35 @@ async function loadAccess(query, userId, channelId) {
     access.channelModerator = moderator.rows.length > 0;
   }
   return access;
+}
+
+// The same answer as resolvePermission, with the reason: { allowed, reason }. Used by the access checker, so a wrong
+// setup can be understood; test/permissions.test.js proves the two always agree.
+function explainPermission({ isOwner, grants, overrides, channelModerator }, permission) {
+  if (isOwner) return { allowed: true, reason: 'Owner: always allowed' };
+  const names = (list) => list.map((entry) => entry.name || 'a role').join(', ');
+  const givers = grants.filter((grant) => (grant.permissions || []).includes(permission));
+  let allowed = givers.length > 0;
+  let reason = allowed ? `Given by ${givers.map((g) => g.name || g.key).join(', ')}` : 'No role gives it';
+  if (overrides) {
+    const step = (entry, who) => {
+      if (!entry) return;
+      if ((entry.deny || []).includes(permission)) { allowed = false; reason = `Denied in this channel for ${who}`; }
+      if ((entry.allow || []).includes(permission)) { allowed = true; reason = `Allowed in this channel for ${who}`; }
+    };
+    step(overrides.everyone, 'Everyone');
+    const roles = overrides.roles || [];
+    const denying = roles.filter((entry) => (entry.deny || []).includes(permission));
+    const allowing = roles.filter((entry) => (entry.allow || []).includes(permission));
+    if (denying.length) { allowed = false; reason = `Denied in this channel for ${names(denying)}`; }
+    if (allowing.length) { allowed = true; reason = `Allowed in this channel for ${names(allowing)}`; }
+    step(overrides.user, 'this person');
+  }
+  if (channelModerator && (permission === 'manage_messages' || permission === 'timeout_members')) {
+    const denied = overrides && overrides.user && (overrides.user.deny || []).includes(permission);
+    if (!denied) return { allowed: true, reason: 'Channel moderator in this channel' };
+  }
+  return { allowed, reason };
 }
 
 // May this person do this (optionally in one channel)? False for an unknown or deactivated account.
@@ -145,6 +175,7 @@ async function viewableChannels(query, userId, rows) {
 }
 
 module.exports = {
+  explainPermission,
   viewableChannels,
   needsCheckSql,
   PERMISSIONS, PERMISSION_KEYS, EVERYONE_DEFAULTS, HR_DEFAULTS, isPermission,

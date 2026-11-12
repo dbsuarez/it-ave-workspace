@@ -49,8 +49,51 @@ function renderRolesPanel() {
       <p class="moderation-help">Tick a box to give or take a role; it saves at once. Owner and HR are shown for reference: they are set on the person's record (Superadmin and HR switches).</p>
       <div class="role-table-tools"><input id="role-table-search" type="search" placeholder="Search people" aria-label="Search people"></div>
       <div class="role-table-wrap" id="role-table-host"><div class="loading-state">Loading…</div></div>
+    </div>
+    <div class="moderation-card roles-card">
+      <h2>Check access</h2>
+      <p class="moderation-help">See what a person or a role can do and which channels they can see, with the reason for each answer. This only looks: it does not sign you in as them.</p>
+      <div class="access-check-bar">
+        <select id="access-subject" aria-label="Person or role">
+          <option value="">Choose a person or a role…</option>
+          <optgroup label="People">${rolesState.people.map((p) => `<option value="user:${p.id}">${escapeHtml(personName(p))}</option>`).join('')}</optgroup>
+          <optgroup label="Roles">${rolesState.roles.map((r) => `<option value="role:${r.id}">${escapeHtml(r.name)}</option>`).join('')}</optgroup>
+        </select>
+        <button type="button" class="btn primary" data-access-check>Check</button>
+      </div>
+      <div id="access-result"></div>
     </div>`;
   loadRoleTable();
+}
+
+function accessMark(allowed) {
+  return allowed ? '<span class="access-yes" aria-label="Allowed">&#10003;</span>' : '<span class="access-no" aria-label="Not allowed">&#10007;</span>';
+}
+
+async function runAccessCheck() {
+  const value = (document.getElementById('access-subject') || {}).value || '';
+  const host = document.getElementById('access-result');
+  if (!host) return;
+  if (!value) { host.innerHTML = ''; return; }
+  const [type, id] = value.split(':');
+  host.innerHTML = '<div class="loading-state">Checking…</div>';
+  const res = await api(`/api/roles/check?${type === 'role' ? 'roleId' : 'userId'}=${encodeURIComponent(id)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { host.innerHTML = `<p class="role-error">${escapeHtml(data.error || 'Could not check')}</p>`; return; }
+  const keys = data.channelPermissions;
+  const own = data.permissions.map((p) => `<tr><td>${accessMark(p.allowed)}</td><td><strong>${escapeHtml(p.label)}</strong></td><td class="access-reason">${escapeHtml(p.reason)}</td></tr>`).join('');
+  const chans = data.channels.map((c) => `<tr>
+    <td><strong>#${escapeHtml(c.name)}</strong>${c.isPrivate ? ' <span class="role-tag">Private</span>' : ''}<small>${c.member === null ? '' : (c.member ? 'Member' : 'Not a member')}</small></td>
+    <td class="role-col">${accessMark(c.visible)}</td>
+    ${keys.slice(1).map((k) => `<td class="role-col" title="${escapeHtml(c.checks[k.key].reason)}">${accessMark(c.checks[k.key].allowed)}</td>`).join('')}
+    <td class="access-reason">${escapeHtml(c.visible ? (c.checks.send_messages.allowed ? '' : c.checks.send_messages.reason) : (c.member === false && c.checks.view_channel.allowed ? 'Not a member of this channel' : c.checks.view_channel.reason))}</td></tr>`).join('');
+  host.innerHTML = `
+    <h3 class="access-title">${escapeHtml(data.subject.name)} <span class="role-tag">${data.subject.type === 'role' ? 'Role' : 'Person'}</span></h3>
+    <h4 class="modal-section-title">Workspace</h4>
+    <table class="role-table"><tbody>${own}</tbody></table>
+    <h4 class="modal-section-title">Channels</h4>
+    <p class="moderation-help">Hover a tick or cross to see the reason. A person only sees channels they belong to.</p>
+    <div class="role-table-wrap"><table class="role-table"><thead><tr><th>Channel</th><th class="role-col">Can see it</th>${keys.slice(1).map((k) => `<th class="role-col">${escapeHtml(k.label)}</th>`).join('')}<th>Why</th></tr></thead><tbody>${chans}</tbody></table></div>`;
 }
 
 const roleTable = { assignments: {}, owners: [], hr: [], query: '' };
@@ -247,6 +290,7 @@ async function handleRolesClick(event) {
     loadRolesPanel();
     return true;
   }
+  if (target.closest('[data-access-check]')) { runAccessCheck(); return true; }
   const save = target.closest('[data-role-assign-save]');
   if (save) {
     const roleIds = [...document.querySelectorAll(`#${save.dataset.box || 'role-assign-box'} input[name="assign"]:checked`)].map((box) => Number(box.value));
@@ -263,6 +307,9 @@ if (typeof document !== 'undefined') {
   document.addEventListener('change', (event) => {
     const box = event.target && event.target.closest ? event.target.closest('input[data-role-toggle]') : null;
     if (box) toggleRoleFor(box.closest('tr'), box);
+  });
+  document.addEventListener('change', (event) => {
+    if (event.target && event.target.id === 'access-subject') runAccessCheck();
   });
   document.addEventListener('input', (event) => {
     if (event.target && event.target.id === 'role-table-search') { roleTable.query = event.target.value; renderRoleTable(); }

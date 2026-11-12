@@ -147,3 +147,27 @@ test('a role granting manage_people makes someone HR everywhere the old flag was
   assert.equal((await query(`SELECT id FROM users WHERE id = $1 AND ${HR_LIKE_SQL}`, [person])).rows.length, 1);
   assert.equal(row.is_hr, false);
 });
+
+test('explainPermission always agrees with resolvePermission, and says why', () => {
+  const { explainPermission } = require('../src/permissions');
+  const keys = ['send_messages', 'manage_messages', 'timeout_members', 'attach_files'];
+  const entries = [null, { allow: ['send_messages'], deny: [] }, { allow: [], deny: ['send_messages'] }, { allow: ['attach_files'], deny: ['send_messages'] }, { allow: ['manage_messages'], deny: [] }];
+  const grantSets = [[everyone], [everyone, { key: null, name: 'Manager', permissions: ['manage_messages', 'send_messages'] }]];
+  let checked = 0;
+  for (const owner of [false, true]) for (const moderator of [false, true]) for (const grants of grantSets) {
+    for (const ev of entries) for (const role of entries) for (const user of entries) {
+      const state = { isOwner: owner, grants, channelModerator: moderator, overrides: { everyone: ev, roles: role ? [{ ...role, name: 'R' }] : [], user } };
+      for (const key of keys) {
+        const explained = explainPermission(state, key);
+        assert.equal(explained.allowed, resolvePermission(state, key), `${key} ${JSON.stringify(state)}`);
+        assert.ok(explained.reason.length > 0);
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked > 1000);
+  assert.equal(explainPermission({ isOwner: true, grants: [], overrides: null, channelModerator: false }, 'manage_roles').reason, 'Owner: always allowed');
+  assert.match(explainPermission(base({ overrides: { everyone: { deny: ['send_messages'] }, roles: [], user: null } }), 'send_messages').reason, /Denied in this channel for Everyone/);
+  assert.match(explainPermission(base(), 'send_messages').reason, /Given by/);
+  assert.match(explainPermission(base(), 'manage_roles').reason, /No role gives it/);
+});

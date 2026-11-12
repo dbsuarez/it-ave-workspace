@@ -123,3 +123,9 @@ old flag checks (canvases, remaining sockets) onto `can()`.
 the role and is in the channel (`/api/roles/mentionable`, `notifyMessageActivity`). Any member may mention a role.
 Left as they are on purpose: canvases keep their own viewer/commenter/editor/owner roles with the Owner bypass, and
 guest accounts are unchanged.
+
+**Access checker (2026-11-12):** Moderation > Roles > Check access. Pick a person or a role: it lists every permission
+with the reason it is allowed or not, and every channel with can-see / send / attach / react and why (`GET
+/api/roles/check`, `explainPermission` in `permissions.js`, kept equal to `resolvePermission` by a test). It never acts as
+anyone. A read-only "View as" (the app opened as that person, every write refused, DMs hidden, audited) is the planned
+next step.

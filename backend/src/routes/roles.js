@@ -5,7 +5,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { PERMISSIONS, can } = require('../permissions');
+const { PERMISSIONS, can, loadAccess, explainPermission } = require('../permissions');
 const { actorProfile, canManageRole, ungrantable, cleanRoleInput, roleHandle, MAX_CUSTOM_ROLES } = require('../roles');
 
 const router = express.Router();
@@ -64,6 +64,69 @@ router.get('/mentionable', async (req, res) => {
     );
     res.json({ roles: result.rows.filter((r) => roleHandle(r.name)).map((r) => ({ id: r.id, name: r.name, handle: roleHandle(r.name), color: r.color, memberCount: Number(r.member_count) })) });
   } catch (err) { sendError(res, err, 'Mentionable roles error'); }
+});
+
+// The access checker: what a person (?userId=) or a role (?roleId=) can do and see, with the reason for each answer.
+// Read-only: it never acts as anyone. { subject, permissions: [{ key, label, allowed, reason }], channels: [{ id, name,
+// isPrivate, member, visible, checks: { view_channel: { allowed, reason }, ... } }] }.
+const CHECKED_IN_CHANNEL = ['view_channel', 'send_messages', 'attach_files', 'add_reactions'];
+
+router.get('/check', async (req, res) => {
+  try {
+    await requireRoleManager(req.user.userId);
+    const userId = parseId(req.query.userId);
+    const roleId = parseId(req.query.roleId);
+    if (!userId === !roleId) throw fail(400, 'Choose one person or one role');
+    const channels = (await query('SELECT id, name, is_private FROM channels ORDER BY name')).rows;
+    const label = (key) => (PERMISSIONS.find((p) => p.key === key) || {}).label || key;
+    let subject;
+    let permissions;
+    let rows;
+    if (userId) {
+      const person = (await query("SELECT id, username, first_name, middle_name, last_name FROM users WHERE id = $1 AND account_type = 'member' AND deactivated_at IS NULL", [userId])).rows[0];
+      if (!person) throw fail(404, 'Person not found');
+      subject = { type: 'person', id: person.id, name: [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ') || person.username };
+      const workspace = await loadAccess(query, userId, null);
+      permissions = PERMISSIONS.map((p) => ({ key: p.key, label: p.label, ...explainPermission(workspace, p.key) }));
+      const member = new Set((await query('SELECT channel_id FROM channel_members WHERE user_id = $1', [userId])).rows.map((r) => Number(r.channel_id)));
+      rows = [];
+      for (const channel of channels) {
+        const access = await loadAccess(query, userId, channel.id);
+        const checks = {};
+        for (const key of CHECKED_IN_CHANNEL) checks[key] = explainPermission(access, key);
+        const isMember = member.has(Number(channel.id));
+        rows.push({ id: channel.id, name: channel.name, isPrivate: channel.is_private, member: isMember, visible: access.isOwner || (isMember && checks.view_channel.allowed), checks });
+      }
+    } else {
+      const role = (await query('SELECT id, name, permissions, builtin_key FROM roles WHERE id = $1', [roleId])).rows[0];
+      if (!role) throw fail(404, 'Role not found');
+      const everyone = (await query("SELECT id, name, permissions, builtin_key FROM roles WHERE builtin_key = 'everyone'")).rows[0];
+      subject = { type: 'role', id: role.id, name: role.name };
+      const grants = [everyone, role].filter((r, i, all) => all.findIndex((x) => x.id === r.id) === i).map((r) => ({ key: r.builtin_key || null, name: r.name, permissions: r.permissions }));
+      const isOwner = role.builtin_key === 'owner';
+      permissions = PERMISSIONS.map((p) => ({ key: p.key, label: p.label, ...explainPermission({ isOwner, grants, overrides: null, channelModerator: false }, p.key) }));
+      const overrides = (await query(
+        "SELECT channel_id, subject_id, allow, deny FROM channel_overrides WHERE subject_type = 'role' AND subject_id = ANY($1::int[])", [[everyone.id, role.id]]
+      )).rows;
+      rows = channels.map((channel) => {
+        const mine = overrides.filter((o) => Number(o.channel_id) === Number(channel.id));
+        const forEveryone = mine.find((o) => Number(o.subject_id) === Number(everyone.id));
+        const forRole = role.builtin_key === 'everyone' ? null : mine.find((o) => Number(o.subject_id) === Number(role.id));
+        const state = {
+          isOwner, grants, channelModerator: false,
+          overrides: {
+            everyone: forEveryone ? { allow: forEveryone.allow, deny: forEveryone.deny } : null,
+            roles: forRole ? [{ allow: forRole.allow, deny: forRole.deny, name: role.name }] : [],
+            user: null,
+          },
+        };
+        const checks = {};
+        for (const key of CHECKED_IN_CHANNEL) checks[key] = explainPermission(state, key);
+        return { id: channel.id, name: channel.name, isPrivate: channel.is_private, member: null, visible: checks.view_channel.allowed, checks };
+      });
+    }
+    res.json({ subject, permissions, channels: rows, channelPermissions: CHECKED_IN_CHANNEL.map((key) => ({ key, label: label(key) })) });
+  } catch (err) { sendError(res, err, 'Access check error'); }
 });
 
 router.get('/permissions', async (req, res) => {

@@ -224,3 +224,25 @@ test('mentioning @table-role notifies the people who hold it, only those in the 
   const mentions = sent.filter((s) => s.event === 'activity' && s.type === 'mention').map((s) => s.room);
   assert.deepEqual(mentions, [`user_${holderIn}`]);
 });
+
+test('the access checker explains a person and a role, and refuses anyone who cannot manage roles', async (t) => {
+  if (skip(t)) return;
+  assert.equal((await call(ids.ann, 'GET', `/check?userId=${ids.bob}`)).status, 403);
+  assert.equal((await call(ids.boss, 'GET', '/check')).status, 400, 'needs a subject');
+  assert.equal((await call(ids.boss, 'GET', `/check?userId=${ids.bob}&roleId=1`)).status, 400, 'not both');
+  const person = await call(ids.boss, 'GET', `/check?userId=${ids.bob}`);
+  assert.equal(person.status, 200);
+  assert.equal(person.json.subject.type, 'person');
+  assert.equal(person.json.permissions.find((p) => p.key === 'send_messages').allowed, true);
+  assert.equal(person.json.permissions.find((p) => p.key === 'manage_roles').allowed, false);
+  const room = person.json.channels.find((c) => c.name === 'role-mention-room');
+  assert.equal(room.member, true);
+  assert.equal(room.visible, true);
+  assert.match(room.checks.send_messages.reason, /Given by/);
+  const hrRole = (await admin.query("SELECT id FROM roles WHERE builtin_key = 'hr'")).rows[0].id;
+  const role = await call(ids.boss, 'GET', `/check?roleId=${hrRole}`);
+  assert.equal(role.status, 200);
+  assert.equal(role.json.subject.type, 'role');
+  assert.equal(role.json.permissions.find((p) => p.key === 'manage_people').allowed, true);
+  assert.equal((await call(ids.boss, 'GET', '/check?userId=999999')).status, 404);
+});
