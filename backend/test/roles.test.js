@@ -174,3 +174,22 @@ test('the assignment table data lists every person\'s custom roles and who is Ow
   assert.deepEqual(data.json.owners, [ids.boss]);
   assert.equal((await call(ids.ann, 'GET', '/assignments')).status, 403);
 });
+
+test('a person\'s roles come with them in the people directory, highest rank first', async (t) => {
+  if (skip(t)) return;
+  const app2 = express();
+  app2.use(express.json());
+  app2.use('/api/people', require('../src/routes/people'));
+  const srv = http.createServer(app2);
+  await new Promise((resolve) => srv.listen(0, '127.0.0.1', resolve));
+  try {
+    const res = await fetch(`http://127.0.0.1:${srv.address().port}/api/people`, { headers: { Authorization: `Bearer ${jwt.sign({ userId: ids.boss, username: 'u', tokenVersion: 0 }, config.JWT_SECRET)}` } });
+    const people = (await res.json()).people;
+    const bob = people.find((p) => p.id === ids.bob);
+    assert.deepEqual(bob.roles.map((r) => r.name), ['Table role']);
+    assert.ok(/^#[0-9A-F]{6}$/i.test(bob.roles[0].color));
+    assert.deepEqual(people.find((p) => p.id === ids.ann).roles, []);
+  } finally {
+    await new Promise((resolve) => srv.close(resolve));
+  }
+});

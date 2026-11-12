@@ -376,6 +376,7 @@ function renderPersonPage() {
       <div class="pp-hero-text">
         <h2>${escapeText(personName(person))} ${presenceDot(person)}</h2>
         <p>${escapeText(personLine(person)) || '<span class="pp-muted">No title yet</span>'}</p>
+        ${(person.roles || []).length ? `<p class="pp-roles">${person.roles.map((r) => `<span class="pp-role-chip"><span class="role-dot" style="background:${escapeText(r.color)}"></span>${escapeText(r.name)}</span>`).join('')}</p>` : ''}
         <p class="pp-muted">${[personFullName(person) ? '@' + person.username : '', person.location, [person.statusEmoji, person.statusText].filter(Boolean).join(' ')].filter(Boolean).map(escapeText).join(' · ')}</p>
       </div>
       <div class="pp-hero-actions">

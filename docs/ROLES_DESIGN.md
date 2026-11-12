@@ -110,3 +110,9 @@ channel has a setting for that permission or the Everyone role no longer grants 
 person" is now a table of everyone against the custom roles (tick to save). Not yet: open clients refreshing live when
 permissions change (the `permissions_updated` socket event is sent but the app does not listen yet), `mention_everyone`
 enforcement, and phase 4 (role mentions, colors on names, badges).
+
+**Update (same day, later):** open clients now refresh when roles or channel permissions change (`permissions_updated`),
+file deletion, topic editing and channel deletion also accept the matching role permission, and a person's page shows
+their roles as colored chips (`roles` on `/api/people`). `mention_everyone` is reserved: the app has no @everyone yet, so
+nothing enforces it. Still open: role colors next to names in messages, role mentions (@role), and moving the rest of the
+old flag checks (canvases, remaining sockets) onto `can()`.
