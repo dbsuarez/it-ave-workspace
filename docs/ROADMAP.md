@@ -405,3 +405,7 @@ Choosing a photo opens "Position your photo": a round window over the picture, d
 ## Thumbnails for picture files (2026-11-12)
 
 The Files view and Saved items show a small thumbnail for PNG, JPEG, GIF, WebP and BMP files (other files keep their icon). The picture is fetched with the sign-in, shrunk in the app to 320 px on its long side and cached for the session; only cards that scroll into view load, two at a time. Server-side thumbnails would save bandwidth for very large pictures; not needed on a LAN. Code: `frontend/src/features/file-thumbnails.js`.
+
+## Later: HTTPS on localhost with mkcert (asked 2026-11-12)
+
+Use mkcert to make a locally trusted certificate so the backend and the phone app can be served over https during development. It also lets the phone app's service worker and web push run (both need https), and it is a rehearsal for the real domain/TLS step on the Linux host. Not started.

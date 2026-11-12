@@ -75,3 +75,14 @@ downgrade.
 - Keep **Superadmin** as the single Owner, or allow several Owners? (Recommend: several, at least one always remains.)
 - Should HR stay a fixed role or become an ordinary editable role? (Recommend: built-in but its permissions editable.)
 - Guests: keep the current guest rules untouched in phase 1? (Recommend: yes.)
+
+## Status
+
+Decisions (2026-11-12): several Owners allowed (at least one always remains); HR is a built-in role with editable
+permissions; guest accounts unchanged in phase 1.
+
+**Phase 1 done (engine):** tables `roles`, `user_roles`, `channel_overrides` with the three built-in roles seeded;
+`backend/src/permissions.js` (`can`, `requirePermission`, `resolvePermission`, the permission list); the Superadmin and
+`is_hr` flags still drive Owner and HR, so nothing changed for anyone. First wiring: a role granting `manage_messages`
+now also passes the channel-moderator check. Next in phase 1: move the remaining hard-coded checks (post, delete,
+moderation, HR routes) onto `can()` one route at a time, each with a test proving the old behavior is unchanged.

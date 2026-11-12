@@ -692,4 +692,33 @@ $$`,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    )`,
   `CREATE INDEX IF NOT EXISTS idx_attendance_corrections_status ON attendance_corrections(status, work_date)`,
+  `CREATE TABLE IF NOT EXISTS roles (
+     id SERIAL PRIMARY KEY,
+     name VARCHAR(40) NOT NULL,
+     color VARCHAR(7) NOT NULL DEFAULT '#6B21A8',
+     position INTEGER NOT NULL DEFAULT 100,
+     permissions TEXT[] NOT NULL DEFAULT '{}',
+     builtin_key VARCHAR(12) UNIQUE CHECK (builtin_key IN ('owner', 'hr', 'everyone')),
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_name ON roles (LOWER(name))`,
+  `CREATE TABLE IF NOT EXISTS user_roles (
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+     assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     PRIMARY KEY (user_id, role_id)
+   )`,
+  `CREATE TABLE IF NOT EXISTS channel_overrides (
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     subject_type VARCHAR(4) NOT NULL CHECK (subject_type IN ('role', 'user')),
+     subject_id INTEGER NOT NULL,
+     allow TEXT[] NOT NULL DEFAULT '{}',
+     deny TEXT[] NOT NULL DEFAULT '{}',
+     PRIMARY KEY (channel_id, subject_type, subject_id)
+   )`,
+  `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('Owner', '#B45309', 0, ARRAY['view_channel','send_messages','attach_files','add_reactions','mention_everyone','create_channels','manage_channels','manage_messages','timeout_members','manage_roles','manage_people','view_audit_log','manage_workspace'], 'owner') ON CONFLICT (builtin_key) DO NOTHING`,
+  `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('HR', '#0F766E', 10, ARRAY['manage_people'], 'hr') ON CONFLICT (builtin_key) DO NOTHING`,
+  `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('Everyone', '#6B7280', 1000, ARRAY['view_channel','send_messages','attach_files','add_reactions','create_channels'], 'everyone') ON CONFLICT (builtin_key) DO NOTHING`,
 ];

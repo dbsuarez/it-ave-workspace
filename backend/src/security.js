@@ -1,3 +1,4 @@
+const { can } = require('./permissions');
 const { ensureGuestCanReach } = require('./guests');
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -119,6 +120,7 @@ async function ensureChannelModerator(query, userId, channelId) {
      )`,
     [channelId, userId]
   );
+  if (result.rows.length === 0 && (await can(query, userId, 'manage_messages', { channelId }))) return; // a role grants it
   if (result.rows.length === 0) {
     const err = new Error('Channel moderator access required');
     err.status = 403;
