@@ -86,3 +86,9 @@ permissions; guest accounts unchanged in phase 1.
 `is_hr` flags still drive Owner and HR, so nothing changed for anyone. First wiring: a role granting `manage_messages`
 now also passes the channel-moderator check. Next in phase 1: move the remaining hard-coded checks (post, delete,
 moderation, HR routes) onto `can()` one route at a time, each with a test proving the old behavior is unchanged.
+
+**Phase 1 wiring so far:** moderation settings, slow mode, audit log (no channel) and changing a channel's moderators
+check `manage_workspace`, `view_audit_log` and `manage_channels`; the HR routes accept any role with `manage_people`
+(`requireHr`); channel-moderator checks accept a role with `manage_messages`. Still on the old flags: posting rules,
+message and file deletion, canvases, the places that read `is_hr`/`is_superadmin` directly (leave and attendance scope,
+people), and the sockets.

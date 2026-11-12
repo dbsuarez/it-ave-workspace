@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { query } = require('../db');
+const { can } = require('../permissions');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { ensureChannelMembership, ensureChannelModerator } = require('../security');
@@ -20,9 +21,10 @@ function sendError(res, err, label) {
   return res.status(500).json({ error: 'Server error' });
 }
 
-async function requireSuperadmin(userId) {
-  const result = await query('SELECT is_superadmin FROM users WHERE id = $1', [userId]);
-  if (!result.rows[0]?.is_superadmin) {
+// Workspace-wide moderation needs a role permission (today only Owners have them): manage_workspace for settings and
+// slow mode, manage_channels for changing a channel's moderators.
+async function requireWorkspacePermission(userId, permission = 'manage_workspace') {
+  if (!(await can(query, userId, permission))) {
     const err = new Error('Superadmin access required');
     err.status = 403;
     throw err;
@@ -64,7 +66,7 @@ router.get('/audit', async (req, res) => {
       return res.status(400).json({ error: 'A valid channel ID is required' });
     }
     if (channelId) await ensureChannelModerator(query, req.user.userId, channelId);
-    else await requireSuperadmin(req.user.userId);
+    else await requireWorkspacePermission(req.user.userId, 'view_audit_log');
     const limit = Number(req.query.limit || 100);
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       return res.status(400).json({ error: 'Limit must be between 1 and 100' });
@@ -94,7 +96,7 @@ router.get('/audit', async (req, res) => {
 
 router.get('/settings', async (req, res) => {
   try {
-    await requireSuperadmin(req.user.userId);
+    await requireWorkspacePermission(req.user.userId, 'manage_workspace');
     const result = await query(
       'SELECT default_timeout_minutes, max_timeout_minutes FROM moderation_settings WHERE id = 1'
     );
@@ -111,7 +113,7 @@ router.get('/settings', async (req, res) => {
 
 router.put('/settings', async (req, res) => {
   try {
-    await requireSuperadmin(req.user.userId);
+    await requireWorkspacePermission(req.user.userId, 'manage_workspace');
     const { defaultTimeoutMinutes, maxTimeoutMinutes } = req.body || {};
     if (!Number.isInteger(defaultTimeoutMinutes) || !Number.isInteger(maxTimeoutMinutes)
       || defaultTimeoutMinutes < 1 || maxTimeoutMinutes < 1 || maxTimeoutMinutes > 10080
@@ -210,7 +212,7 @@ router.get('/channels/:channelId', async (req, res) => {
 
 router.put('/channels/:channelId/members/:userId', async (req, res) => {
   try {
-    await requireSuperadmin(req.user.userId);
+    await requireWorkspacePermission(req.user.userId, 'manage_channels');
     const channelId = parseId(req.params.channelId);
     const userId = parseId(req.params.userId);
     const { role } = req.body || {};
@@ -236,7 +238,7 @@ router.put('/channels/:channelId/members/:userId', async (req, res) => {
 
 router.delete('/channels/:channelId/members/:userId', async (req, res) => {
   try {
-    await requireSuperadmin(req.user.userId);
+    await requireWorkspacePermission(req.user.userId, 'manage_channels');
     const channelId = parseId(req.params.channelId);
     const userId = parseId(req.params.userId);
     if (!channelId || !userId) return res.status(400).json({ error: 'Valid channel and user IDs are required' });
@@ -480,7 +482,7 @@ const slowSeconds = (value) => (Number.isInteger(value) && value >= 0 && value <
 // GET /api/moderation/slowmode-policy - the slow mode new channels start with
 router.get('/slowmode-policy', async (req, res) => {
   try {
-    await requireSuperadmin(req.user.userId);
+    await requireWorkspacePermission(req.user.userId, 'manage_workspace');
     const row = (await query('SELECT default_slowmode_seconds FROM moderation_settings WHERE id = 1')).rows[0];
     res.json({ defaultSeconds: row ? row.default_slowmode_seconds : 5 });
   } catch (err) {
@@ -491,7 +493,7 @@ router.get('/slowmode-policy', async (req, res) => {
 // PUT /api/moderation/slowmode-policy - { defaultSeconds } for channels created from now on
 router.put('/slowmode-policy', async (req, res) => {
   try {
-    await requireSuperadmin(req.user.userId);
+    await requireWorkspacePermission(req.user.userId, 'manage_workspace');
     const seconds = slowSeconds(req.body && req.body.defaultSeconds);
     if (seconds === null) return res.status(400).json({ error: 'Slow mode must be whole seconds from 0 to 3600' });
     await query('UPDATE moderation_settings SET default_slowmode_seconds = $1, updated_by = $2, updated_at = NOW() WHERE id = 1', [seconds, req.user.userId]);
@@ -505,7 +507,7 @@ router.put('/slowmode-policy', async (req, res) => {
 // POST /api/moderation/slowmode-all - { seconds }: set the same slow mode on every existing channel
 router.post('/slowmode-all', async (req, res) => {
   try {
-    await requireSuperadmin(req.user.userId);
+    await requireWorkspacePermission(req.user.userId, 'manage_workspace');
     const seconds = slowSeconds(req.body && req.body.seconds);
     if (seconds === null) return res.status(400).json({ error: 'Slow mode must be whole seconds from 0 to 3600' });
     const result = await query('UPDATE channels SET slowmode_seconds = $1 RETURNING id', [seconds]);

@@ -12,6 +12,7 @@ const config = require('../src/config');
 const dbPath = require.resolve('../src/db');
 const previousDbModule = require.cache[dbPath];
 let superadmin = false;
+let rolePermissions = [];
 let channelModerator = false;
 let savedSettings = { default_timeout_minutes: 5, max_timeout_minutes: 10080 };
 const queries = [];
@@ -25,6 +26,8 @@ require.cache[dbPath] = {
       queries.push({ sql, params });
       if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
       if (sql.includes('SELECT is_superadmin FROM users')) return { rows: [{ is_superadmin: superadmin }] };
+      if (sql.includes('SELECT is_superadmin, is_hr, account_type FROM users')) return { rows: [{ is_superadmin: superadmin, is_hr: false, account_type: 'member' }] };
+      if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: [] }, ...(rolePermissions.length ? [{ id: 9, builtin_key: null, permissions: rolePermissions }] : [])] };
       if (sql.includes('SELECT default_timeout_minutes, max_timeout_minutes')) {
         return { rows: [savedSettings] };
       }
@@ -95,6 +98,15 @@ test('moderation settings are restricted to the configured superadmin role', asy
     defaultTimeoutMinutes: 5,
     maxTimeoutMinutes: 10080,
   });
+});
+
+test('a role that grants manage_workspace opens the settings for someone who is not an Owner; another permission does not', async () => {
+  superadmin = false;
+  rolePermissions = ['manage_messages'];
+  assert.equal((await fetch(`${baseUrl}/api/moderation/settings`, { headers: headers() })).status, 403);
+  rolePermissions = ['manage_workspace'];
+  assert.equal((await fetch(`${baseUrl}/api/moderation/settings`, { headers: headers() })).status, 200);
+  rolePermissions = [];
 });
 
 test('timeout policy validates bounds and persists only valid settings', async () => {

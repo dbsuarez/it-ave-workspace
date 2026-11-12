@@ -3,6 +3,7 @@
 // Only the Superadmin gives out roles (HR, Superadmin, guest) and moderates.
 const crypto = require('crypto');
 const { query } = require('./db');
+const { can } = require('./permissions');
 
 function fail(status, message) {
   return Object.assign(new Error(message), { status });
@@ -20,7 +21,10 @@ const canManageEmployees = (actor) => Boolean(actor && actor.account_type === 'm
 
 async function requireHr(userId) {
   const actor = await hrActor(userId);
-  if (!canManageEmployees(actor)) throw fail(403, 'Only the Superadmin or HR can do that');
+  // the Superadmin and HR flags, or any role that grants manage_people
+  if (!canManageEmployees(actor) && !(actor.account_type === 'member' && await can(query, userId, 'manage_people'))) {
+    throw fail(403, 'Only the Superadmin or HR can do that');
+  }
   return actor;
 }
 
