@@ -87,7 +87,8 @@ function cleanProfile(body) {
 }
 
 const PERSON_COLUMNS = `u.id, u.username, u.email, u.avatar_color, u.status, u.status_text, u.status_emoji, u.job_title,
-  u.department, u.location, u.manager_id, u.photo_file, u.photo_updated_at, u.profile, u.created_at, u.account_type`;
+  u.department, u.location, u.manager_id, u.photo_file, u.photo_updated_at, u.profile, u.created_at, u.account_type,
+  COALESCE((SELECT array_agg(sm.manager_id ORDER BY sm.position, sm.manager_id) FROM user_secondary_managers sm WHERE sm.user_id = u.id), '{}') AS secondary_manager_ids`;
 
 const photoVersion = (row) => (row.photo_file && row.photo_updated_at ? new Date(row.photo_updated_at).getTime() : null);
 
@@ -109,6 +110,8 @@ function mapPerson(row, viewerId, { full = false } = {}) {
     department: row.department || '',
     location: shows('location') ? row.location || '' : '',
     managerId: row.manager_id || null,
+    // extra, dotted-line managers (the main one is managerId)
+    secondaryManagerIds: (row.secondary_manager_ids || []).map(Number),
     email: shows('email') ? row.email : '',
   };
   if (full) {
@@ -176,9 +179,19 @@ router.get('/:id', async (req, res) => {
     const reports = (await query(
       `SELECT ${PERSON_COLUMNS} FROM users u WHERE u.manager_id = $1 AND ${MEMBERS_ONLY} ORDER BY LOWER(u.username)`, [id]
     )).rows;
+    const secondaryManagers = person.secondaryManagerIds.length ? (await query(
+      `SELECT ${PERSON_COLUMNS} FROM users u JOIN user_secondary_managers sm ON sm.manager_id = u.id
+       WHERE sm.user_id = $1 AND ${MEMBERS_ONLY} ORDER BY sm.position, sm.manager_id`, [id]
+    )).rows : [];
+    const secondaryReports = (await query(
+      `SELECT ${PERSON_COLUMNS} FROM users u JOIN user_secondary_managers sm ON sm.user_id = u.id
+       WHERE sm.manager_id = $1 AND ${MEMBERS_ONLY} ORDER BY LOWER(u.username)`, [id]
+    )).rows;
     res.json({
       person,
       manager: manager ? mapPerson(manager, me.id) : null,
+      secondaryManagers: secondaryManagers.map((row) => mapPerson(row, me.id)),
+      secondaryReports: secondaryReports.map((row) => mapPerson(row, me.id)),
       reports: reports.map((report) => mapPerson(report, me.id)),
       canSetManager: Boolean(me.is_superadmin),
     });
@@ -213,10 +226,48 @@ router.put('/:id/manager', async (req, res) => {
       }
     }
     await query('UPDATE users SET manager_id = $1 WHERE id = $2', [managerId, id]);
+    // the main manager is not also an extra one
+    if (managerId !== null) await query('DELETE FROM user_secondary_managers WHERE user_id = $1 AND manager_id = $2', [id, managerId]);
     res.json({ id, managerId });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Set manager error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/people/:id/secondary-managers - the extra (dotted-line) managers, in order; { managerIds: [] } clears them
+const MAX_SECONDARY_MANAGERS = 5;
+router.put('/:id/secondary-managers', async (req, res) => {
+  try {
+    const me = await requireMember(req.user.userId);
+    if (!me.is_superadmin) throw fail(403, 'Only the Superadmin can change reporting lines');
+    const id = parseId(req.params.id);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    const given = req.body && req.body.managerIds;
+    if (!Array.isArray(given) || given.length > MAX_SECONDARY_MANAGERS) throw fail(400, `managerIds must be a list of at most ${MAX_SECONDARY_MANAGERS} people`);
+    const managerIds = given.map(parseId);
+    if (managerIds.some((value) => value === null)) throw fail(400, 'managerIds must be person IDs');
+    if (new Set(managerIds).size !== managerIds.length) throw fail(400, 'Each manager can be listed once');
+    const person = (await query(`SELECT u.id, u.manager_id FROM users u WHERE u.id = $1 AND ${MEMBERS_ONLY}`, [id])).rows[0];
+    if (!person) throw fail(404, 'Person not found');
+    if (managerIds.includes(id)) throw fail(400, 'Nobody can report to themselves');
+    if (person.manager_id && managerIds.includes(Number(person.manager_id))) throw fail(400, 'That person is already the main manager');
+    if (managerIds.length) {
+      const found = await query(`SELECT u.id FROM users u WHERE u.id = ANY($1::int[]) AND ${MEMBERS_ONLY}`, [managerIds]);
+      if (found.rows.length !== managerIds.length) throw fail(404, 'One of those managers was not found');
+    }
+    await query('DELETE FROM user_secondary_managers WHERE user_id = $1', [id]);
+    if (managerIds.length) {
+      await query(
+        'INSERT INTO user_secondary_managers (user_id, manager_id, position) SELECT $1, m, ord FROM unnest($2::int[]) WITH ORDINALITY AS t(m, ord)',
+        [id, managerIds]
+      );
+    }
+    res.json({ id, secondaryManagerIds: managerIds });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Set secondary managers error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -6607,6 +6607,13 @@ h4.cv-h { font-size: 15px; }
 .pp-mini { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .pp-mini span { display: flex; flex-direction: column; min-width: 0; }
 .pp-mini em { font-size: 12px; font-style: normal; color: var(--text-muted); }
+.org-also { display: block; margin-top: 2px; font-size: 11px; font-style: italic; color: var(--muted, #6b7280); }
+.org-also-edit { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.org-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px dashed var(--border); border-radius: 999px; font-size: 11px; }
+.org-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
+.pp-subhead { margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--muted, #6b7280); text-transform: none; }
+.pp-secondary-row { display: flex; align-items: center; gap: 6px; }
+.pp-secondary-row .pp-mini { flex: 1; min-width: 0; }
 .pp-manager-edit { display: flex; gap: 6px; margin-top: 8px; }
 .pp-manager-edit select { flex: 1; min-width: 0; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
 

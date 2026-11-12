@@ -520,6 +520,14 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(100) NOT NULL DEFAUL
 ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id) WHERE manager_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS user_secondary_managers (
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     manager_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     position SMALLINT NOT NULL DEFAULT 0,
+     PRIMARY KEY (user_id, manager_id),
+     CHECK (user_id <> manager_id)
+   );
+CREATE INDEX IF NOT EXISTS idx_secondary_managers_manager ON user_secondary_managers(manager_id);
 
 -- Profile photo; mirrors backend/src/migrations.js.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_file VARCHAR(255);

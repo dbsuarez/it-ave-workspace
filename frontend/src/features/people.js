@@ -120,8 +120,14 @@ function renderDirectory(body) {
 
 // ---- org chart ---------------------------------------------------------------------------------
 
+// The extra (dotted-line) managers of a person, as people, in order.
+function secondaryManagersOf(person, everyone) {
+  return (person.secondaryManagerIds || []).map((id) => everyone.find((o) => o.id === id)).filter(Boolean);
+}
+
 function orgNodeHtml(node, editable, everyone) {
   const p = node.person;
+  const also = secondaryManagersOf(p, everyone);
   const size = orgTeamSize(node);
   const collapsed = peopleState.collapsed.has(p.id);
   const card = `
@@ -132,10 +138,15 @@ function orgNodeHtml(node, editable, everyone) {
           <strong>${escapeText(p.username)}</strong>
           <span>${escapeText(p.jobTitle) || ''}</span>
           ${p.department ? `<em>${escapeText(p.department)}</em>` : ''}
+          ${also.length ? `<span class="org-also" title="Dotted-line manager${also.length > 1 ? 's' : ''}">Also reports to ${also.map((o) => escapeText(o.username)).join(', ')}</span>` : ''}
         </span>
       </button>
       ${editable ? `<select class="org-manager-select" data-org-manager="${p.id}" aria-label="Reports to">
-        <option value="">No manager</option>${everyone.filter((o) => o.id !== p.id).map((o) => `<option value="${o.id}"${o.id === p.managerId ? ' selected' : ''}>${escapeText(o.username)}</option>`).join('')}</select>` : ''}
+        <option value="">No manager</option>${everyone.filter((o) => o.id !== p.id).map((o) => `<option value="${o.id}"${o.id === p.managerId ? ' selected' : ''}>${escapeText(o.username)}</option>`).join('')}</select>
+        <div class="org-also-edit">
+          ${also.map((o) => `<span class="org-chip">${escapeText(o.username)}<button type="button" data-secondary-remove="${p.id}:${o.id}" aria-label="Remove ${escapeText(o.username)} as an extra manager">×</button></span>`).join('')}
+          ${(p.secondaryManagerIds || []).length < 5 ? `<select class="org-manager-select" data-org-secondary-add="${p.id}" aria-label="Add an extra manager"><option value="">+ Also reports to…</option>${everyone.filter((o) => o.id !== p.id && o.id !== p.managerId && !(p.secondaryManagerIds || []).includes(o.id)).map((o) => `<option value="${o.id}">${escapeText(o.username)}</option>`).join('')}</select>` : ''}
+        </div>` : ''}
       ${node.children.length ? `<button type="button" class="org-toggle" data-org-toggle="${p.id}" title="${collapsed ? 'Show' : 'Hide'} the team" aria-expanded="${!collapsed}">${collapsed ? '+' : '−'} ${size}</button>` : ''}
     </div>`;
   const kids = node.children.length && !collapsed
@@ -154,7 +165,7 @@ function renderOrgChart(body) {
     body.innerHTML = emptyRecordMarkup('No one matches', 'Try a different search.');
     return;
   }
-  const hint = editable ? '<p class="pp-hint">Choose who each person reports to. Changes save immediately.</p>'
+  const hint = editable ? '<p class="pp-hint">Choose who each person reports to: the first is the main manager and sets where they sit in the chart. Add extra managers below it; they show as "Also reports to". Changes save immediately.</p>'
     : (peopleState.list.every((p) => !p.managerId) ? '<p class="pp-hint">No reporting lines are set yet.' + (state.moderation && state.moderation.isSuperadmin ? ' Use "Edit reporting lines" to set them.' : ' The Superadmin sets them.') + '</p>' : '');
   body.innerHTML = `${hint}<div class="org-scroll"><ul class="org-roots">${tree.map((node) => orgNodeHtml(node, editable, peopleState.list)).join('')}</ul></div>`;
 }
@@ -165,7 +176,25 @@ async function setPersonManager(personId, managerId) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not change the reporting line');
     const person = peopleState.list.find((p) => p.id === personId);
-    if (person) person.managerId = data.managerId;
+    if (person) {
+      person.managerId = data.managerId;
+      person.secondaryManagerIds = (person.secondaryManagerIds || []).filter((id) => id !== data.managerId);
+    }
+    return true;
+  } catch (err) {
+    showToast(err.message || 'Could not change the reporting line.', 'error');
+    return false;
+  }
+}
+
+// Replace the extra managers of someone. Resolves true on success.
+async function setSecondaryManagers(personId, managerIds) {
+  try {
+    const res = await api(`/api/people/${personId}/secondary-managers`, { method: 'PUT', body: JSON.stringify({ managerIds }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not change the reporting line');
+    const person = peopleState.list.find((p) => p.id === personId);
+    if (person) person.secondaryManagerIds = data.secondaryManagerIds;
     return true;
   } catch (err) {
     showToast(err.message || 'Could not change the reporting line.', 'error');
@@ -205,6 +234,8 @@ function renderPersonPage() {
   body.className = 'people-body people-page-body';
   if (!peopleState.page) { body.innerHTML = '<p class="pp-muted">Loading…</p>'; return; }
   const { person, manager, reports, canSetManager } = peopleState.page;
+  const secondaryManagers = peopleState.page.secondaryManagers || [];
+  const secondaryReports = peopleState.page.secondaryReports || [];
   const mine = Number(person.id) === Number(state.user.id);
   const color = /^#[0-9a-fA-F]{6}$/.test(person.avatarColor || '') ? person.avatarColor : '#6B21A8';
   const empty = !person.about && !person.sections.length && !person.links.length;
@@ -242,11 +273,15 @@ function renderPersonPage() {
         <section class="pp-section">
           <h3>Reports to</h3>
           ${manager ? personCard(manager) : '<p class="pp-muted">No manager set</p>'}
-          ${canSetManager ? `<div class="pp-manager-edit"><select id="page-manager" aria-label="Reports to"><option value="">No manager</option>${peopleState.list.filter((p) => p.id !== person.id).map((p) => `<option value="${p.id}"${manager && manager.id === p.id ? ' selected' : ''}>${escapeText(p.username)}</option>`).join('')}</select><button type="button" class="btn" data-page-set-manager="${person.id}">Save</button></div>` : ''}
+          ${secondaryManagers.length || canSetManager ? '<h4 class="pp-subhead">Also reports to</h4>' : ''}
+          ${secondaryManagers.map((m) => `<div class="pp-secondary-row">${personCard(m)}${canSetManager ? `<button type="button" class="btn" data-page-remove-secondary="${m.id}" aria-label="Remove ${escapeText(m.username)} as an extra manager">Remove</button>` : ''}</div>`).join('')}
+          ${canSetManager ? `<div class="pp-manager-edit"><select id="page-manager" aria-label="Reports to"><option value="">No manager</option>${peopleState.list.filter((p) => p.id !== person.id).map((p) => `<option value="${p.id}"${manager && manager.id === p.id ? ' selected' : ''}>${escapeText(p.username)}</option>`).join('')}</select><button type="button" class="btn" data-page-set-manager="${person.id}">Save</button></div>
+          ${secondaryManagers.length < 5 ? `<div class="pp-manager-edit"><select id="page-secondary" aria-label="Add an extra manager"><option value="">Add an extra manager…</option>${peopleState.list.filter((p) => p.id !== person.id && !(manager && manager.id === p.id) && !secondaryManagers.some((m) => m.id === p.id)).map((p) => `<option value="${p.id}">${escapeText(p.username)}</option>`).join('')}</select><button type="button" class="btn" data-page-add-secondary="${person.id}">Add</button></div>` : ''}` : ''}
         </section>
         <section class="pp-section">
           <h3>Direct reports${reports.length ? ` (${reports.length})` : ''}</h3>
           ${reports.length ? reports.map(personCard).join('') : '<p class="pp-muted">No direct reports</p>'}
+          ${secondaryReports.length ? `<h4 class="pp-subhead">Dotted-line reports (${secondaryReports.length})</h4>${secondaryReports.map(personCard).join('')}` : ''}
         </section>
       </aside>
     </div>`;
@@ -353,7 +388,7 @@ if (typeof document !== 'undefined') {
       return;
     }
     if (t.closest('[data-people-edit-lines]')) { peopleState.editLines = !peopleState.editLines; renderPeople(); return; }
-    if (t.closest('.org-manager-select')) return;
+    if (t.closest('.org-manager-select, .org-also-edit')) return;
     const person = t.closest('[data-person]');
     if (person) { openPersonPage(Number(person.dataset.person)); return; }
     const profile = t.closest('[data-profile-user]');
@@ -369,6 +404,30 @@ if (typeof document !== 'undefined') {
       const value = document.getElementById('page-manager').value;
       const ok = await setPersonManager(Number(setManager.dataset.pageSetManager), value === '' ? null : Number(value));
       if (ok) { showToast('Reporting line saved.', 'success'); openPersonPage(Number(setManager.dataset.pageSetManager)); }
+      return;
+    }
+    const addSecondary = t.closest('[data-page-add-secondary]');
+    if (addSecondary) {
+      const personId = Number(addSecondary.dataset.pageAddSecondary);
+      const value = document.getElementById('page-secondary').value;
+      if (!value) return;
+      const current = (peopleState.page.secondaryManagers || []).map((m) => m.id);
+      if (await setSecondaryManagers(personId, [...current, Number(value)])) openPersonPage(personId);
+      return;
+    }
+    const removeSecondary = t.closest('[data-page-remove-secondary]');
+    if (removeSecondary) {
+      const personId = peopleState.pageId;
+      const current = (peopleState.page.secondaryManagers || []).map((m) => m.id).filter((id) => id !== Number(removeSecondary.dataset.pageRemoveSecondary));
+      if (await setSecondaryManagers(personId, current)) openPersonPage(personId);
+      return;
+    }
+    const chipRemove = t.closest('[data-secondary-remove]');
+    if (chipRemove) {
+      const [personId, managerId] = chipRemove.dataset.secondaryRemove.split(':').map(Number);
+      const person = peopleState.list.find((p) => p.id === personId);
+      const next = ((person && person.secondaryManagerIds) || []).filter((id) => id !== managerId);
+      if (await setSecondaryManagers(personId, next)) renderPeopleBody();
       return;
     }
     // the page editor
@@ -393,6 +452,15 @@ if (typeof document !== 'undefined') {
 
   document.addEventListener('change', async (event) => {
     if (event.target.id === 'people-department') { peopleState.department = event.target.value; renderPeopleBody(); return; }
+    const addSelect = event.target.closest ? event.target.closest('[data-org-secondary-add]') : null;
+    if (addSelect) {
+      const id = Number(addSelect.dataset.orgSecondaryAdd);
+      if (!addSelect.value) return;
+      const person = peopleState.list.find((p) => p.id === id);
+      const ok = await setSecondaryManagers(id, [...((person && person.secondaryManagerIds) || []), Number(addSelect.value)]);
+      if (ok) renderPeopleBody(); else addSelect.value = '';
+      return;
+    }
     const select = event.target.closest ? event.target.closest('[data-org-manager]') : null;
     if (select) {
       const id = Number(select.dataset.orgManager);
