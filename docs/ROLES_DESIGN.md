@@ -99,3 +99,5 @@ hold; Owner is untouchable; HR and Everyone keep their names but their permissio
 every change. Moderation has a **Roles** tab (Superadmin only for now): the ranked list, New role / Edit with a
 permission checklist, and "Give roles to a person". Still to do in phase 2: role chips on the person's record, and
 showing the Roles tab to anyone whose role grants `manage_roles`. Phase 3 (channel overrides screen) is next.
+
+**Phase 2 finished:** the Roles tab now shows for anyone whose role grants `manage_roles` (the access answer carries `canManageRoles`), and a person's employee record has a Roles section to give or take custom roles.

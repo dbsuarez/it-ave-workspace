@@ -49,6 +49,7 @@ router.get('/access', async (req, res) => {
       [req.user.userId]
     );
     res.json({
+      canManageRoles: await can(query, req.user.userId, 'manage_roles'),
       isSuperadmin: Boolean(result.rows[0]?.is_superadmin),
       isHr: Boolean(result.rows[0]?.is_hr),
       accountType: result.rows[0]?.account_type || 'member',

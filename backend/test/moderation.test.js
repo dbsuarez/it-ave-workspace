@@ -136,6 +136,7 @@ test('access response exposes moderator channel IDs without granting superadmin 
   const response = await fetch(`${baseUrl}/api/moderation/access`, { headers: headers() });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
+    canManageRoles: false,
     isSuperadmin: false,
     isHr: false,
     accountType: 'member',

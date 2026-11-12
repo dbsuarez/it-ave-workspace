@@ -193,6 +193,8 @@ function openEmployeeEditor(id) {
         ${state.moderation.isSuperadmin ? `<label class="preference-toggle"><input type="checkbox" id="emp-hr"${e.isHr ? ' checked' : ''}><span>HR: can manage employee records, departments and reporting lines</span></label>` : ''}
         <div class="form-group"><label for="emp-email">Email</label><input id="emp-email" type="email" maxlength="255" value="${escapeText(e.email)}" autocomplete="off"></div>
         <p class="form-note">${e.phone ? `Phone: ${escapeText(e.phone)}. ` : ''}The employee edits their own photo, phone and page.</p>
+        <div data-emp-roles-section><h4 class="modal-section-title">Roles</h4>
+        <div id="emp-roles"><p class="pp-muted">Loading…</p></div></div>
         <h4 class="modal-section-title">Leave balances</h4>
         <div id="emp-leave"><p class="pp-muted">Loading…</p></div>
         <h4 class="modal-section-title">Checklists</h4>
@@ -213,6 +215,7 @@ function openEmployeeEditor(id) {
     </form>`;
   openSettingsModal(modal);
   loadEmployeeTasks(id);
+  if (typeof loadEmployeeRoles === 'function') loadEmployeeRoles(id);
   if (typeof loadEmployeeLeave === 'function') loadEmployeeLeave(id);
 }
 

@@ -47,6 +47,24 @@ function renderRolesPanel() {
     </div>`;
 }
 
+// Just the data (no panel): the role list the person's record needs.
+async function loadRolesList() {
+  const res = await api('/api/roles');
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) rolesState.roles = data.roles;
+  return res.ok;
+}
+
+// The Roles section on a person's record (employees.js): shown to whoever may manage roles.
+async function loadEmployeeRoles(personId) {
+  const host = document.getElementById('emp-roles');
+  if (!host) return;
+  if (!(state.moderation && (state.moderation.isSuperadmin || state.moderation.canManageRoles))) { host.closest('[data-emp-roles-section]')?.remove(); return; }
+  if (!(await loadRolesList())) { host.innerHTML = '<p class="pp-muted">Roles could not load.</p>'; return; }
+  host.innerHTML = '<div id="emp-roles-box"></div>';
+  showPersonRoles(personId, 'emp-roles-box');
+}
+
 async function loadRolesPanel() {
   const host = document.getElementById('moderation-roles');
   if (!host) return;
@@ -135,8 +153,8 @@ function openRoleEditor(roleId) {
   if (!editable) overlay.querySelectorAll('input[name="perm"]').forEach((box) => { box.disabled = true; });
 }
 
-async function showPersonRoles(personId) {
-  const box = document.getElementById('role-assign-box');
+async function showPersonRoles(personId, boxId = 'role-assign-box') {
+  const box = document.getElementById(boxId);
   if (!box) return;
   if (!personId) { box.innerHTML = ''; return; }
   const res = await api(`/api/roles/users/${personId}`);
@@ -148,7 +166,7 @@ async function showPersonRoles(personId) {
     <div class="role-assign-list">${custom.map((r) => `
       <label class="role-perm"><input type="checkbox" name="assign" value="${r.id}"${held.has(r.id) ? ' checked' : ''}${r.canManage ? '' : ' disabled'}>
         <span>${roleDot(r)} <strong>${escapeHtml(r.name)}</strong></span></label>`).join('')}</div>
-    <button type="button" class="btn primary" data-role-assign-save data-person="${personId}">Save roles</button>`
+    <button type="button" class="btn primary" data-role-assign-save data-person="${personId}" data-box="${boxId}">Save roles</button>`
     : '<p class="moderation-help">Create a role first.</p>';
 }
 
@@ -166,11 +184,12 @@ async function handleRolesClick(event) {
   }
   const save = target.closest('[data-role-assign-save]');
   if (save) {
-    const roleIds = [...document.querySelectorAll('#role-assign-box input[name="assign"]:checked')].map((box) => Number(box.value));
+    const roleIds = [...document.querySelectorAll(`#${save.dataset.box || 'role-assign-box'} input[name="assign"]:checked`)].map((box) => Number(box.value));
     const res = await api(`/api/roles/users/${save.dataset.person}`, { method: 'PUT', body: JSON.stringify({ roleIds }) });
     const data = await res.json().catch(() => ({}));
     showToast(res.ok ? 'Roles saved.' : (data.error || 'Could not save the roles.'), res.ok ? 'success' : 'error');
-    if (res.ok) loadRolesPanel().then(() => { const select = document.getElementById('role-assign-person'); if (select) { select.value = save.dataset.person; showPersonRoles(save.dataset.person); } });
+    if (res.ok && save.dataset.box === 'emp-roles-box') { await loadRolesList(); showPersonRoles(save.dataset.person, 'emp-roles-box'); }
+    else if (res.ok) loadRolesPanel().then(() => { const select = document.getElementById('role-assign-person'); if (select) { select.value = save.dataset.person; showPersonRoles(save.dataset.person); } });
     return true;
   }
   return false;

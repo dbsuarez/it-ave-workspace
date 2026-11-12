@@ -2426,13 +2426,14 @@ async function loadModerationAccess() {
     if (!res.ok) throw new Error(data.error || 'Could not load moderation access');
     state.moderation.isSuperadmin = Boolean(data.isSuperadmin);
     state.moderation.isHr = Boolean(data.isHr);
+    state.moderation.canManageRoles = Boolean(data.canManageRoles);
     if (typeof refreshLeaveSummary === 'function' && state.moderation.accountType !== 'guest') refreshLeaveSummary();
     if (typeof refreshAttendanceSummary === 'function' && state.moderation.accountType !== 'guest') refreshAttendanceSummary();
     state.moderation.moderatorChannelIds = data.moderatorChannelIds || [];
     state.moderation.accountType = data.accountType || 'member';
     applyAccountRestrictions();
     const nav = document.getElementById('nav-moderation');
-    if (nav) nav.hidden = !state.moderation.isSuperadmin && !state.moderation.moderatorChannelIds.length;
+    if (nav) nav.hidden = !state.moderation.isSuperadmin && !state.moderation.canManageRoles && !state.moderation.moderatorChannelIds.length;
     updateEditTopicVisibility(state.currentChannelId);
   } catch (err) {
     console.error('Load moderation access error:', err);
@@ -2446,26 +2447,28 @@ async function loadModerationView() {
     ? state.channels
     : state.channels.filter((channel) => state.moderation.moderatorChannelIds
       .some((id) => Number(id) === Number(channel.id)));
-  if (!channels.length) {
+  if (!channels.length && !state.moderation.canManageRoles && !state.moderation.isSuperadmin) {
     container.innerHTML = emptyRecordMarkup(
       'No channels to moderate',
       'You do not have moderation access to a channel yet.',
     );
     return;
   }
-  const selectedId = channels.some((channel) => Number(channel.id) === Number(state.moderation.channel?.id))
+  const selectedId = !channels.length ? null : channels.some((channel) => Number(channel.id) === Number(state.moderation.channel?.id))
     ? Number(state.moderation.channel.id) : Number(channels[0].id);
+  const canRoles = Boolean(state.moderation.isSuperadmin || state.moderation.canManageRoles);
   // Moderation is split into tabs for the Superadmin; a channel moderator only has Channels.
   const tabs = state.moderation.isSuperadmin
-    ? [['channels', 'Channels'], ['people', 'People and groups'], ['signup', 'Sign-up and invitations'], ['roles', 'Roles'], ['rules', 'Rules and audit log']] : [];
-  if (!tabs.some(([key]) => key === state.moderation.tab)) state.moderation.tab = 'channels';
+    ? [['channels', 'Channels'], ['people', 'People and groups'], ['signup', 'Sign-up and invitations'], ['roles', 'Roles'], ['rules', 'Rules and audit log']]
+    : [...(channels.length ? [['channels', 'Channels']] : []), ...(canRoles ? [['roles', 'Roles']] : [])];
+  if (!tabs.some(([key]) => key === state.moderation.tab)) state.moderation.tab = tabs.length ? tabs[0][0] : 'channels';
   container.dataset.tab = state.moderation.tab;
   container.innerHTML = `
-    ${tabs.length ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" role="tab">${label}</button>`).join('')}</div>` : ''}
-    <div class="moderation-toolbar" data-mod-tab="channels">
+    ${tabs.length > 1 ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" role="tab">${label}</button>`).join('')}</div>` : ''}
+    ${channels.length ? `<div class="moderation-toolbar" data-mod-tab="channels">
       <label for="moderation-channel-select">Channel</label>
       <select id="moderation-channel-select">${channels.map((channel) => `<option value="${channel.id}"${Number(channel.id) === selectedId ? ' selected' : ''}>#${escapeHtml(channel.name)}</option>`).join('')}</select>
-    </div>
+    </div>` : ''}
     ${state.moderation.isSuperadmin ? `
       <form class="moderation-card moderation-settings" data-moderation-form="settings" data-mod-tab="rules">
         <h2>Workspace timeout policy</h2>
@@ -2479,9 +2482,10 @@ async function loadModerationView() {
       <div class="moderation-inline"><label>Default for new channels (seconds)<input id="slowmode-default" type="number" min="0" max="3600" value="5"></label><button class="btn primary" type="button" data-action="save-default-slowmode">Save default</button></div>
       <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
     </div>` : ''}
-    <div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>
-    ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit" data-mod-tab="rules"></div><div id="moderation-roles" data-mod-tab="roles"></div>' : ''}`;
-  if (state.moderation.isSuperadmin && state.moderation.tab === 'roles') loadRolesPanel();
+    ${channels.length ? '<div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>' : ''}
+    ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit" data-mod-tab="rules"></div>' : ''}
+    ${canRoles ? '<div id="moderation-roles" data-mod-tab="roles"></div>' : ''}`;
+  if (canRoles && state.moderation.tab === 'roles') loadRolesPanel();
   if (state.moderation.isSuperadmin) {
     try {
       const response = await api('/api/moderation/settings');
@@ -2507,7 +2511,7 @@ async function loadModerationView() {
       console.error('Load slow mode policy error:', err);
     }
   }
-  await loadModerationChannel(selectedId);
+  if (selectedId) await loadModerationChannel(selectedId);
   if (state.moderation.isSuperadmin) await loadModerationAudit();
   if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
 }
