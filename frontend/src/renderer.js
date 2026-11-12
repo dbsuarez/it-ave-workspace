@@ -2351,7 +2351,7 @@ const SECTIONS = {
 };
 
 // Sections reached from the rail's More menu rather than their own rail buttons.
-const MORE_SECTIONS = ['lists', 'people', 'canvases'];
+const MORE_SECTIONS = ['lists', 'canvases'];
 
 function updateRail(section) {
   document.querySelectorAll('.rail-item[data-rail]').forEach((btn) => {
