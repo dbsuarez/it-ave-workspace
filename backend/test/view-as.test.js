@@ -8,7 +8,7 @@ const { viewAsRefusal } = require('../src/viewAs');
 const { createScratchDatabase } = require('./helpers/scratchDb');
 
 test('in testing mode every GET is allowed except signing in elsewhere and starting another View as; writes never are', () => {
-  for (const path of ['/api/conversations', '/api/notes', '/api/saved', '/api/search?q=a', '/api/files', '/api/leave/summary', '/api/settings']) {
+  for (const path of ['/api/conversations', '/api/notes', '/api/saved', '/api/search?q=a', '/api/files', '/api/leave/summary']) {
     assert.equal(viewAsRefusal('GET', path, { full: true }), null, path);
     assert.match(viewAsRefusal('GET', path, { full: false }), /private/, path);
   }
@@ -20,13 +20,13 @@ test('in testing mode every GET is allowed except signing in elsewhere and start
 test('View as may read channels, channel messages, people and lists, and nothing that writes or is private', () => {
   for (const path of ['/api/auth/me', '/api/channels', '/api/channels/my', '/api/channels/4/members', '/api/messages/4', '/api/messages/4?limit=50',
     '/api/messages/4/pins', '/api/messages/4/threads/9', '/api/people', '/api/people/3', '/api/users', '/api/user-groups',
-    '/api/roles/mentionable', '/api/moderation/access', '/api/canvas/channel/4', '/api/lists', '/api/lists/2']) {
+    '/api/roles/mentionable', '/api/moderation/access', '/api/canvas/channel/4', '/api/lists', '/api/lists/2', '/api/settings', '/api/settings/sidebar']) {
     assert.equal(viewAsRefusal('GET', path), null, path);
   }
   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.match(viewAsRefusal(method, '/api/people'), /read-only/);
   for (const path of ['/api/conversations', '/api/conversations/3', '/api/notes', '/api/saved', '/api/reminders', '/api/scheduled', '/api/search?q=a',
     '/api/files', '/api/canvas/dm/3', '/api/canvases', '/api/leave/summary', '/api/attendance/today', '/api/hr/employees', '/api/admin/users',
-    '/api/settings', '/api/activity', '/api/users/heartbeat']) {
+    '/api/activity', '/api/users/heartbeat']) {
     assert.match(viewAsRefusal('GET', path), /private/, path);
   }
 });
@@ -62,6 +62,13 @@ test.before(async () => {
   app.use('/api/roles', require('../src/routes/roles'));
   app.use('/api/people', require('../src/routes/people'));
   app.use('/api/conversations', require('../src/routes/conversations'));
+  app.use('/api/users', require('../src/routes/users'));
+  app.use('/api/notes', require('../src/routes/notes'));
+  app.use('/api/saved', require('../src/routes/saved'));
+  app.use('/api/files', require('../src/routes/files'));
+  app.use('/api/activity', require('../src/routes/activity'));
+  app.use('/api/reminders', require('../src/routes/reminders'));
+  app.use('/api/leave', require('../src/routes/leave'));
   app.use('/api/messages', require('../src/routes/messages'));
   app.use('/api/canvas', require('../src/routes/canvas'));
   app.use('/api/lists', require('../src/routes/lists'));
@@ -125,9 +132,17 @@ test('once the workspace is Live, View as goes back to what the roles decide and
   await admin.query('UPDATE moderation_settings SET go_live = TRUE WHERE id = 1');
   try {
     assert.equal((await call(ids.viewToken, 'GET', '/api/people')).status, 200);
-    const dms = await call(ids.viewToken, 'GET', '/api/conversations');
-    assert.equal(dms.status, 403);
-    assert.match(dms.json.error, /private/);
+    // private screens come back as samples, never as the person's real content
+    await admin.query("INSERT INTO direct_messages (sender_id, receiver_id, content) VALUES ($1, $2, 'REAL DM SECRET')", [ids.ann, ids.bob]);
+    await admin.query("INSERT INTO notes (user_id, title, content) VALUES ($1, 'REAL NOTE SECRET', 'REAL NOTE SECRET')", [ids.ann]);
+    for (const path of [`/api/users/${ids.bob}/direct-messages`, '/api/notes', '/api/saved', '/api/conversations', '/api/files', '/api/activity', '/api/reminders']) {
+      const sampled = await call(ids.viewToken, 'GET', path);
+      assert.equal(sampled.status, 200, path);
+      assert.ok(!JSON.stringify(sampled.json).includes('SECRET'), `${path} shows no real content`);
+    }
+    const dm = await call(ids.viewToken, 'GET', `/api/users/${ids.bob}/direct-messages`);
+    assert.ok(dm.json.messages.length >= 3 && dm.json.messages.every((m) => m.id < 0), 'a sample conversation');
+    assert.equal((await call(ids.viewToken, 'GET', '/api/leave/summary')).status, 403, 'leave and attendance are still refused');
     const fresh = await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.ann });
     assert.equal(fresh.json.full, false);
     // real content never comes back: channel messages are made-up samples, and a channel the person is not in is still refused

@@ -6947,7 +6947,6 @@ h4.cv-h { font-size: 15px; }
 .view-as-bar { position: sticky; top: 0; z-index: 9500; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 6px 12px; background: #b45309; color: #fff; font-size: 13px; }
 .view-as-bar .btn { background: #fff; color: #7c2d12; border-color: #fff; }
 body.view-as .input-area { opacity: 0.45; pointer-events: none; }
-body.view-as:not(.view-as-full) [data-rail="dms"], body.view-as:not(.view-as-full) #dm-list, body.view-as:not(.view-as-full) [data-rail="later"], body.view-as:not(.view-as-full) [data-rail="notes"], body.view-as:not(.view-as-full) [data-rail="activity"] { display: none !important; }
 
 /* Launch mode card */
 .launch-card.is-live { border-color: #16a34a; }

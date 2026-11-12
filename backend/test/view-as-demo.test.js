@@ -22,3 +22,18 @@ test('the sample canvas is read-only and says it is a sample', () => {
   assert.match(canvas.title, /sample/i);
   assert.ok(canvas.id < 0);
 });
+
+test('the private screens have fixed samples with fake ids, and never real content', () => {
+  const { sampleDirectMessages, sampleConversation, sampleNotes, sampleSaved, sampleFiles, sampleActivity } = require('../src/viewAsDemo');
+  const now = new Date('2026-11-12T10:00:00Z');
+  const dm = sampleDirectMessages(5, 9, now);
+  assert.deepEqual(dm, sampleDirectMessages(5, 9, now));
+  assert.ok(dm.every((m) => m.id < 0));
+  assert.ok(dm.some((m) => m.senderId === 5) && dm.some((m) => m.senderId === 9), 'both sides of the conversation');
+  assert.ok(sampleConversation(now).id < 0);
+  assert.ok(sampleNotes(now).every((n) => n.id < 0 && /sample/i.test(n.title)));
+  const channel = { id: 3, name: 'general' };
+  assert.ok(sampleSaved(channel, now).every((i) => i.id < 0));
+  assert.ok(sampleFiles(channel, now).every((f) => f.id < 0 && /sample/i.test(f.name)));
+  assert.ok(sampleActivity(channel, now).items.every((i) => i.messageId < 0));
+});

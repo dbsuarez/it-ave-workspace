@@ -25,6 +25,7 @@ const VIEW_AS_ALLOWED = [
   /^\/api\/moderation\/access$/,
   /^\/api\/canvas\/channel\/\d+$/,
   /^\/api\/lists(\/\d+)?$/,
+  /^\/api\/settings(\/sidebar)?$/, // preferences and sidebar layout are settings, not content
 ];
 
 // null when the request may go ahead, otherwise the message to refuse it with.

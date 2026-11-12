@@ -33,13 +33,13 @@ const authenticateToken = (req, res, next) => {
         // the testing mode (private messages shown, still read-only) exists only while the workspace is Pre-launch
         const live = await query('SELECT go_live FROM moderation_settings WHERE id = 1');
         const full = !(live.rows[0] && live.rows[0].go_live);
-        const refusal = viewAsRefusal(req.method, req.originalUrl, { full });
-        if (refusal) return res.status(403).json({ error: refusal, viewAs: true });
-        if (!full) {
+        if (!full && req.method === 'GET') {
           // Live: content comes from fixed samples, never from the database (src/viewAsDemo.js)
           const demo = await demoResponse(req.originalUrl, { userId: user.userId, query });
           if (demo) return res.status(demo.status).json(demo.body);
         }
+        const refusal = viewAsRefusal(req.method, req.originalUrl, { full });
+        if (refusal) return res.status(403).json({ error: refusal, viewAs: true });
       }
       req.user = user;
       next();

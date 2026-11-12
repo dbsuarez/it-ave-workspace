@@ -419,5 +419,5 @@ production yet the Owner still sees a full-looking screen as that person. It rep
 private screens are simply refused). Design: a server-side set of sample responses for the sensitive endpoints, used for View
 as tokens when the workspace is Live; every other path stays refused by default, so a forgotten screen cannot leak real
 data. While Pre-launch the real-data testing view stays. Built for channel messages, threads, pins, canvases and lists
-(`backend/src/viewAsDemo.js`); direct messages, notes, saved items, files, leave and attendance samples are not built (those
-rail items stay hidden after go-live).
+(`backend/src/viewAsDemo.js`); direct messages, notes, saved items, files, activity and reminders have samples too; leave and
+attendance samples are not built (those screens stay refused after go-live).

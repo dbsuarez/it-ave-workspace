@@ -160,3 +160,9 @@ structure (their channels, tabs, people, what is allowed) but channel messages, 
 and lists come from fixed made-up samples (`backend/src/viewAsDemo.js`, applied in `middleware/auth.js`), never from the
 database; a channel the person cannot open is still refused. The sidebar items for direct messages, notes, saved items and
 activity stay hidden in this mode (their content would have to be invented too). Pre-launch keeps the real-data testing view.
+
+**Sample private screens after go-live (2026-11-12, later):** in Live View as, the person's direct messages (one sample
+conversation per person and a sample group), notes, saved items, files list, activity and reminders are also fixed made-up
+samples (`backend/src/viewAsDemo.js`), and the sidebar items are visible again; their preferences and sidebar layout are
+real (settings, not content). Still refused, not yet sampled: leave and attendance (about 18 endpoints with their own
+shapes). A test seeds a real direct message and a real note and proves neither comes back.

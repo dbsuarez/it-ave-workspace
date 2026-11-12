@@ -42,7 +42,7 @@ function applyViewAsMode(claims) {
   bar.className = 'view-as-bar';
   bar.setAttribute('role', 'status');
   const name = typeof personName === 'function' ? personName(state.user) : state.user.username;
-  bar.innerHTML = `<span>Viewing as <strong>${escapeHtml(name)}</strong>. Read-only: nothing is saved as them. ${claims.viewFull ? 'Testing mode: their private messages, notes and saved items are shown too.' : 'Messages, canvases and lists are made-up samples; nobody\'s private content is shown.'}</span>
+  bar.innerHTML = `<span>Viewing as <strong>${escapeHtml(name)}</strong>. Read-only: nothing is saved as them. ${claims.viewFull ? 'Testing mode: their private messages, notes and saved items are shown too.' : 'Messages, direct messages, notes, files and lists are made-up samples; nobody\'s private content is shown.'}</span>
     <button type="button" class="btn small" data-view-as-exit>Exit View as</button>`;
   document.body.prepend(bar);
   bar.querySelector('[data-view-as-exit]').addEventListener('click', exitViewAs);
