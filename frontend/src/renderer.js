@@ -379,7 +379,8 @@ function setupEventListeners() {
   });
 
   // User menu
-  on('btn-user-menu', 'click', (e) => { e.stopPropagation(); toggleMenu('user-menu', 'btn-user-menu'); });
+  // opening the account menu first catches up with the account, so the name and email are never stale
+  on('btn-user-menu', 'click', (e) => { e.stopPropagation(); refreshOwnProfile(); toggleMenu('user-menu', 'btn-user-menu'); });
   document.querySelectorAll('#user-menu .menu-item').forEach((item) => {
     item.addEventListener('click', () => {
       closeAllMenus();
@@ -596,8 +597,7 @@ function showApp() {
   if (els.loginCard) els.loginCard.style.display = 'none';
   if (els.app) els.app.style.display = 'flex';
   if (els.userMenuBtn) els.userMenuBtn.style.display = 'flex';
-  if (els.userName) els.userName.textContent = state.user.username;
-  if (els.userEmail) els.userEmail.textContent = state.user.email || '';
+  paintAccountMenu();
   if (els.userAvatar) {
     els.userAvatar.textContent = state.user.username.charAt(0).toUpperCase();
     els.userAvatar.parentElement.style.backgroundColor = state.user.avatarColor || '';
@@ -641,6 +641,8 @@ function openPreferencesModal() {
 
 function openAccountModal() {
   document.getElementById('account-email').value = state.user.email || '';
+  // the saved sign-in can be out of date (HR may have corrected the address): catch up, unless they already started typing
+  refreshOwnProfile().then(() => { const field = document.getElementById('account-email'); if (field && document.activeElement !== field) field.value = state.user.email || ''; });
   document.getElementById('account-current-password').value = '';
   document.getElementById('account-new-password').value = '';
   document.getElementById('account-confirm-password').value = '';
@@ -953,6 +955,7 @@ function connectSocket() {
   });
 
   state.socket.on('user_photo_updated', handleUserPhotoUpdated);
+  state.socket.on('profile_updated', () => refreshOwnProfile());
   state.socket.on('leave_updated', handleLeaveUpdated);
   state.socket.on('attendance_updated', handleAttendanceUpdated);
   state.socket.on('huddle:joined', handleHuddleJoined);

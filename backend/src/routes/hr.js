@@ -196,6 +196,7 @@ router.put('/employees/:id', async (req, res) => {
       );
     }
     const row = (await query(`${EMPLOYEE_SELECT} WHERE u.id = $1`, [id])).rows[0];
+    req.io?.to(`user_${id}`).emit('profile_updated', {}); // their account menu shows the new name, username or email
     res.json({ employee: mapEmployee(row) });
   } catch (err) {
     sendError(res, err, 'Update employee error');

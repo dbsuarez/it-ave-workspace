@@ -137,14 +137,34 @@ function paintProfilePhotoPreview() {
   if (remove) remove.hidden = !state.user.photoVersion;
 }
 
-// The sign-in response has no job title or photo; fetch the full profile once the app is up.
+// The name, email and avatar in the account menu, from state.user (kept current by refreshOwnProfile).
+function paintAccountMenu() {
+  if (!state.user) return;
+  const full = [state.user.firstName, state.user.middleName, state.user.lastName].map((x) => String(x || '').trim()).filter(Boolean).join(' ');
+  if (els.userName) els.userName.textContent = full || state.user.username;
+  if (els.userEmail) els.userEmail.textContent = [full ? `@${state.user.username}` : '', state.user.email || ''].filter(Boolean).join(' · ');
+  if (els.userAvatar) {
+    els.userAvatar.parentElement.style.backgroundColor = state.user.avatarColor || '';
+    if (!els.userAvatar.classList.contains('has-photo')) els.userAvatar.textContent = (state.user.username || '?').charAt(0).toUpperCase();
+  }
+}
+
+// The sign-in response has no job title or photo, and goes stale (HR can change a name or an email); fetch the
+// full profile when the app is up, when the account menu opens, and when the server says it changed.
 async function refreshOwnProfile() {
   try {
     const res = await api('/api/auth/me');
     const data = await res.json();
     if (!res.ok || !data.user) return;
-    state.user = { ...state.user, jobTitle: data.user.jobTitle || '', photoVersion: data.user.photoVersion || null };
+    // the sign-in answer is a snapshot: take what the account says now (username, email, names, color, title, photo)
+    const u = data.user;
+    state.user = {
+      ...state.user, username: u.username, email: u.email, avatarColor: u.avatarColor, isSuperadmin: u.isSuperadmin,
+      firstName: u.firstName || '', middleName: u.middleName || '', lastName: u.lastName || '',
+      jobTitle: u.jobTitle || '', photoVersion: u.photoVersion || null,
+    };
     await electronAPI.storeSet('user', state.user);
+    paintAccountMenu();
     paintOwnAvatar();
     // an account the Superadmin created starts with a temporary password: ask for a new one
     if (data.user.mustChangePassword && typeof openAccountModal === 'function') {

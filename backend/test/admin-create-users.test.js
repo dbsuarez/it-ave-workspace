@@ -156,3 +156,14 @@ test('accounts can be created with last, first and middle names', async (t) => {
   const row = (await admin.query("SELECT last_name, first_name, middle_name FROM users WHERE username = 'named1'")).rows[0];
   assert.deepEqual(row, { last_name: 'Lee', first_name: 'Ann', middle_name: 'Marie' });
 });
+
+test('the account endpoint returns the current names, username and email (the app refreshes its saved copy from it)', async (t) => {
+  if (skip(t)) return;
+  const made = await call('POST', '/admin/users', { accounts: [{ username: 'fresh', email: 'fresh@x.test', lastName: 'Lee', firstName: 'Ann', middleName: 'Marie' }] }, bearer(ids.boss));
+  const who = made.json.created[0].id;
+  const me = await call('GET', '/auth/me', undefined, bearer(who));
+  assert.deepEqual([me.json.user.username, me.json.user.email, me.json.user.firstName, me.json.user.middleName, me.json.user.lastName], ['fresh', 'fresh@x.test', 'Ann', 'Marie', 'Lee']);
+  await admin.query("UPDATE users SET email = 'changed@x.test', first_name = 'Anna' WHERE id = $1", [who]);
+  const later = await call('GET', '/auth/me', undefined, bearer(who));
+  assert.deepEqual([later.json.user.email, later.json.user.firstName], ['changed@x.test', 'Anna'], 'always the current record');
+});
