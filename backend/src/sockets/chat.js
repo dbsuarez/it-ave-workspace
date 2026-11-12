@@ -181,7 +181,7 @@ module.exports = (io, socket) => {
 
       const { query } = require('../db');
       const account = await query(
-        'SELECT token_version FROM users WHERE id = $1',
+        'SELECT token_version FROM users WHERE id = $1 AND deactivated_at IS NULL',
         [decoded.userId]
       );
       if (account.rows.length === 0

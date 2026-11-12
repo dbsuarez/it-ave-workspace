@@ -17,7 +17,7 @@ const authenticateToken = (req, res, next) => {
     }
     try {
       const result = await query(
-        'SELECT token_version FROM users WHERE id = $1',
+        'SELECT token_version FROM users WHERE id = $1 AND deactivated_at IS NULL',
         [user.userId]
       );
       if (result.rows.length === 0

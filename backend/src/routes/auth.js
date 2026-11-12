@@ -164,7 +164,7 @@ router.post('/login', async (req, res) => {
 
     // Find user
     const result = await query(
-      'SELECT id, username, email, password_hash, avatar_color, is_superadmin, token_version, must_change_password FROM users WHERE username = $1',
+      'SELECT id, username, email, password_hash, avatar_color, is_superadmin, token_version, must_change_password, deactivated_at FROM users WHERE username = $1',
       [username]
     );
 
@@ -183,6 +183,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     loginFailuresByAccount.reset(accountId);
+    if (user.deactivated_at) {
+      return res.status(403).json({ error: 'This account has been deactivated. Ask HR if you think this is a mistake.' });
+    }
 
     // Update last seen
     await query(

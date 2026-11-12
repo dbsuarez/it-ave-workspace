@@ -519,4 +519,32 @@ $$`,
      edited_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      UNIQUE (canvas_id, revision)
    )`,
+
+  // Onboarding and offboarding checklists: the templates HR edits, and each person's own list
+  `CREATE TABLE IF NOT EXISTS hr_task_templates (
+     id SERIAL PRIMARY KEY,
+     kind VARCHAR(12) NOT NULL CHECK (kind IN ('onboarding', 'offboarding')),
+     title VARCHAR(160) NOT NULL,
+     position INTEGER NOT NULL DEFAULT 0
+   )`,
+  `CREATE TABLE IF NOT EXISTS employee_tasks (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     kind VARCHAR(12) NOT NULL CHECK (kind IN ('onboarding', 'offboarding')),
+     title VARCHAR(160) NOT NULL,
+     position INTEGER NOT NULL DEFAULT 0,
+     done_at TIMESTAMP WITH TIME ZONE,
+     done_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_employee_tasks_user ON employee_tasks(user_id, kind, position)',
+  `INSERT INTO hr_task_templates (kind, title, position)
+   SELECT v.kind, v.title, v.position FROM (VALUES
+     ('onboarding', 'Create the email account', 1), ('onboarding', 'Issue laptop and equipment', 2),
+     ('onboarding', 'Sign the employment contract', 3), ('onboarding', 'Introduce them to the team', 4),
+     ('offboarding', 'Collect laptop and equipment', 1), ('offboarding', 'Remove system access', 2),
+     ('offboarding', 'Exit interview', 3), ('offboarding', 'Compute the final pay', 4)
+   ) AS v(kind, title, position)
+   WHERE NOT EXISTS (SELECT 1 FROM schema_markers WHERE name = 'hr_task_templates_v1')`,
+  "INSERT INTO schema_markers (name) VALUES ('hr_task_templates_v1') ON CONFLICT DO NOTHING",
 ];

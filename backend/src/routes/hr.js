@@ -3,7 +3,8 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin } = require('../hr');
+const bcrypt = require('bcryptjs');
+const { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin, temporaryPassword, applyChecklist } = require('../hr');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -44,7 +45,11 @@ const EMPLOYEE_SELECT = `
          u.department_id, u.department, u.manager_id, u.employee_no,
          to_char(u.hire_date, 'YYYY-MM-DD') AS hire_date, to_char(u.separation_date, 'YYYY-MM-DD') AS separation_date,
          u.employment_status, u.employment_type, u.is_hr, u.is_superadmin, u.last_seen, u.created_at,
-         u.profile->>'phone' AS phone, u.deactivated_at, u.photo_file, u.photo_updated_at
+         u.profile->>'phone' AS phone, u.deactivated_at, u.photo_file, u.photo_updated_at,
+         (SELECT COUNT(*)::int FROM employee_tasks t WHERE t.user_id = u.id AND t.kind = 'onboarding') AS onboarding_total,
+         (SELECT COUNT(*)::int FROM employee_tasks t WHERE t.user_id = u.id AND t.kind = 'onboarding' AND t.done_at IS NOT NULL) AS onboarding_done,
+         (SELECT COUNT(*)::int FROM employee_tasks t WHERE t.user_id = u.id AND t.kind = 'offboarding') AS offboarding_total,
+         (SELECT COUNT(*)::int FROM employee_tasks t WHERE t.user_id = u.id AND t.kind = 'offboarding' AND t.done_at IS NOT NULL) AS offboarding_done
   FROM users u`;
 
 function mapEmployee(row) {
@@ -69,6 +74,10 @@ function mapEmployee(row) {
     isHr: Boolean(row.is_hr),
     isSuperadmin: Boolean(row.is_superadmin),
     deactivatedAt: row.deactivated_at || null,
+    checklists: {
+      onboarding: { done: row.onboarding_done, total: row.onboarding_total },
+      offboarding: { done: row.offboarding_done, total: row.offboarding_total },
+    },
     lastSeen: row.last_seen,
     createdAt: row.created_at,
     photoVersion: row.photo_file && row.photo_updated_at ? new Date(row.photo_updated_at).getTime() : null,
@@ -246,6 +255,196 @@ router.delete('/departments/:id', async (req, res) => {
     res.json({ id });
   } catch (err) {
     sendError(res, err, 'Delete department error');
+  }
+});
+
+// ---- leaving, returning, and passwords ----
+
+async function memberRow(id) {
+  const row = (await query(
+    "SELECT id, username, is_superadmin, manager_id, deactivated_at FROM users WHERE id = $1 AND account_type = 'member'", [id]
+  )).rows[0];
+  if (!row) throw fail(404, 'Person not found');
+  return row;
+}
+
+async function employeeJson(id) {
+  return mapEmployee((await query(`${EMPLOYEE_SELECT} WHERE u.id = $1`, [id])).rows[0]);
+}
+
+// POST /api/hr/employees/:id/deactivate - the person resigned or left: they can no longer sign in, and are signed
+// out now. Their history stays. People who reported to them move up to their manager. { lastDay } is optional.
+router.post('/employees/:id/deactivate', async (req, res) => {
+  try {
+    const actor = await requireHr(req.user.userId);
+    const id = parseId(req.params.id);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    if (id === Number(actor.id)) throw fail(400, 'You cannot deactivate your own account');
+    const target = await memberRow(id);
+    if (target.is_superadmin) throw fail(400, 'Take the Superadmin role away first');
+    if (target.deactivated_at) throw fail(400, 'This account is already deactivated');
+    const lastDay = dateOrNull(req.body && req.body.lastDay, 'Last day');
+    await query(
+      `UPDATE users SET deactivated_at = NOW(), employment_status = 'resigned', is_hr = false,
+              separation_date = COALESCE($1::date, separation_date, CURRENT_DATE), token_version = token_version + 1
+       WHERE id = $2`,
+      [lastDay, id]
+    );
+    const moved = await query('UPDATE users SET manager_id = $1 WHERE manager_id = $2 RETURNING id', [target.manager_id, id]);
+    await query('DELETE FROM user_secondary_managers WHERE user_id = $1 OR manager_id = $1', [id]);
+    await query('UPDATE departments SET head_id = NULL WHERE head_id = $1', [id]);
+    await applyChecklist(id, 'offboarding');
+    req.io?.in(`user_${id}`).disconnectSockets(true);
+    res.json({ employee: await employeeJson(id), reassignedReports: moved.rows.length });
+  } catch (err) {
+    sendError(res, err, 'Deactivate employee error');
+  }
+});
+
+// POST /api/hr/employees/:id/reactivate - they are back. Reporting lines are not restored.
+router.post('/employees/:id/reactivate', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    const id = parseId(req.params.id);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    const target = await memberRow(id);
+    if (!target.deactivated_at) throw fail(400, 'This account is not deactivated');
+    await query("UPDATE users SET deactivated_at = NULL, employment_status = 'active', separation_date = NULL WHERE id = $1", [id]);
+    res.json({ employee: await employeeJson(id) });
+  } catch (err) {
+    sendError(res, err, 'Reactivate employee error');
+  }
+});
+
+// POST /api/hr/employees/:id/reset-password - a new temporary password, shown once; they must replace it
+router.post('/employees/:id/reset-password', async (req, res) => {
+  try {
+    const actor = await requireHr(req.user.userId);
+    const id = parseId(req.params.id);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    const target = await memberRow(id);
+    if (target.deactivated_at) throw fail(400, 'Reactivate this account first');
+    if (target.is_superadmin && !actor.is_superadmin) throw fail(403, 'Only the Superadmin can reset a Superadmin\'s password');
+    const password = temporaryPassword();
+    await query(
+      'UPDATE users SET password_hash = $1, must_change_password = true, token_version = token_version + 1 WHERE id = $2',
+      [await bcrypt.hash(password, 10), id]
+    );
+    req.io?.in(`user_${id}`).disconnectSockets(true);
+    res.json({ username: target.username, password });
+  } catch (err) {
+    sendError(res, err, 'Reset password error');
+  }
+});
+
+// ---- onboarding and offboarding checklists ----
+
+const KINDS = ['onboarding', 'offboarding'];
+const MAX_TASKS = 40;
+
+const mapTask = (row) => ({ id: row.id, kind: row.kind, title: row.title, done: Boolean(row.done_at), doneAt: row.done_at || null, doneBy: row.done_by_username || null });
+
+const TASK_SELECT = `SELECT t.id, t.kind, t.title, t.done_at, d.username AS done_by_username
+  FROM employee_tasks t LEFT JOIN users d ON d.id = t.done_by`;
+
+router.get('/employees/:id/tasks', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    const id = parseId(req.params.id);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    await memberRow(id);
+    const result = await query(`${TASK_SELECT} WHERE t.user_id = $1 ORDER BY t.kind, t.position, t.id`, [id]);
+    res.json({ tasks: result.rows.map(mapTask) });
+  } catch (err) {
+    sendError(res, err, 'List tasks error');
+  }
+});
+
+router.post('/employees/:id/tasks', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    const id = parseId(req.params.id);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    await memberRow(id);
+    const body = req.body || {};
+    if (!KINDS.includes(body.kind)) throw fail(400, 'kind must be onboarding or offboarding');
+    if (body.apply === true) {
+      // start the standard checklist (does nothing when they already have one)
+      await applyChecklist(id, body.kind);
+    } else {
+      const title = text(body.title, 160, 'Task');
+      if (!title) throw fail(400, 'A task needs a title');
+      const count = await query('SELECT COUNT(*)::int AS n, COALESCE(MAX(position), 0) AS last FROM employee_tasks WHERE user_id = $1 AND kind = $2', [id, body.kind]);
+      if (count.rows[0].n >= MAX_TASKS) throw fail(400, `A checklist can have at most ${MAX_TASKS} tasks`);
+      await query('INSERT INTO employee_tasks (user_id, kind, title, position) VALUES ($1, $2, $3, $4)', [id, body.kind, title, count.rows[0].last + 1]);
+    }
+    const result = await query(`${TASK_SELECT} WHERE t.user_id = $1 ORDER BY t.kind, t.position, t.id`, [id]);
+    res.status(201).json({ tasks: result.rows.map(mapTask) });
+  } catch (err) {
+    sendError(res, err, 'Add task error');
+  }
+});
+
+router.put('/tasks/:taskId', async (req, res) => {
+  try {
+    const actor = await requireHr(req.user.userId);
+    const taskId = parseId(req.params.taskId);
+    if (taskId === null) throw fail(400, 'A valid task ID is required');
+    if (typeof (req.body && req.body.done) !== 'boolean') throw fail(400, 'done must be true or false');
+    const result = await query(
+      'UPDATE employee_tasks SET done_at = CASE WHEN $1 THEN NOW() ELSE NULL END, done_by = CASE WHEN $1 THEN $2::int ELSE NULL END WHERE id = $3 RETURNING id',
+      [req.body.done, actor.id, taskId]
+    );
+    if (!result.rows.length) throw fail(404, 'Task not found');
+    const row = (await query(`${TASK_SELECT} WHERE t.id = $1`, [taskId])).rows[0];
+    res.json({ task: mapTask(row) });
+  } catch (err) {
+    sendError(res, err, 'Update task error');
+  }
+});
+
+router.delete('/tasks/:taskId', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    const taskId = parseId(req.params.taskId);
+    if (taskId === null) throw fail(400, 'A valid task ID is required');
+    const result = await query('DELETE FROM employee_tasks WHERE id = $1 RETURNING id', [taskId]);
+    if (!result.rows.length) throw fail(404, 'Task not found');
+    res.json({ id: taskId });
+  } catch (err) {
+    sendError(res, err, 'Delete task error');
+  }
+});
+
+// The standard checklists new hires and leavers start with.
+router.get('/task-templates', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    const result = await query('SELECT kind, title FROM hr_task_templates ORDER BY kind, position, id');
+    res.json({
+      onboarding: result.rows.filter((r) => r.kind === 'onboarding').map((r) => r.title),
+      offboarding: result.rows.filter((r) => r.kind === 'offboarding').map((r) => r.title),
+    });
+  } catch (err) {
+    sendError(res, err, 'List task templates error');
+  }
+});
+
+// PUT /api/hr/task-templates - { kind, titles: [...] } replaces that checklist template. Existing people keep their lists.
+router.put('/task-templates', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    const body = req.body || {};
+    if (!KINDS.includes(body.kind)) throw fail(400, 'kind must be onboarding or offboarding');
+    if (!Array.isArray(body.titles) || body.titles.length > MAX_TASKS) throw fail(400, `titles must be a list of at most ${MAX_TASKS} tasks`);
+    const titles = body.titles.map((title) => text(title, 160, 'Task')).filter(Boolean);
+    await query('DELETE FROM hr_task_templates WHERE kind = $1', [body.kind]);
+    if (titles.length) {
+      await query('INSERT INTO hr_task_templates (kind, title, position) SELECT $1, t, ord FROM unnest($2::text[]) WITH ORDINALITY AS x(t, ord)', [body.kind, titles]);
+    }
+    res.json({ kind: body.kind, titles });
+  } catch (err) {
+    sendError(res, err, 'Save task templates error');
   }
 });
 

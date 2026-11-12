@@ -38,6 +38,7 @@ async function loadEmployeeManagement() {
 // After something changed elsewhere (accounts were created): refresh quietly when the table has been opened.
 function reloadEmployeeManagement() {
   if (employeeState.loaded) loadEmployeeManagement();
+  if (typeof peopleState !== 'undefined' && peopleState.loaded) loadPeople(true);
 }
 
 function employeeFullName(e) {
@@ -55,6 +56,14 @@ function employeeDate(value) {
   return new Date(y, m - 1, d).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// "Onboarding 2/4" while a checklist is under way.
+function employeeChecklistBadge(e) {
+  const parts = ['onboarding', 'offboarding']
+    .filter((kind) => e.checklists && e.checklists[kind].total > e.checklists[kind].done)
+    .map((kind) => `${kind === 'onboarding' ? 'Onboarding' : 'Offboarding'} ${e.checklists[kind].done}/${e.checklists[kind].total}`);
+  return parts.length ? `<span class="emp-progress">${parts.join(' · ')}</span>` : '';
+}
+
 function renderEmployeeManagement(body) {
   if (employeeState.error) {
     body.innerHTML = emptyRecordMarkup('Employee records are not available', employeeState.error);
@@ -68,15 +77,16 @@ function renderEmployeeManagement(body) {
   const byId = new Map(employeeState.list.map((e) => [e.id, e]));
   const rows = employeeState.list
     .filter((e) => employeeMatches(e, peopleState.query))
-    .filter((e) => !employeeState.status || e.employmentStatus === employeeState.status)
+    .filter((e) => !employeeState.status || (employeeState.status === 'deactivated' ? Boolean(e.deactivatedAt) : e.employmentStatus === employeeState.status && !e.deactivatedAt))
     .filter((e) => !employeeState.department || String(e.departmentId || '') === employeeState.department);
   const counts = { active: 0, on_leave: 0, resigned: 0 };
-  employeeState.list.forEach((e) => { counts[e.employmentStatus] += 1; });
+  counts.deactivated = 0;
+  employeeState.list.forEach((e) => { if (e.deactivatedAt) counts.deactivated += 1; else counts[e.employmentStatus] += 1; });
   body.innerHTML = `
     <div class="emp-toolbar">
       <select id="emp-filter-status" class="pp-select" aria-label="Status">
         <option value="">All statuses (${employeeState.list.length})</option>
-        ${Object.entries(EMPLOYEE_STATUSES).map(([key, label]) => `<option value="${key}"${employeeState.status === key ? ' selected' : ''}>${label} (${counts[key]})</option>`).join('')}
+        ${Object.entries({ ...EMPLOYEE_STATUSES, deactivated: 'Deactivated' }).map(([key, label]) => `<option value="${key}"${employeeState.status === key ? ' selected' : ''}>${label} (${counts[key]})</option>`).join('')}
       </select>
       <select id="emp-filter-department" class="pp-select" aria-label="Department">
         <option value="">All departments</option>
@@ -84,6 +94,7 @@ function renderEmployeeManagement(body) {
       </select>
       <span class="emp-spacer"></span>
       <button type="button" class="btn" data-emp-departments>Departments</button>
+      <button type="button" class="btn" data-emp-checklists>Checklists</button>
       <button type="button" class="btn" data-emp-export>Export CSV</button>
       <button type="button" class="btn primary" data-emp-add>Add people</button>
     </div>
@@ -97,7 +108,7 @@ function renderEmployeeManagement(body) {
         <td>${escapeText(e.department) || '<span class="pp-muted">—</span>'}</td>
         <td>${escapeText(e.jobTitle) || '<span class="pp-muted">—</span>'}</td>
         <td>${boss ? escapeText(employeeFullName(boss)) : '<span class="pp-muted">—</span>'}</td>
-        <td><span class="emp-status emp-status-${e.employmentStatus}">${EMPLOYEE_STATUSES[e.employmentStatus]}</span></td>
+        <td><span class="emp-status emp-status-${e.deactivatedAt ? 'resigned' : e.employmentStatus}">${e.deactivatedAt ? 'Deactivated' : EMPLOYEE_STATUSES[e.employmentStatus]}</span>${employeeChecklistBadge(e)}</td>
         <td>${escapeText(employeeDate(e.hireDate)) || '<span class="pp-muted">—</span>'}</td>
       </tr>`;
   }).join('')}</tbody></table></div>`
@@ -141,6 +152,15 @@ function openEmployeeEditor(id) {
         </div>
         ${state.moderation.isSuperadmin ? `<label class="preference-toggle"><input type="checkbox" id="emp-hr"${e.isHr ? ' checked' : ''}><span>HR: can manage employee records, departments and reporting lines</span></label>` : ''}
         <p class="form-note">Email: ${escapeText(e.email)}${e.phone ? ` · Phone: ${escapeText(e.phone)}` : ''}. The employee edits their own photo, phone and page.</p>
+        <h4 class="modal-section-title">Checklists</h4>
+        <div id="emp-tasks" class="emp-tasks"><p class="pp-muted">Loading…</p></div>
+        <h4 class="modal-section-title">Account</h4>
+        <div class="emp-account">
+          ${e.deactivatedAt
+    ? `<p class="form-note">Deactivated ${escapeText(new Date(e.deactivatedAt).toLocaleDateString())}. They cannot sign in. Their messages and files stay.</p><button type="button" class="btn" data-emp-reactivate="${e.id}">Reactivate account</button>`
+    : `<button type="button" class="btn" data-emp-reset="${e.id}">Reset password</button><button type="button" class="btn danger" data-emp-deactivate="${e.id}">Deactivate account…</button>`}
+        </div>
+        <div id="emp-account-note" aria-live="polite"></div>
       </div>
       <div class="modal-footer">
         <button class="btn" type="button" data-emp-page="${e.id}">Open their page</button>
@@ -149,6 +169,7 @@ function openEmployeeEditor(id) {
       </div>
     </form>`;
   openSettingsModal(modal);
+  loadEmployeeTasks(id);
 }
 
 async function saveEmployeeRecord(event) {
@@ -171,10 +192,117 @@ async function saveEmployeeRecord(event) {
     closeSettingsModal();
     showToast('Employee record saved.', 'success');
     await loadEmployeeManagement();
-    if (typeof loadPeople === 'function') loadPeople();
+    if (typeof loadPeople === 'function') loadPeople(true);
   } catch (err) {
     showToast(err.message || 'Could not save the record.', 'error');
   }
+}
+
+// ---- checklists, passwords, and leaving ----------------------------------------------------------------
+
+async function loadEmployeeTasks(id) {
+  const host = document.getElementById('emp-tasks');
+  if (!host) return;
+  try {
+    const data = await hrApi(`/api/hr/employees/${id}/tasks`);
+    if (employeeState.editingId !== id) return;
+    renderEmployeeTasks(id, data.tasks);
+  } catch (err) {
+    host.innerHTML = `<p class="pp-muted">${escapeText(err.message || 'Could not load the checklists.')}</p>`;
+  }
+}
+
+function renderEmployeeTasks(id, tasks) {
+  const host = document.getElementById('emp-tasks');
+  if (!host) return;
+  const e = employeeState.list.find((item) => item.id === id);
+  if (e) {
+    for (const kind of ['onboarding', 'offboarding']) {
+      const own = tasks.filter((t) => t.kind === kind);
+      e.checklists[kind] = { done: own.filter((t) => t.done).length, total: own.length };
+    }
+  }
+  host.innerHTML = ['onboarding', 'offboarding'].map((kind) => {
+    const own = tasks.filter((t) => t.kind === kind);
+    const done = own.filter((t) => t.done).length;
+    const label = kind === 'onboarding' ? 'Onboarding' : 'Offboarding';
+    return `<div class="emp-task-block" data-task-kind="${kind}">
+      <div class="emp-task-head"><strong>${label}</strong><span class="pp-muted">${own.length ? `${done} of ${own.length} done` : 'No list yet'}</span>
+        ${own.length ? '' : `<button type="button" class="btn" data-task-apply="${kind}">Start the standard list</button>`}</div>
+      ${own.map((t) => `<label class="emp-task${t.done ? ' done' : ''}"><input type="checkbox" data-task-toggle="${t.id}"${t.done ? ' checked' : ''}><span>${escapeText(t.title)}</span>${t.done && t.doneBy ? `<em>by ${escapeText(t.doneBy)}</em>` : ''}<button type="button" class="emp-task-x" data-task-delete="${t.id}" aria-label="Remove this task">×</button></label>`).join('')}
+      <div class="emp-task-add"><input type="text" maxlength="160" placeholder="Add a task" data-task-input="${kind}" aria-label="Add a ${label.toLowerCase()} task"><button type="button" class="btn" data-task-add="${kind}">Add</button></div>
+    </div>`;
+  }).join('');
+}
+
+async function changeTasks(id, fn) {
+  try {
+    await fn();
+    await loadEmployeeTasks(id);
+  } catch (err) {
+    showToast(err.message || 'Could not change the checklist.', 'error');
+    loadEmployeeTasks(id);
+  }
+}
+
+async function resetEmployeePassword(id) {
+  const e = employeeState.list.find((item) => item.id === id);
+  if (!e || !confirm(`Reset ${employeeFullName(e)}'s password? They are signed out now and must choose a new one when they sign in with the temporary password.`)) return;
+  try {
+    const data = await hrApi(`/api/hr/employees/${id}/reset-password`, 'POST', {});
+    document.getElementById('emp-account-note').innerHTML = `<p class="admin-help">Temporary password for <strong>${escapeText(data.username)}</strong> (shown only now):</p><p><code class="emp-password">${escapeText(data.password)}</code> <button type="button" class="btn" data-emp-copy="${escapeText(data.password)}">Copy</button></p>`;
+  } catch (err) {
+    showToast(err.message || 'Could not reset the password.', 'error');
+  }
+}
+
+async function deactivateEmployee(id) {
+  const e = employeeState.list.find((item) => item.id === id);
+  if (!e || !confirm(`Deactivate ${employeeFullName(e)}?\n\nThey are signed out now and cannot sign in. Their messages and files stay. People who report to them move up to their manager.`)) return;
+  try {
+    const lastDay = (document.getElementById('emp-lastday') || {}).value || null;
+    const data = await hrApi(`/api/hr/employees/${id}/deactivate`, 'POST', lastDay ? { lastDay } : {});
+    closeSettingsModal();
+    showToast(`Account deactivated${data.reassignedReports ? `; ${data.reassignedReports} ${data.reassignedReports === 1 ? 'report moved' : 'reports moved'} up` : ''}.`, 'success');
+    await loadEmployeeManagement();
+    if (typeof loadPeople === 'function') loadPeople(true);
+  } catch (err) {
+    showToast(err.message || 'Could not deactivate the account.', 'error');
+  }
+}
+
+async function reactivateEmployee(id) {
+  try {
+    await hrApi(`/api/hr/employees/${id}/reactivate`, 'POST', {});
+    closeSettingsModal();
+    showToast('Account reactivated. Reporting lines were not restored.', 'success');
+    await loadEmployeeManagement();
+    if (typeof loadPeople === 'function') loadPeople(true);
+  } catch (err) {
+    showToast(err.message || 'Could not reactivate the account.', 'error');
+  }
+}
+
+// The standard checklists new hires and leavers start with: one task per line.
+async function openChecklistTemplates() {
+  const modal = document.getElementById('checklists-modal');
+  if (!modal) return;
+  let data;
+  try {
+    data = await hrApi('/api/hr/task-templates');
+  } catch (err) {
+    showToast(err.message || 'Could not load the checklists.', 'error');
+    return;
+  }
+  modal.innerHTML = `
+    <div class="modal-header"><h3>Standard checklists</h3><button class="modal-close" type="button" data-emp-close aria-label="Close">&times;</button></div>
+    <div class="modal-body pp-editor-body">
+      <p class="form-note">New accounts start with the onboarding list. Deactivating an account starts the offboarding list. One task per line. Changing a list does not change lists people already have.</p>
+      ${['onboarding', 'offboarding'].map((kind) => `<div class="form-group"><label for="tpl-${kind}">${kind === 'onboarding' ? 'Onboarding' : 'Offboarding'}</label>
+        <textarea id="tpl-${kind}" rows="7" maxlength="6000">${escapeText((data[kind] || []).join('\n'))}</textarea>
+        <button type="button" class="btn" data-tpl-save="${kind}">Save ${kind}</button></div>`).join('')}
+    </div>`;
+  openSettingsModal(modal);
 }
 
 // ---- departments --------------------------------------------------------------------------------
@@ -220,7 +348,7 @@ async function departmentAction(row, action) {
     }
     await loadEmployeeManagement();
     openDepartments();
-    if (typeof loadPeople === 'function') loadPeople();
+    if (typeof loadPeople === 'function') loadPeople(true);
     showToast(action === 'delete' ? 'Department deleted.' : 'Department saved.', 'success');
   } catch (err) {
     showToast(err.message || 'Could not change the department.', 'error');
@@ -249,6 +377,14 @@ async function exportEmployees() {
   }
 }
 
+async function addEmployeeTask(kind) {
+  const input = document.querySelector(`[data-task-input="${kind}"]`);
+  const title = input ? input.value.trim() : '';
+  if (!title) return;
+  const id = employeeState.editingId;
+  await changeTasks(id, () => hrApi(`/api/hr/employees/${id}/tasks`, 'POST', { kind, title }));
+}
+
 // ---- events ---------------------------------------------------------------------------------------
 
 if (typeof document !== 'undefined') {
@@ -259,6 +395,28 @@ if (typeof document !== 'undefined') {
     const row = t.closest('[data-emp-row]');
     if (row) { openEmployeeEditor(Number(row.dataset.empRow)); return; }
     if (t.closest('[data-emp-departments]')) { openDepartments(); return; }
+    if (t.closest('[data-emp-checklists]')) { openChecklistTemplates(); return; }
+    const reset = t.closest('[data-emp-reset]');
+    if (reset) { resetEmployeePassword(Number(reset.dataset.empReset)); return; }
+    const deactivate = t.closest('[data-emp-deactivate]');
+    if (deactivate) { deactivateEmployee(Number(deactivate.dataset.empDeactivate)); return; }
+    const reactivate = t.closest('[data-emp-reactivate]');
+    if (reactivate) { reactivateEmployee(Number(reactivate.dataset.empReactivate)); return; }
+    const copy = t.closest('[data-emp-copy]');
+    if (copy) { navigator.clipboard.writeText(copy.dataset.empCopy).then(() => showToast('Copied.', 'success')); return; }
+    const remove = t.closest('[data-task-delete]');
+    if (remove) { event.preventDefault(); changeTasks(employeeState.editingId, () => hrApi(`/api/hr/tasks/${remove.dataset.taskDelete}`, 'DELETE')); return; }
+    const apply = t.closest('[data-task-apply]');
+    if (apply) { changeTasks(employeeState.editingId, () => hrApi(`/api/hr/employees/${employeeState.editingId}/tasks`, 'POST', { kind: apply.dataset.taskApply, apply: true })); return; }
+    const add = t.closest('[data-task-add]');
+    if (add) { addEmployeeTask(add.dataset.taskAdd); return; }
+    const save = t.closest('[data-tpl-save]');
+    if (save) {
+      const kind = save.dataset.tplSave;
+      const titles = document.getElementById(`tpl-${kind}`).value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      hrApi('/api/hr/task-templates', 'PUT', { kind, titles }).then(() => showToast(`${kind === 'onboarding' ? 'Onboarding' : 'Offboarding'} list saved.`, 'success')).catch((err) => showToast(err.message || 'Could not save.', 'error'));
+      return;
+    }
     if (t.closest('[data-emp-add]')) { openAddPeople(); return; }
     if (t.closest('[data-emp-export]')) { exportEmployees(); return; }
     const page = t.closest('[data-emp-page]');
@@ -272,11 +430,18 @@ if (typeof document !== 'undefined') {
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' || !event.target.closest) return;
+    const taskInput = event.target.closest('[data-task-input]');
+    if (taskInput) { event.preventDefault(); addEmployeeTask(taskInput.dataset.taskInput); return; }
     const row = event.target.closest('[data-emp-row]');
     if (row) openEmployeeEditor(Number(row.dataset.empRow));
   });
 
   document.addEventListener('change', (event) => {
+    if (event.target.dataset && event.target.dataset.taskToggle) {
+      const id = employeeState.editingId;
+      changeTasks(id, () => hrApi(`/api/hr/tasks/${event.target.dataset.taskToggle}`, 'PUT', { done: event.target.checked }));
+      return;
+    }
     if (event.target.id === 'emp-filter-status') { employeeState.status = event.target.value; renderPeopleBody(); }
     if (event.target.id === 'emp-filter-department') { employeeState.department = event.target.value; renderPeopleBody(); }
   });

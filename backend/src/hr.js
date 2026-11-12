@@ -1,6 +1,7 @@
 // Who may manage employees: the Superadmin, and anyone the Superadmin has given the HR role.
 // HR can keep employee records, departments, reporting lines and names, and create member accounts.
 // Only the Superadmin gives out roles (HR, Superadmin, guest) and moderates.
+const crypto = require('crypto');
 const { query } = require('./db');
 
 function fail(status, message) {
@@ -29,4 +30,25 @@ async function requireSuperadmin(userId) {
   return actor;
 }
 
-module.exports = { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin };
+// no 0/O, 1/l/I: a temporary password gets read out and typed
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+
+function temporaryPassword() {
+  let out = '';
+  for (let i = 0; i < 12; i += 1) out += PASSWORD_ALPHABET[crypto.randomInt(PASSWORD_ALPHABET.length)];
+  return out;
+}
+
+// Give someone the checklist HR keeps for 'onboarding' or 'offboarding', unless they already have one of that kind.
+async function applyChecklist(userId, kind) {
+  const existing = await query('SELECT 1 FROM employee_tasks WHERE user_id = $1 AND kind = $2 LIMIT 1', [userId, kind]);
+  if (existing.rows.length) return 0;
+  const inserted = await query(
+    `INSERT INTO employee_tasks (user_id, kind, title, position)
+     SELECT $1::int, kind, title, position FROM hr_task_templates WHERE kind = $2 ORDER BY position, id RETURNING id`,
+    [userId, kind]
+  );
+  return inserted.rows.length;
+}
+
+module.exports = { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin, temporaryPassword, applyChecklist };

@@ -1,9 +1,8 @@
 const express = require('express');
-const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { query } = require('../db');
 const { passwordProblem } = require('../authLimits');
-const { hrActor, canManageEmployees } = require('../hr');
+const { hrActor, canManageEmployees, temporaryPassword, applyChecklist } = require('../hr');
 const authenticateToken = require('../middleware/auth');
 const {
   newInviteCode, hashInviteCode, invitationProblem, normalizeInviteCode,
@@ -225,15 +224,6 @@ router.get('/invitations', async (req, res) => {
 // ---- Creating accounts directly ----
 const MAX_NEW_ACCOUNTS = 100;
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// no 0/O, 1/l/I: a temporary password gets read out and typed
-const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-
-function temporaryPassword() {
-  let out = '';
-  for (let i = 0; i < 12; i += 1) out += PASSWORD_ALPHABET[crypto.randomInt(PASSWORD_ALPHABET.length)];
-  return out;
-}
-
 // POST /api/admin/users - create one or many accounts at once.
 // { accounts: [{ username, email, password?, lastName?, firstName?, middleName? }], accountType, channelIds }
 // A missing password is generated. Each person must replace it at their first sign-in.
@@ -294,6 +284,7 @@ router.post('/users', async (req, res) => {
       for (const channelId of joinIds) {
         await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, userId]);
       }
+      if (accountType === 'member') await applyChecklist(userId, 'onboarding');
       await audit(req.user.userId, 'user_created', userId, { accountType, key });
       created.push({ id: userId, username, email, password });
     }

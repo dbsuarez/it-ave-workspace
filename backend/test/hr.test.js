@@ -35,6 +35,7 @@ test.before(async () => {
   ids.guest = await user('visitor', { type: 'guest' });
   const app = express();
   app.use(express.json());
+  app.use('/api/auth', require('../src/routes/auth'));
   app.use('/api/hr', require('../src/routes/hr'));
   app.use('/api/people', require('../src/routes/people'));
   app.use('/api/admin', require('../src/routes/admin'));
@@ -50,10 +51,10 @@ test.after(async () => {
   if (scratch) await scratch.drop();
 });
 
-const call = async (userId, method, path, body) => {
+const call = async (userId, method, path, body, tokenVersion = 0) => {
   const res = await fetch(`${baseUrl}/api${path}`, {
     method,
-    headers: { Authorization: `Bearer ${jwt.sign({ userId, username: 'u', tokenVersion: 0 }, config.JWT_SECRET)}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${jwt.sign({ userId, username: 'u', tokenVersion }, config.JWT_SECRET)}`, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, json: await res.json().catch(() => ({})) };
@@ -170,4 +171,96 @@ test('departments typed on employee pages before this feature become real depart
   const legacy = list.find((d) => d.name === 'Legacy Dept');
   assert.ok(legacy, 'the department was created');
   assert.equal(legacy.memberCount, 1);
+});
+
+const makeMember = async (name) => (await admin.query(
+  'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id', [name, `${name}@x.test`, require('bcryptjs').hashSync('Old-pass-123', 4)]
+)).rows[0].id;
+
+test('deactivating: signed out now, cannot sign in, hidden, reports move up, checklist starts; reactivating brings them back', async (t) => {
+  if (skip(t)) return;
+  const lead = await makeMember('lead');
+  const leaver = await makeMember('leaver');
+  const report = await makeMember('report');
+  await admin.query('UPDATE users SET manager_id = $1 WHERE id = $2', [lead, leaver]);
+  await admin.query('UPDATE users SET manager_id = $1 WHERE id = $2', [leaver, report]);
+  const dept = (await call(ids.hr, 'POST', '/hr/departments', { name: 'Leavers', headId: leaver })).json.department;
+
+  assert.equal((await call(ids.ann, 'POST', `/hr/employees/${leaver}/deactivate`, {})).status, 403);
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${ids.hr}/deactivate`, {})).status, 400, 'not yourself');
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${ids.boss}/deactivate`, {})).status, 400, 'not a Superadmin');
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${leaver}/deactivate`, { lastDay: 'soon' })).status, 400);
+  const done = await call(ids.hr, 'POST', `/hr/employees/${leaver}/deactivate`, { lastDay: '2026-12-31' });
+  assert.equal(done.status, 200);
+  assert.equal(done.json.reassignedReports, 1);
+  assert.equal(done.json.employee.employmentStatus, 'resigned');
+  assert.equal(done.json.employee.separationDate, '2026-12-31');
+  assert.ok(done.json.employee.deactivatedAt);
+  assert.equal(done.json.employee.checklists.offboarding.total, 4, 'the standard offboarding checklist started');
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${leaver}/deactivate`, {})).status, 400, 'already deactivated');
+
+  assert.equal((await call(leaver, 'GET', '/people')).status, 403, 'their old session is gone');
+  const login = await call(0, 'POST', '/auth/login', { username: 'leaver', password: 'Old-pass-123' });
+  assert.equal(login.status, 403);
+  assert.match(login.json.error, /deactivated/);
+  const people = (await call(ids.ann, 'GET', '/people')).json.people;
+  assert.ok(!people.some((p) => p.username === 'leaver'), 'gone from the directory and the chart');
+  assert.equal(people.find((p) => p.username === 'report').managerId, lead, 'their report now reports to the leaver manager');
+  const dpt = (await call(ids.hr, 'GET', '/hr/departments')).json.departments.find((d) => d.id === dept.id);
+  assert.equal(dpt.headId, null, 'no longer a department head');
+  assert.ok((await call(ids.hr, 'GET', '/hr/employees')).json.employees.some((e) => e.username === 'leaver'), 'HR still sees the record');
+
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${leaver}/reactivate`, {})).json.employee.employmentStatus, 'active');
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${leaver}/reactivate`, {})).status, 400);
+  assert.equal((await call(0, 'POST', '/auth/login', { username: 'leaver', password: 'Old-pass-123' })).status, 200);
+});
+
+test('resetting a password gives a temporary one, once, and signs the person out', async (t) => {
+  if (skip(t)) return;
+  const who = await makeMember('forgetful');
+  assert.equal((await call(ids.ann, 'POST', `/hr/employees/${who}/reset-password`, {})).status, 403);
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${ids.boss}/reset-password`, {})).status, 403, 'HR cannot reset a Superadmin');
+  const reset = await call(ids.hr, 'POST', `/hr/employees/${who}/reset-password`, {});
+  assert.equal(reset.status, 200);
+  assert.match(reset.json.password, /^[A-Za-z2-9]{12}$/);
+  assert.equal((await call(who, 'GET', '/hr/me')).status, 403, 'old session signed out');
+  assert.equal((await call(0, 'POST', '/auth/login', { username: 'forgetful', password: 'Old-pass-123' })).status, 401);
+  const login = await call(0, 'POST', '/auth/login', { username: 'forgetful', password: reset.json.password });
+  assert.equal(login.status, 200);
+  assert.equal(login.json.user.mustChangePassword, true);
+});
+
+test('checklists: new accounts start onboarding, tasks can be ticked, added and removed, and HR edits the standard lists', async (t) => {
+  if (skip(t)) return;
+  const made = await call(ids.hr, 'POST', '/admin/users', { accounts: [{ username: 'fresh', email: 'fresh@x.test' }] });
+  const fresh = made.json.created[0].id;
+  const list = (await call(ids.hr, 'GET', `/hr/employees/${fresh}/tasks`)).json.tasks;
+  assert.equal(list.filter((x) => x.kind === 'onboarding').length, 4, 'the standard onboarding list');
+  assert.equal(list.filter((x) => x.kind === 'offboarding').length, 0);
+
+  const ticked = await call(ids.hr, 'PUT', `/hr/tasks/${list[0].id}`, { done: true });
+  assert.equal(ticked.json.task.done, true);
+  assert.equal(ticked.json.task.doneBy, 'hana');
+  const row = (await call(ids.hr, 'GET', '/hr/employees')).json.employees.find((e) => e.id === fresh);
+  assert.deepEqual(row.checklists.onboarding, { done: 1, total: 4 });
+  assert.equal((await call(ids.hr, 'PUT', `/hr/tasks/${list[0].id}`, { done: false })).json.task.done, false);
+  assert.equal((await call(ids.hr, 'PUT', `/hr/tasks/${list[0].id}`, { done: 'yes' })).status, 400);
+  assert.equal((await call(ids.ann, 'PUT', `/hr/tasks/${list[0].id}`, { done: true })).status, 403);
+
+  const added = await call(ids.hr, 'POST', `/hr/employees/${fresh}/tasks`, { kind: 'onboarding', title: 'Set up the badge' });
+  assert.equal(added.status, 201);
+  assert.equal(added.json.tasks.at(-1).title, 'Set up the badge');
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${fresh}/tasks`, { kind: 'other', title: 'x' })).status, 400);
+  assert.equal((await call(ids.hr, 'POST', `/hr/employees/${fresh}/tasks`, { kind: 'onboarding', title: ' ' })).status, 400);
+  assert.equal((await call(ids.hr, 'DELETE', `/hr/tasks/${added.json.tasks.at(-1).id}`)).status, 200);
+  assert.equal((await call(ids.hr, 'DELETE', `/hr/tasks/${added.json.tasks.at(-1).id}`)).status, 404);
+  const started = await call(ids.hr, 'POST', `/hr/employees/${fresh}/tasks`, { kind: 'offboarding', apply: true });
+  assert.equal(started.json.tasks.filter((x) => x.kind === 'offboarding').length, 4, 'start the standard offboarding list by hand');
+
+  const saved = await call(ids.hr, 'PUT', '/hr/task-templates', { kind: 'onboarding', titles: ['Badge', 'Laptop', ' '] });
+  assert.deepEqual(saved.json.titles, ['Badge', 'Laptop']);
+  assert.deepEqual((await call(ids.hr, 'GET', '/hr/task-templates')).json.onboarding, ['Badge', 'Laptop']);
+  assert.equal((await call(ids.hr, 'GET', '/hr/task-templates')).json.offboarding.length, 4, 'the other list is untouched');
+  assert.equal((await call(ids.hr, 'PUT', '/hr/task-templates', { kind: 'nope', titles: [] })).status, 400);
+  assert.equal((await call(ids.hr, 'GET', `/hr/employees/${fresh}/tasks`)).json.tasks.filter((x) => x.kind === 'onboarding').length, 4, 'people keep the list they have');
 });

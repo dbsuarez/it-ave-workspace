@@ -364,15 +364,6 @@ function renderPersonPage() {
         ${empty ? emptyRecordMarkup(mine ? 'Your page is empty' : `${personName(person)} has not added anything yet`, mine ? 'Use "Edit my page" to add an about text, sections and links.' : 'Their title and contact details show on the right.', 'compact') : ''}
       </div>
       <aside class="pp-side">
-        ${canSetManager && !mine ? `<section class="pp-section">
-          <h3>Name</h3>
-          <div class="pp-name-edit">
-            <input id="page-last" type="text" maxlength="100" placeholder="Last name" aria-label="Last name" value="${escapeText(person.lastName)}">
-            <input id="page-first" type="text" maxlength="100" placeholder="First name" aria-label="First name" value="${escapeText(person.firstName)}">
-            <input id="page-middle" type="text" maxlength="100" placeholder="Middle name" aria-label="Middle name" value="${escapeText(person.middleName)}">
-            <button type="button" class="btn" data-page-save-names="${person.id}">Save name</button>
-          </div>
-        </section>` : ''}
         <section class="pp-section">
           <h3>Contact</h3>
           ${contactRow('Email', person.email, person.email ? `mailto:${person.email}` : '')}
@@ -520,24 +511,6 @@ if (typeof document !== 'undefined') {
       const value = document.getElementById('page-manager').value;
       const ok = await setPersonManager(Number(setManager.dataset.pageSetManager), value === '' ? null : Number(value));
       if (ok) { showToast('Reporting line saved.', 'success'); openPersonPage(Number(setManager.dataset.pageSetManager)); }
-      return;
-    }
-    const saveNames = t.closest('[data-page-save-names]');
-    if (saveNames) {
-      const personId = Number(saveNames.dataset.pageSaveNames);
-      try {
-        const res = await api(`/api/people/${personId}/names`, { method: 'PUT', body: JSON.stringify({
-          lastName: document.getElementById('page-last').value, firstName: document.getElementById('page-first').value, middleName: document.getElementById('page-middle').value,
-        }) });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Could not save the name');
-        const listed = peopleState.list.find((p) => p.id === personId);
-        if (listed) Object.assign(listed, { lastName: data.person.lastName, firstName: data.person.firstName, middleName: data.person.middleName });
-        showToast('Name saved.', 'success');
-        openPersonPage(personId);
-      } catch (err) {
-        showToast(err.message || 'Could not save the name.', 'error');
-      }
       return;
     }
     const addSecondary = t.closest('[data-page-add-secondary]');

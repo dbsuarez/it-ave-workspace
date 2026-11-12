@@ -51,7 +51,7 @@ router.get('/', authenticateToken, async (req, res) => {
       query(
         `SELECT id, username
          FROM users
-         WHERE id != $1 AND username ILIKE $2 ESCAPE '\\'
+         WHERE id != $1 AND deactivated_at IS NULL AND username ILIKE $2 ESCAPE '\\'
          ORDER BY username
          LIMIT 5`,
         [userId, pattern]

@@ -131,7 +131,7 @@ function mapPerson(row, viewerId, { full = false } = {}) {
   return person;
 }
 
-const MEMBERS_ONLY = "u.account_type = 'member'";
+const MEMBERS_ONLY = "u.account_type = 'member' AND u.deactivated_at IS NULL";
 
 // GET /api/people - everyone in the directory (and so the whole org chart)
 router.get('/', async (req, res) => {
