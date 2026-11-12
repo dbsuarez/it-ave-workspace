@@ -62,6 +62,7 @@ require.cache[dbPath] = {
         canvases.delete(Number(params[0]));
         return { rows: [], rowCount: 1 };
       }
+      if (sql.includes('FROM canvas_channel_grants')) return { rows: [] }; // canvases shared into the channel: none here
       throw new Error(`Unexpected canvas query: ${sql}`);
     },
   },

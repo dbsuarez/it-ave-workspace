@@ -395,7 +395,7 @@ async function channelResourceHtml(tab, channelId) {
     const data = await fetchJson(`/api/canvases?channelId=${channelId}`);
     const canvases = data.canvases || [];
     return canvases.length
-      ? canvases.map((canvas) => row(`data-resource-canvas="${canvas.id}"`, escapeHtml(canvas.title), `Updated ${escapeHtml(shortTime(canvas.updatedAt))}`)).join('')
+      ? canvases.map((canvas) => row(`${canvas.shared ? 'data-resource-shared-canvas' : 'data-resource-canvas'}="${canvas.id}"`, escapeHtml(canvas.title || 'Untitled canvas'), `${canvas.shared ? 'Shared canvas · ' : ''}Updated ${escapeHtml(shortTime(canvas.updatedAt))}`)).join('')
       : emptyRecordMarkup('No canvases in this channel', 'Create one from the Canvas section.');
   }
   if (tab === 'lists') {
@@ -447,6 +447,13 @@ async function handleChannelResourceClick(event) {
   if (file) {
     const item = (state.channelTab.files || []).find((entry) => String(entry.id) === file.dataset.resourceFile);
     if (item) downloadFile(item.id, item.name);
+    return;
+  }
+  const sharedCanvas = event.target.closest('[data-resource-shared-canvas]');
+  if (sharedCanvas) {
+    // a canvas from the Canvas section that was shared into this channel opens there
+    await setSection('canvas2');
+    await openCanvas2Standalone(sharedCanvas.dataset.resourceSharedCanvas);
     return;
   }
   const canvas = event.target.closest('[data-resource-canvas]');

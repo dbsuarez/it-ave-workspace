@@ -50,15 +50,32 @@ router.get('/', authenticateToken, async (req, res) => {
        ORDER BY updated_at DESC, id DESC`,
       [channelId]
     );
-    res.json({
-      canvases: result.rows.map((canvas) => ({
+    // canvases someone shared into this channel (from the Canvas section) belong in the channel's list too
+    const shared = await query(
+      `SELECT c.id, c.title, c.created_at, c.updated_at, g.role
+       FROM canvas_channel_grants g JOIN canvases c ON c.id = g.canvas_id
+       WHERE g.channel_id = $1 AND c.kind = 'standalone' AND c.deleted_at IS NULL`,
+      [channelId]
+    );
+    const canvases = [
+      ...result.rows.map((canvas) => ({
         id: canvas.id,
         channelId: canvas.channel_id,
         title: canvas.title,
         createdAt: canvas.created_at,
         updatedAt: canvas.updated_at,
       })),
-    });
+      ...shared.rows.map((canvas) => ({
+        id: canvas.id,
+        channelId,
+        title: canvas.title,
+        createdAt: canvas.created_at,
+        updatedAt: canvas.updated_at,
+        shared: true,
+        role: canvas.role,
+      })),
+    ].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    res.json({ canvases });
   } catch (err) {
     handleError(res, err, 'Get canvases error');
   }
