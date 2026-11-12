@@ -593,4 +593,38 @@ $$`,
    ) AS v(name, days, paid, position)
    WHERE NOT EXISTS (SELECT 1 FROM schema_markers WHERE name = 'leave_types_v1')`,
   `INSERT INTO schema_markers (name) VALUES ('leave_types_v1') ON CONFLICT DO NOTHING`,
+
+  // Attendance: work schedules (the default one is seeded once) and one clock-in/out record per person per day
+  `CREATE TABLE IF NOT EXISTS work_schedules (
+     id SERIAL PRIMARY KEY,
+     name VARCHAR(60) NOT NULL,
+     start_time TIME NOT NULL,
+     end_time TIME NOT NULL,
+     break_minutes SMALLINT NOT NULL DEFAULT 60 CHECK (break_minutes BETWEEN 0 AND 240),
+     grace_minutes SMALLINT NOT NULL DEFAULT 10 CHECK (grace_minutes BETWEEN 0 AND 120),
+     overtime_min_minutes SMALLINT NOT NULL DEFAULT 30 CHECK (overtime_min_minutes BETWEEN 0 AND 240),
+     work_days SMALLINT[] NOT NULL DEFAULT '{1,2,3,4,5}',
+     is_default BOOLEAN NOT NULL DEFAULT false
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_work_schedules_name ON work_schedules (LOWER(name))`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_work_schedules_default ON work_schedules (is_default) WHERE is_default`,
+  `INSERT INTO work_schedules (name, start_time, end_time, is_default)
+   SELECT 'Regular (9:00 to 18:00)', '09:00', '18:00', true
+   WHERE NOT EXISTS (SELECT 1 FROM schema_markers WHERE name = 'work_schedule_v1')`,
+  `INSERT INTO schema_markers (name) VALUES ('work_schedule_v1') ON CONFLICT DO NOTHING`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS schedule_id INTEGER REFERENCES work_schedules(id) ON DELETE SET NULL`,
+  `CREATE TABLE IF NOT EXISTS attendance_records (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     work_date DATE NOT NULL,
+     clock_in TIMESTAMP WITH TIME ZONE NOT NULL,
+     clock_out TIMESTAMP WITH TIME ZONE,
+     source VARCHAR(8) NOT NULL DEFAULT 'self' CHECK (source IN ('self', 'hr')),
+     note VARCHAR(200) NOT NULL DEFAULT '',
+     edited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     UNIQUE (user_id, work_date),
+     CHECK (clock_out IS NULL OR clock_out >= clock_in)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(work_date)`,
 ];

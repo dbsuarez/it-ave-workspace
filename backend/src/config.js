@@ -11,6 +11,17 @@ if (NODE_ENV === 'production' && !process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is required when NODE_ENV=production');
 }
 
+// An IANA name such as Asia/Manila; a wrong one stops the server with a clear message instead of misdating attendance.
+function companyTimezone() {
+  const zone = process.env.COMPANY_TIMEZONE || 'Asia/Manila';
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: zone });
+  } catch (err) {
+    throw new Error(`COMPANY_TIMEZONE "${zone}" is not a valid time zone name (for example Asia/Manila)`, { cause: err });
+  }
+  return zone;
+}
+
 function getIceServers() {
   const configured = process.env.WEBRTC_ICE_SERVERS;
   if (!configured) {
@@ -67,6 +78,8 @@ module.exports = {
   // extra web origins allowed to call the API (comma separated); the desktop app and local tools always are
   CORS_ORIGINS: process.env.CORS_ORIGINS || '',
   // how long a deleted personal canvas can be restored before it is removed for good
+  // the company's time zone: "today" for attendance, and the clock times people see and HR types
+  COMPANY_TIMEZONE: companyTimezone(),
   CANVAS_TRASH_DAYS: Math.max(1, parseInt(process.env.CANVAS_TRASH_DAYS || '7', 10) || 7),
   WEBRTC_ICE_SERVERS: getIceServers(),
 };

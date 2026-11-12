@@ -186,7 +186,7 @@ function yearFrom(value) {
 const REQUEST_SELECT = `
   SELECT r.id, r.user_id, r.leave_type_id, to_char(r.start_date, 'YYYY-MM-DD') AS start_date, to_char(r.end_date, 'YYYY-MM-DD') AS end_date,
          r.days, r.half_day, r.reason, r.status, r.decided_at, r.decision_note, r.created_at,
-         t.name AS type_name, u.username, u.first_name, u.last_name, u.middle_name, u.manager_id,
+         t.name AS type_name, u.username, u.first_name, u.last_name, u.middle_name, u.manager_id, u.employee_no, u.department,
          d.username AS decided_by_username
   FROM leave_requests r
   JOIN leave_types t ON t.id = r.leave_type_id
@@ -198,6 +198,8 @@ function mapRequest(row) {
     id: row.id,
     userId: row.user_id,
     username: row.username,
+    employeeNo: row.employee_no || '',
+    department: row.department || '',
     firstName: row.first_name || '',
     middleName: row.middle_name || '',
     lastName: row.last_name || '',
@@ -364,6 +366,83 @@ router.put('/requests/:id/decision', async (req, res) => {
     res.json({ request });
   } catch (err) {
     sendError(res, err, 'Decide leave request error');
+  }
+});
+
+// ---- HR: every leave record ----
+
+const RECORD_STATUSES = ['pending', 'approved', 'rejected', 'cancelled'];
+
+// The filtered records for HR: ?status=&typeId=&userId=&q=&from=&to= (leave overlapping from..to)
+async function recordsFor(params, limit) {
+  const where = [];
+  const values = [];
+  const add = (sql, value) => { values.push(value); where.push(sql.replace('?', `$${values.length}`)); };
+  if (params.status) {
+    if (!RECORD_STATUSES.includes(params.status)) throw fail(400, 'Unknown status');
+    add('r.status = ?', params.status);
+  }
+  if (params.typeId) {
+    const id = parseId(params.typeId);
+    if (id === null) throw fail(400, 'A valid leave type ID is required');
+    add('r.leave_type_id = ?', id);
+  }
+  if (params.userId) {
+    const id = parseId(params.userId);
+    if (id === null) throw fail(400, 'A valid person ID is required');
+    add('r.user_id = ?', id);
+  }
+  if (params.from) {
+    if (!parseDay(params.from)) throw fail(400, 'from must be a date');
+    add('r.end_date >= ?::date', params.from);
+  }
+  if (params.to) {
+    if (!parseDay(params.to)) throw fail(400, 'to must be a date');
+    add('r.start_date <= ?::date', params.to);
+  }
+  if (typeof params.q === 'string' && params.q.trim()) {
+    const escaped = params.q.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+    values.push(`%${escaped}%`);
+    const n = values.length; // the one search text is used three times
+    where.push(`(u.username ILIKE $${n} ESCAPE '\\' OR COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '') ILIKE $${n} ESCAPE '\\' OR COALESCE(u.employee_no, '') ILIKE $${n} ESCAPE '\\')`);
+  }
+  const rows = (await query(
+    `${REQUEST_SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY r.start_date DESC, r.id DESC LIMIT ${limit + 1}`, values
+  )).rows;
+  return { requests: rows.slice(0, limit).map(mapRequest), truncated: rows.length > limit };
+}
+
+router.get('/records', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    res.json(await recordsFor(req.query, 500));
+  } catch (err) {
+    sendError(res, err, 'Leave records error');
+  }
+});
+
+// A CSV cell: quoted when needed; one that could start a formula is defused.
+function csvCell(value) {
+  let cell = value === null || value === undefined ? '' : String(value);
+  if (/^[=@\t\r]/.test(cell) || (/^[+-]/.test(cell) && !/^[+-][\d\s().-]+$/.test(cell))) cell = `'${cell}`;
+  return /[",\n\r]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;
+}
+
+const dayOf = (value) => (value ? new Date(value).toISOString().slice(0, 10) : '');
+
+// GET /api/leave/records/export - the same filters as a CSV
+router.get('/records/export', async (req, res) => {
+  try {
+    await requireHr(req.user.userId);
+    const { requests, truncated } = await recordsFor(req.query, 5000);
+    const header = ['Employee no.', 'Name', 'Department', 'Leave type', 'From', 'To', 'Days', 'Half day', 'Status', 'Reason', 'Decided by', 'Decided on', 'Decision note', 'Requested on'];
+    const lines = [header.join(',')].concat(requests.map((r) => [
+      r.employeeNo, [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ') || r.username, r.department, r.typeName, r.startDate, r.endDate, r.days,
+      r.halfDay ? 'yes' : '', r.status, r.reason, r.decidedBy || '', dayOf(r.decidedAt), r.decisionNote, dayOf(r.createdAt),
+    ].map(csvCell).join(',')));
+    res.json({ csv: `${lines.join('\r\n')}\r\n`, count: requests.length, truncated });
+  } catch (err) {
+    sendError(res, err, 'Export leave records error');
   }
 });
 

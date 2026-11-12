@@ -7,6 +7,7 @@
 const leaveState = {
   view: 'mine', me: null, approvals: [], waiting: 0, loaded: false, error: '',
   month: new Date().toISOString().slice(0, 7), scope: 'team', calendar: null,
+  records: null, types: [], filters: { status: '', typeId: '', q: '', from: '', to: '' }, // HR: every request
 };
 
 const LEAVE_STATUS = { pending: 'Waiting', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
@@ -57,6 +58,10 @@ async function loadLeave() {
     leaveState.waiting = leaveState.me.approvalsWaiting;
     leaveState.approvals = leaveState.me.approvalsWaiting ? (await leaveApi('/api/leave/approvals')).requests : [];
     if (leaveState.view === 'calendar') leaveState.calendar = await leaveApi(`/api/leave/calendar?month=${leaveState.month}&scope=${leaveState.scope}`);
+    if (leaveState.view === 'records' && leaveState.me.canManage) {
+      if (!leaveState.types.length) leaveState.types = (await leaveApi('/api/leave/types')).types;
+      leaveState.records = await leaveApi(`/api/leave/records?${leaveFilterQuery()}`);
+    }
     leaveState.error = '';
   } catch (err) {
     leaveState.error = err.message || 'Leave is not available';
@@ -104,12 +109,14 @@ function renderLeave(body) {
   if (leaveState.error) { body.innerHTML = emptyRecordMarkup('Leave is not available', leaveState.error); return; }
   if (!leaveState.loaded) { body.innerHTML = '<p class="pp-muted">Loading…</p>'; loadLeave(); return; }
   const tabs = [['mine', 'My leave'], ['approvals', `Approvals${leaveState.waiting ? ` (${leaveState.waiting})` : ''}`], ['calendar', 'Calendar']];
+  if (leaveState.me && leaveState.me.canManage) tabs.push(['records', 'All records']);
   body.innerHTML = `
     <div class="lv-tabs">${tabs.map(([key, label]) => `<button type="button" class="lv-tab${leaveState.view === key ? ' active' : ''}" data-leave-view="${key}">${label}</button>`).join('')}
       <span class="emp-spacer"></span>
       ${leaveState.view === 'mine' ? '<button type="button" class="btn primary" data-leave-request>Request leave</button>' : ''}</div>
-    <div class="lv-body">${leaveState.view === 'mine' ? leaveMineHtml() : leaveState.view === 'approvals' ? leaveApprovalsHtml() : leaveCalendarHtml()}</div>`;
+    <div class="lv-body">${leaveState.view === 'mine' ? leaveMineHtml() : leaveState.view === 'approvals' ? leaveApprovalsHtml() : leaveState.view === 'records' ? leaveRecordsHtml() : leaveCalendarHtml()}</div>`;
   if (leaveState.view === 'calendar' && !leaveState.calendar) loadLeave();
+  if (leaveState.view === 'records' && !leaveState.records) loadLeave();
 }
 
 function leaveMineHtml() {
@@ -129,6 +136,36 @@ function leaveMineHtml() {
     <h3 class="lv-h">My requests</h3>
     ${me.requests.length ? `<div class="emp-table-wrap"><table class="emp-table"><thead><tr><th>Dates</th><th>Type</th><th>Days</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
     : emptyRecordMarkup('No leave requests yet', 'Use "Request leave" to ask for time off.', 'compact')}`;
+}
+
+function leaveFilterQuery() {
+  const f = leaveState.filters;
+  return Object.entries(f).filter(([, value]) => value !== '').map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');
+}
+
+// HR: every request, any status, with filters and a CSV export.
+function leaveRecordsHtml() {
+  const f = leaveState.filters;
+  const r = leaveState.records;
+  const rows = r ? r.requests.map((x) => `
+    <tr><td><strong>${escapeText(personName(x))}</strong>${x.employeeNo ? `<em class="lv-by">#${escapeText(x.employeeNo)}${x.department ? ` · ${escapeText(x.department)}` : ''}</em>` : (x.department ? `<em class="lv-by">${escapeText(x.department)}</em>` : '')}</td>
+      <td>${escapeText(x.typeName)}</td><td>${escapeText(leaveRange(x))}</td><td>${leaveDays(x.days)}${x.halfDay ? ' (half)' : ''}</td>
+      <td><span class="lv-status lv-${x.status}">${LEAVE_STATUS[x.status]}</span>${x.decidedBy ? `<em class="lv-by">by ${escapeText(x.decidedBy)}${x.decidedAt ? `, ${escapeText(new Date(x.decidedAt).toLocaleDateString())}` : ''}</em>` : ''}${x.decisionNote ? `<em class="lv-by">“${escapeText(x.decisionNote)}”</em>` : ''}</td>
+      <td class="att-note" title="${escapeText(x.reason)}">${escapeText(x.reason)}</td></tr>`).join('') : '';
+  return `
+    <div class="emp-toolbar">
+      <input type="search" id="lv-f-q" class="pp-search" placeholder="Name, username or employee no." value="${escapeText(f.q)}" aria-label="Search">
+      <select id="lv-f-status" class="pp-select" aria-label="Status"><option value="">All statuses</option>${Object.entries(LEAVE_STATUS).map(([k, l]) => `<option value="${k}"${f.status === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <select id="lv-f-type" class="pp-select" aria-label="Leave type"><option value="">All types</option>${leaveState.types.map((t) => `<option value="${t.id}"${String(f.typeId) === String(t.id) ? ' selected' : ''}>${escapeText(t.name)}</option>`).join('')}</select>
+      <label class="lv-f-date">From <input type="date" id="lv-f-from" value="${escapeText(f.from)}"></label>
+      <label class="lv-f-date">To <input type="date" id="lv-f-to" value="${escapeText(f.to)}"></label>
+      <span class="emp-spacer"></span>
+      <button type="button" class="btn" data-leave-records-export>Export CSV</button>
+    </div>
+    ${!r ? '<p class="pp-muted">Loading…</p>' : r.requests.length
+    ? `<div class="emp-table-wrap"><table class="emp-table"><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="pp-hint">${r.requests.length} record${r.requests.length === 1 ? '' : 's'}${r.truncated ? ' (the newest 500; narrow the filters or export for more)' : ''}, newest first. Dates filter finds leave that overlaps the range.</p>`
+    : emptyRecordMarkup('No leave records', 'Nothing matches these filters.', 'compact')}`;
 }
 
 function leaveApprovalsHtml() {
@@ -313,10 +350,19 @@ if (typeof document !== 'undefined') {
     if (view) {
       leaveState.view = view.dataset.leaveView;
       if (leaveState.view === 'calendar') leaveState.calendar = null;
+      if (leaveState.view === 'records') leaveState.records = null;
       renderPeopleBody();
       return;
     }
     if (t.closest('[data-leave-request]')) { openLeaveRequest(); return; }
+    if (t.closest('[data-leave-records-export]')) {
+      try {
+        const data = await leaveApi(`/api/leave/records/export?${leaveFilterQuery()}`);
+        const saved = await window.electronAPI.saveAccountsCsv('leave', data.csv);
+        if (saved && saved.saved) showToast(`Saved ${data.count} record${data.count === 1 ? '' : 's'}${data.truncated ? ' (the newest 5000)' : ''}.`, 'success');
+      } catch (err) { showToast(err.message || 'Could not export.', 'error'); }
+      return;
+    }
     const cancel = t.closest('[data-leave-cancel]');
     if (cancel) {
       if (!confirm('Cancel this leave request?')) return;
@@ -363,8 +409,26 @@ if (typeof document !== 'undefined') {
   });
 
   document.addEventListener('change', (event) => {
+    const filterKey = { 'lv-f-status': 'status', 'lv-f-type': 'typeId', 'lv-f-from': 'from', 'lv-f-to': 'to' }[event.target.id];
+    if (filterKey) { leaveState.filters[filterKey] = event.target.value; leaveState.records = null; renderPeopleBody(); return; }
     if (event.target.id === 'leave-scope') { leaveState.scope = event.target.value; leaveState.calendar = null; renderPeopleBody(); return; }
     if (['lv-start', 'lv-end', 'lv-half'].includes(event.target.id)) updateLeavePreview();
+  });
+
+  let leaveSearchTimer = null;
+  document.addEventListener('input', (event) => {
+    if (event.target.id !== 'lv-f-q') return;
+    clearTimeout(leaveSearchTimer);
+    const value = event.target.value;
+    leaveSearchTimer = setTimeout(async () => {
+      leaveState.filters.q = value;
+      try { leaveState.records = await leaveApi(`/api/leave/records?${leaveFilterQuery()}`); } catch (err) { showToast(err.message || 'Could not search.', 'error'); return; }
+      const input = document.getElementById('lv-f-q');
+      const caret = input ? input.selectionStart : null;
+      renderPeopleBody();
+      const again = document.getElementById('lv-f-q');
+      if (again) { again.focus(); if (caret !== null) again.setSelectionRange(caret, caret); }
+    }, 300);
   });
 
   document.addEventListener('submit', (event) => {

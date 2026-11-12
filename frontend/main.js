@@ -371,12 +371,12 @@ handleTrusted('admin:importAccounts', async (event) => {
 });
 
 // Saving the new accounts' passwords (or a blank template) as a CSV the person chooses where to keep.
-const CSV_SAVES = { credentials: 'new-accounts.csv', template: 'accounts-template.csv', employees: 'employees.csv' };
+const CSV_SAVES = { credentials: 'new-accounts.csv', template: 'accounts-template.csv', employees: 'employees.csv', attendance: 'attendance-export.csv', leave: 'leave-records.csv' };
 handleTrusted('admin:saveCsv', async (event, kind, created) => {
   if (!Object.prototype.hasOwnProperty.call(CSV_SAVES, kind)) throw new Error('Unknown file');
   const { credentialsCsv } = require('./accounts-import');
   let text;
-  if (kind === 'employees') {
+  if (kind === 'employees' || kind === 'attendance' || kind === 'leave') {
     if (typeof created !== 'string' || created.length > 5 * 1024 * 1024) throw new Error('Invalid file contents');
     text = created;
   } else if (kind === 'template') {
@@ -394,7 +394,7 @@ handleTrusted('admin:saveCsv', async (event, kind, created) => {
   } else {
     const parent = BrowserWindow.fromWebContents(event.sender) || mainWindow;
     const chosen = await dialog.showSaveDialog(parent, {
-      title: kind === 'credentials' ? 'Save the new accounts' : kind === 'employees' ? 'Save the employee list' : 'Save the template',
+      title: kind === 'credentials' ? 'Save the new accounts' : kind === 'employees' ? 'Save the employee list' : kind === 'attendance' ? 'Save the attendance export' : kind === 'leave' ? 'Save the leave records' : 'Save the template',
       defaultPath: path.join(app.getPath('documents'), CSV_SAVES[kind]),
       filters: [{ name: 'CSV', extensions: ['csv'] }],
     });

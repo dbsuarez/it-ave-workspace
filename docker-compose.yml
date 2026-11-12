@@ -36,6 +36,7 @@ services:
       WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-}
       TRUST_PROXY: ${TRUST_PROXY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      COMPANY_TIMEZONE: ${COMPANY_TIMEZONE:-Asia/Manila}
       LOG_REQUESTS: ${LOG_REQUESTS:-true}
     ports:
       # Set BACKEND_BIND=127.0.0.1 when the TLS proxy is in front, so only the proxy can reach the backend.

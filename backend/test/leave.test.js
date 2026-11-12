@@ -219,3 +219,39 @@ test('a leave type that has requests is hidden, not deleted', async (t) => {
   assert.ok((await call(ids.hr, 'GET', '/types')).json.types.some((x) => x.id === emergency), 'HR still does');
   assert.equal((await call(ids.ann, 'POST', '/requests', { typeId: emergency, startDate: iso(addDays(mon, 7)) })).status, 404, 'and it cannot be requested');
 });
+
+test('HR sees every leave record, filtered, and can export them; nobody else can', async (t) => {
+  if (skip(t)) return;
+  const sick = await typeId('Sick Leave');
+  const mon = monday(20);
+  const made = await call(ids.cy, 'POST', '/requests', { typeId: sick, startDate: iso(mon), endDate: iso(addDays(mon, 1)), reason: 'Flu, rest' });
+  await call(ids.hr, 'PUT', `/requests/${made.json.request.id}/decision`, { status: 'approved', note: 'Get well' });
+
+  assert.equal((await call(ids.ann, 'GET', '/records')).status, 403);
+  assert.equal((await call(ids.lead, 'GET', '/records')).status, 403, 'not even a manager');
+  const all = await call(ids.hr, 'GET', '/records');
+  assert.equal(all.status, 200);
+  assert.ok(all.json.requests.length >= 4, 'every status, every person');
+  assert.ok(all.json.requests.some((r) => r.status === 'rejected') && all.json.requests.some((r) => r.status === 'pending' || r.status === 'approved'));
+  const dates = all.json.requests.map((r) => r.startDate);
+  assert.deepEqual(dates, [...dates].sort().reverse(), 'newest first');
+
+  const byStatus = await call(ids.hr, 'GET', '/records?status=approved');
+  assert.ok(byStatus.json.requests.every((r) => r.status === 'approved'));
+  assert.equal((await call(ids.hr, 'GET', '/records?status=weird')).status, 400);
+  const byPerson = await call(ids.hr, 'GET', `/records?userId=${ids.cy}`);
+  assert.ok(byPerson.json.requests.length >= 1 && byPerson.json.requests.every((r) => r.userId === ids.cy));
+  const byRange = await call(ids.hr, 'GET', `/records?from=${iso(mon)}&to=${iso(addDays(mon, 1))}`);
+  assert.deepEqual(byRange.json.requests.map((r) => r.username), ['cy'], 'leave overlapping that range');
+  const bySearch = await call(ids.hr, 'GET', '/records?q=CY');
+  assert.ok(bySearch.json.requests.length >= 1 && bySearch.json.requests.every((r) => r.username.toLowerCase().includes('cy')));
+  assert.equal((await call(ids.hr, 'GET', '/records?q=%25')).json.requests.length, 0, 'a % is searched for, not a wildcard');
+  assert.equal((await call(ids.hr, 'GET', '/records?from=bad')).status, 400);
+  assert.equal((await call(ids.hr, 'GET', '/records?typeId=abc')).status, 400);
+
+  const out = await call(ids.hr, 'GET', `/records/export?userId=${ids.cy}`);
+  const lines = out.json.csv.split('\r\n').filter(Boolean);
+  assert.equal(lines[0], 'Employee no.,Name,Department,Leave type,From,To,Days,Half day,Status,Reason,Decided by,Decided on,Decision note,Requested on');
+  assert.match(lines[1], /Sick Leave,.*approved,"Flu, rest",hana,\d{4}-\d{2}-\d{2},Get well,/);
+  assert.equal((await call(ids.ann, 'GET', '/records/export')).status, 403);
+});

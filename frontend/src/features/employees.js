@@ -5,7 +5,8 @@
 // Moderation). Loaded after people.js; the People view calls renderEmployeeManagement().
 
 const employeeState = {
-  list: [], departments: [], loaded: false, error: '', status: '', department: '', editingId: null,
+  list: [], departments: [], schedules: [], loaded: false, error: '', status: '', department: '', editingId: null,
+  sort: { key: 'name', dir: 'asc' }, // the table is in name order until a column header is clicked
 };
 
 const EMPLOYEE_STATUSES = { active: 'Active', on_leave: 'On leave', resigned: 'Resigned' };
@@ -24,9 +25,10 @@ async function hrApi(path, method = 'GET', body) {
 
 async function loadEmployeeManagement() {
   try {
-    const [employees, departments] = await Promise.all([hrApi('/api/hr/employees'), hrApi('/api/hr/departments')]);
+    const [employees, departments, schedules] = await Promise.all([hrApi('/api/hr/employees'), hrApi('/api/hr/departments'), hrApi('/api/attendance/schedules')]);
     employeeState.list = employees.employees;
     employeeState.departments = departments.departments;
+    employeeState.schedules = schedules.schedules;
     employeeState.error = '';
   } catch (err) {
     employeeState.error = err.message || 'Could not load employees';
@@ -64,6 +66,37 @@ function employeeChecklistBadge(e) {
   return parts.length ? `<span class="emp-progress">${parts.join(' · ')}</span>` : '';
 }
 
+// What each column sorts by. Empty values always go last, whichever way the column is sorted.
+const EMPLOYEE_SORTS = {
+  name: (e) => personName(e).toLowerCase(),
+  no: (e) => String(e.employeeNo || '').toLowerCase(),
+  department: (e) => String(e.department || '').toLowerCase(),
+  title: (e) => String(e.jobTitle || '').toLowerCase(),
+  manager: (e, byId) => (e.managerId && byId.get(e.managerId) ? personName(byId.get(e.managerId)).toLowerCase() : ''),
+  status: (e) => (e.deactivatedAt ? 'deactivated' : e.employmentStatus),
+  hired: (e) => e.hireDate || '',
+};
+
+function sortEmployees(list, byId) {
+  const { key, dir } = employeeState.sort;
+  const pick = EMPLOYEE_SORTS[key] || EMPLOYEE_SORTS.name;
+  const sign = dir === 'desc' ? -1 : 1;
+  return list.slice().sort((a, b) => {
+    const x = pick(a, byId);
+    const y = pick(b, byId);
+    if (x === '' && y !== '') return 1;
+    if (y === '' && x !== '') return -1;
+    const order = x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' });
+    return order !== 0 ? sign * order : personName(a).localeCompare(personName(b), undefined, { sensitivity: 'base' });
+  });
+}
+
+function employeeHeader(key, label) {
+  const active = employeeState.sort.key === key;
+  const arrow = active ? (employeeState.sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  return `<th aria-sort="${active ? (employeeState.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><button type="button" class="emp-sort" data-emp-sort="${key}">${label}${arrow}</button></th>`;
+}
+
 function renderEmployeeManagement(body) {
   if (employeeState.error) {
     body.innerHTML = emptyRecordMarkup('Employee records are not available', employeeState.error);
@@ -75,7 +108,7 @@ function renderEmployeeManagement(body) {
     return;
   }
   const byId = new Map(employeeState.list.map((e) => [e.id, e]));
-  const rows = employeeState.list
+  const rows = sortEmployees(employeeState.list, byId)
     .filter((e) => employeeMatches(e, peopleState.query))
     .filter((e) => !employeeState.status || (employeeState.status === 'deactivated' ? Boolean(e.deactivatedAt) : e.employmentStatus === employeeState.status && !e.deactivatedAt))
     .filter((e) => !employeeState.department || String(e.departmentId || '') === employeeState.department);
@@ -100,7 +133,7 @@ function renderEmployeeManagement(body) {
       <button type="button" class="btn primary" data-emp-add>Add people</button>
     </div>
     ${rows.length ? `<div class="emp-table-wrap"><table class="emp-table">
-      <thead><tr><th>Employee</th><th>No.</th><th>Department</th><th>Job title</th><th>Reports to</th><th>Status</th><th>Hired</th></tr></thead>
+      <thead><tr>${employeeHeader('name', 'Employee')}${employeeHeader('no', 'No.')}${employeeHeader('department', 'Department')}${employeeHeader('title', 'Job title')}${employeeHeader('manager', 'Reports to')}${employeeHeader('status', 'Status')}${employeeHeader('hired', 'Hired')}</tr></thead>
       <tbody>${rows.map((e) => {
     const boss = e.managerId ? byId.get(e.managerId) : null;
     return `<tr data-emp-row="${e.id}" tabindex="0">
@@ -147,6 +180,7 @@ function openEmployeeEditor(id) {
           <div class="form-group"><label for="emp-manager">Reports to</label><select id="emp-manager"><option value="">No manager</option>${employeeState.list.filter((o) => o.id !== e.id).map((o) => option(o.id, employeeFullName(o), e.managerId || '')).join('')}</select></div>
           <div class="form-group"><label for="emp-location">Location</label><input id="emp-location" type="text" maxlength="100" value="${escapeText(e.location)}"></div>
         </div>
+        <div class="form-group"><label for="emp-schedule">Work schedule</label><select id="emp-schedule"><option value="">Default${(employeeState.schedules.find((s) => s.isDefault) || {}).name ? ` (${escapeText(employeeState.schedules.find((s) => s.isDefault).name)})` : ''}</option>${employeeState.schedules.filter((s) => !s.isDefault).map((s) => option(s.id, `${s.name} (${s.start}–${s.end})`, e.scheduleId || '')).join('')}</select></div>
         <div class="pp-edit-triple">
           <div class="form-group"><label for="emp-status">Status</label><select id="emp-status">${Object.entries(EMPLOYEE_STATUSES).map(([k, l]) => option(k, l, e.employmentStatus)).join('')}</select></div>
           <div class="form-group"><label for="emp-hired">Hire date</label><input id="emp-hired" type="date" value="${escapeText(e.hireDate || '')}"></div>
@@ -194,6 +228,8 @@ async function saveEmployeeRecord(event) {
     await hrApi(`/api/hr/employees/${e.id}`, 'PUT', record);
     const manager = value('emp-manager') === '' ? null : Number(value('emp-manager'));
     if (manager !== (e.managerId || null)) await hrApi(`/api/people/${e.id}/manager`, 'PUT', { managerId: manager });
+    const schedule = value('emp-schedule') === '' ? null : Number(value('emp-schedule'));
+    if (schedule !== (e.scheduleId || null)) await hrApi(`/api/attendance/people/${e.id}/schedule`, 'PUT', { scheduleId: schedule });
     const hrBox = document.getElementById('emp-hr');
     if (hrBox && hrBox.checked !== e.isHr) await hrApi(`/api/hr/employees/${e.id}/hr-role`, 'PUT', { isHr: hrBox.checked });
     closeSettingsModal();
@@ -399,6 +435,13 @@ if (typeof document !== 'undefined') {
     const t = event.target;
     if (!t.closest) return;
     if (t.closest('[data-emp-close]')) { closeSettingsModal(); return; }
+    const sort = t.closest('[data-emp-sort]');
+    if (sort) {
+      const key = sort.dataset.empSort;
+      employeeState.sort = employeeState.sort.key === key ? { key, dir: employeeState.sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
+      renderPeopleBody();
+      return;
+    }
     const row = t.closest('[data-emp-row]');
     if (row) { openEmployeeEditor(Number(row.dataset.empRow)); return; }
     if (t.closest('[data-emp-departments]')) { openDepartments(); return; }

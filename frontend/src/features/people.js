@@ -67,13 +67,14 @@ function renderPeople() {
     return;
   }
   title.textContent = 'People';
-  sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : peopleState.tab === 'manage' ? 'Employee records, departments and accounts.' : peopleState.tab === 'leave' ? 'Time off: balances, requests, approvals and who is away.' : 'Everyone in the workspace.';
+  sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : peopleState.tab === 'manage' ? 'Employee records, departments and accounts.' : peopleState.tab === 'leave' ? 'Time off: balances, requests, approvals and who is away.' : peopleState.tab === 'attendance' ? 'Clock in and out, timesheets, and the payroll export.' : 'Everyone in the workspace.';
   const departments = Array.from(new Set(peopleState.list.map((p) => p.department).filter(Boolean))).sort();
   actions.innerHTML = `
     <div class="pp-tabs" role="tablist">
       <button type="button" class="pp-tab${peopleState.tab === 'directory' ? ' active' : ''}" data-people-tab="directory" role="tab">Directory</button>
       <button type="button" class="pp-tab${peopleState.tab === 'chart' ? ' active' : ''}" data-people-tab="chart" role="tab">Org chart</button>
       <button type="button" class="pp-tab${peopleState.tab === 'leave' ? ' active' : ''}" data-people-tab="leave" role="tab">Leave${typeof leaveState !== 'undefined' && leaveState.waiting ? ` (${leaveState.waiting})` : ''}</button>
+      <button type="button" class="pp-tab${peopleState.tab === 'attendance' ? ' active' : ''}" data-people-tab="attendance" role="tab">Attendance</button>
       ${canManageEmployees() ? `<button type="button" class="pp-tab${peopleState.tab === 'manage' ? ' active' : ''}" data-people-tab="manage" role="tab">Manage</button>` : ''}
     </div>
     <input type="search" id="people-search" class="pp-search" placeholder="Search name, title, department…" value="${escapeText(peopleState.query)}" aria-label="Search people">
@@ -92,8 +93,8 @@ function renderPeopleBody() {
     return;
   }
   if (peopleState.tab === 'manage' && !canManageEmployees()) peopleState.tab = 'directory';
-  body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : peopleState.tab === 'manage' || peopleState.tab === 'leave' ? 'people-manage-body' : 'people-directory-body'}`;
-  if (peopleState.tab === 'chart') renderOrgChart(body); else if (peopleState.tab === 'manage') renderEmployeeManagement(body); else if (peopleState.tab === 'leave') renderLeave(body); else renderDirectory(body);
+  body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : peopleState.tab === 'manage' || peopleState.tab === 'leave' || peopleState.tab === 'attendance' ? 'people-manage-body' : 'people-directory-body'}`;
+  if (peopleState.tab === 'chart') renderOrgChart(body); else if (peopleState.tab === 'manage') renderEmployeeManagement(body); else if (peopleState.tab === 'leave') renderLeave(body); else if (peopleState.tab === 'attendance') renderAttendance(body); else renderDirectory(body);
   paintPeoplePhotos(body);
 }
 
@@ -103,7 +104,8 @@ function matchesPeopleQuery(person, query) {
 }
 
 function renderDirectory(body) {
-  const people = peopleState.list
+  const people = peopleState.list.slice()
+    .sort((a, b) => personName(a).localeCompare(personName(b), undefined, { sensitivity: 'base' })) // name order
     .filter((p) => matchesPeopleQuery(p, peopleState.query))
     .filter((p) => !peopleState.department || p.department === peopleState.department);
   if (!people.length) {
@@ -231,7 +233,23 @@ function orgZoomBy(factor, clientX, clientY) {
   orgApplyView(false);
 }
 
-// A dashed curve from each extra manager's card to the person's card. Positions are measured on screen and
+// A line through these points with rounded corners, like the connectors in the chart.
+function orgRoundedPath(points, radius) {
+  let d = `M${points[0][0]},${points[0][1]}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const [px, py] = points[i - 1];
+    const [cx, cy] = points[i];
+    const [nx, ny] = points[i + 1];
+    const r = Math.min(radius, Math.hypot(cx - px, cy - py) / 2, Math.hypot(nx - cx, ny - cy) / 2);
+    const inX = cx - Math.sign(cx - px) * r; const inY = cy - Math.sign(cy - py) * r;
+    const outX = cx + Math.sign(nx - cx) * r; const outY = cy + Math.sign(ny - cy) * r;
+    d += ` L${inX},${inY} Q${cx},${cy} ${outX},${outY}`;
+  }
+  const last = points[points.length - 1];
+  return `${d} L${last[0]},${last[1]}`;
+}
+
+// A dashed line from each extra manager's card to the person's card, drawn like the chart's own connectors. Positions are measured on screen and
 // divided by the zoom, so the lines sit in the same unscaled space as the cards.
 function orgDrawDotted() {
   const svg = document.getElementById('org-dotted');
@@ -246,27 +264,27 @@ function orgDrawDotted() {
     return { left: (r.left - origin.left) / k, right: (r.right - origin.left) / k, top: (r.top - origin.top) / k, bottom: (r.bottom - origin.top) / k };
   };
   const parts = [];
+  let lane = 0;
   for (const person of peopleState.list) {
     const to = (person.secondaryManagerIds || []).length ? box(person.id) : null;
     if (!to) continue;
     for (const managerId of person.secondaryManagerIds) {
       const from = box(managerId);
       if (!from) continue; // that manager's card is hidden (a collapsed team)
-      let d;
-      if (to.top > from.bottom + 8) { // person is below: bottom of the manager to top of the person
-        const x1 = (from.left + from.right) / 2; const y1 = from.bottom;
-        const x2 = (to.left + to.right) / 2; const y2 = to.top;
-        const dy = Math.max(30, (y2 - y1) / 2);
-        d = `M${x1},${y1} C${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}`;
-        parts.push(`<path d="${d}"/><circle cx="${x2}" cy="${y2}" r="4"/>`);
-      } else { // same level or above: side to side
-        const right = to.left > from.left;
-        const x1 = right ? from.right : from.left; const y1 = (from.top + from.bottom) / 2;
-        const x2 = right ? to.left : to.right; const y2 = (to.top + to.bottom) / 2;
-        const dx = Math.max(40, Math.abs(x2 - x1) / 2) * (right ? 1 : -1);
-        d = `M${x1},${y1} C${x1 + dx},${y1 - 50} ${x2 - dx},${y2 - 50} ${x2},${y2}`;
-        parts.push(`<path d="${d}"/><circle cx="${x2}" cy="${y2}" r="4"/>`);
+      const x1 = (from.left + from.right) / 2;
+      const x2 = (to.left + to.right) / 2;
+      let points;
+      if (to.top > from.bottom + 8) {
+        // the person is below: down from the manager, across, down into the person (like the chart's own lines)
+        const midY = to.top - 14 - (lane % 3) * 6;
+        points = [[x1, from.bottom], [x1, midY], [x2, midY], [x2, to.top]];
+      } else {
+        // same level or above: down under both cards, across, and up into the person
+        const lowY = Math.max(from.bottom, to.bottom) + 18 + (lane % 3) * 6;
+        points = [[x1, from.bottom], [x1, lowY], [x2, lowY], [x2, to.bottom]];
       }
+      parts.push(`<path d="${orgRoundedPath(points, 8)}"/>`);
+      lane += 1;
     }
   }
   svg.setAttribute('width', canvas.offsetWidth);

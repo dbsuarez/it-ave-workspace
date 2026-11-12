@@ -6498,10 +6498,9 @@ h4.cv-h { font-size: 15px; }
 .org-tools button { min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .org-tools button:hover { background: var(--muted-bg); }
 .org-legend { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; color: var(--text-muted); }
-.org-legend i { display: inline-block; width: 22px; border-top: 2px dashed var(--purple); }
+.org-legend i { display: inline-block; width: 22px; border-top: 2px dashed var(--text-muted); }
 .org-dotted { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; z-index: 2; }
-.org-dotted path { fill: none; stroke: var(--purple); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.85; }
-.org-dotted circle { fill: var(--purple); }
+.org-dotted path { fill: none; stroke: var(--text-muted); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }
 .org-roots { display: flex; flex-direction: column; align-items: center; gap: 36px; list-style: none; margin: 0; padding: 0; min-width: max-content; }
 
 .org-children {
@@ -6647,6 +6646,28 @@ h4.cv-h { font-size: 15px; }
 .emp-status-active { background: rgba(34, 197, 94, 0.15); color: #15803d; }
 .emp-status-on_leave { background: rgba(245, 158, 11, 0.18); color: #b45309; }
 .emp-status-resigned { background: rgba(107, 114, 128, 0.18); color: var(--text-muted); }
+.att-clock { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.att-date { font-size: 18px; }
+.att-status { margin: 4px 0; font-size: 15px; }
+.att-big { padding: 12px 28px; font-size: 16px; }
+.att-totals { margin-bottom: 14px; }
+.att-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.att-present { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.att-working { background: rgba(59, 130, 246, 0.15); color: #1d4ed8; }
+.att-absent { background: rgba(220, 38, 38, 0.13); color: #b91c1c; }
+.att-leave { background: rgba(245, 158, 11, 0.18); color: #b45309; }
+.att-rest { background: rgba(107, 114, 128, 0.15); color: var(--text-muted); }
+.att-hr { margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: var(--muted-bg); font-size: 10px; font-weight: 700; color: var(--text-muted); }
+.att-late { margin-left: 8px; font-size: 11px; color: #b45309; }
+.att-muted-row td { color: var(--text-muted); }
+.att-note { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+.att-table tbody tr[data-att-edit] { cursor: pointer; }
+.sch-row { display: grid; gap: 8px; margin-bottom: 14px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.sch-row input[type="text"], .sch-times input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.sch-times { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+.sch-times input[type="number"] { width: 60px; }
+.sch-days { display: flex; flex-wrap: wrap; gap: 8px; }
+.sch-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .lv-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
 .lv-tab { padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-muted); font: inherit; font-weight: 600; cursor: pointer; }
 .lv-tab.active { border-bottom-color: var(--purple); color: var(--text); }
@@ -6793,3 +6814,9 @@ h4.cv-h { font-size: 15px; }
   background-size: cover;
   background-position: center;
 }
+
+.emp-sort { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; white-space: nowrap; }
+.emp-sort:hover { color: var(--text); }
+
+.lv-f-date { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.lv-f-date input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
