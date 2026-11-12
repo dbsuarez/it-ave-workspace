@@ -191,7 +191,8 @@ function openEmployeeEditor(id) {
           <div class="form-group"><label for="emp-lastday">Last day</label><input id="emp-lastday" type="date" value="${escapeText(e.separationDate || '')}"></div>
         </div>
         ${state.moderation.isSuperadmin ? `<label class="preference-toggle"><input type="checkbox" id="emp-hr"${e.isHr ? ' checked' : ''}><span>HR: can manage employee records, departments and reporting lines</span></label>` : ''}
-        <p class="form-note">Email: ${escapeText(e.email)}${e.phone ? ` · Phone: ${escapeText(e.phone)}` : ''}. The employee edits their own photo, phone and page.</p>
+        <div class="form-group"><label for="emp-email">Email</label><input id="emp-email" type="email" maxlength="255" value="${escapeText(e.email)}" autocomplete="off"></div>
+        <p class="form-note">${e.phone ? `Phone: ${escapeText(e.phone)}. ` : ''}The employee edits their own photo, phone and page.</p>
         <h4 class="modal-section-title">Leave balances</h4>
         <div id="emp-leave"><p class="pp-muted">Loading…</p></div>
         <h4 class="modal-section-title">Checklists</h4>
@@ -227,6 +228,8 @@ async function saveEmployeeRecord(event) {
     jobLevel: value('emp-level'), remoteClock: document.getElementById('emp-remote').checked,
     employmentStatus: value('emp-status'), hireDate: value('emp-hired') || null, separationDate: value('emp-lastday') || null,
   };
+  const emailField = document.getElementById('emp-email');
+  if (emailField && emailField.value.trim().toLowerCase() !== String(e.email || '').toLowerCase()) record.email = emailField.value;
   const usernameField = document.getElementById('emp-username');
   if (usernameField && usernameField.value.trim() !== e.username) record.username = usernameField.value;
   try {

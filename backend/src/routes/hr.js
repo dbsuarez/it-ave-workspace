@@ -129,6 +129,14 @@ router.put('/employees/:id', async (req, res) => {
       if (taken.rows.length) throw fail(409, 'That username is already taken');
       set('username', username);
     }
+    if (body.email !== undefined) {
+      // HR and the Superadmin may correct an employee's email address (the employee can also change their own in Account settings)
+      const email = text(body.email, 255, 'Email').toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw fail(400, 'Enter a valid email address');
+      const taken = await query('SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2', [email, id]);
+      if (taken.rows.length) throw fail(409, 'That email address is already used by someone else');
+      set('email', email);
+    }
     if (body.employeeNo !== undefined) {
       const number = text(body.employeeNo, 40, 'Employee number');
       if (number) {
@@ -172,10 +180,16 @@ router.put('/employees/:id', async (req, res) => {
     }
     if (!sets.length) throw fail(400, 'Nothing to change');
     values.push(id);
-    const before = body.username !== undefined ? (await query('SELECT username FROM users WHERE id = $1', [id])).rows[0] : null;
+    const before = body.username !== undefined || body.email !== undefined ? (await query('SELECT username, email FROM users WHERE id = $1', [id])).rows[0] : null;
     const updated = await query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} AND account_type = 'member' RETURNING id`, values);
     if (!updated.rows.length) throw fail(404, 'Person not found');
-    if (before && before.username !== body.username.trim()) {
+    if (before && body.email !== undefined && before.email.toLowerCase() !== String(body.email).trim().toLowerCase()) {
+      await query(
+        "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'email_changed', $3)",
+        [actor.id, id, JSON.stringify({ from: before.email, to: String(body.email).trim().toLowerCase() })]
+      );
+    }
+    if (before && body.username !== undefined && before.username !== body.username.trim()) {
       await query(
         "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'username_changed', $3)",
         [actor.id, id, JSON.stringify({ from: before.username, to: body.username.trim() })]

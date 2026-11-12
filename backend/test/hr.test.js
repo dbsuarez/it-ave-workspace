@@ -283,3 +283,18 @@ test('only the Superadmin changes a username; it must be free, and the change is
   assert.deepEqual(log.map((r) => r.details), [{ from: 'oldname', to: 'newname' }]);
   assert.equal((await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: 'newname' })).status, 200, 'saving the same name again is fine');
 });
+
+test('HR and the Superadmin correct an email address: valid, unique, and logged', async (t) => {
+  if (skip(t)) return;
+  const who = await makeMember('emailer');
+  assert.equal((await call(ids.ann, 'PUT', `/hr/employees/${who}`, { email: 'new@x.test' })).status, 403, 'an employee cannot change someone else\'s');
+  assert.equal((await call(ids.hr, 'PUT', `/hr/employees/${who}`, { email: 'not-an-email' })).status, 400);
+  assert.equal((await call(ids.hr, 'PUT', `/hr/employees/${who}`, { email: 'ann@x.test' })).status, 409, 'already used by ann');
+  assert.equal((await call(ids.hr, 'PUT', `/hr/employees/${who}`, { email: 'ANN@X.TEST' })).status, 409, 'ignoring case');
+  const done = await call(ids.hr, 'PUT', `/hr/employees/${who}`, { email: ' New.Address@X.test ' });
+  assert.equal(done.status, 200);
+  assert.equal(done.json.employee.email, 'new.address@x.test', 'trimmed and lower-cased');
+  assert.equal((await call(ids.hr, 'PUT', `/hr/employees/${who}`, { email: 'new.address@x.test' })).status, 200, 'saving the same address again is fine');
+  const log = (await admin.query("SELECT details FROM moderation_audit_log WHERE action = 'email_changed' AND target_user_id = $1", [who])).rows;
+  assert.deepEqual(log.map((r) => r.details), [{ from: 'emailer@x.test', to: 'new.address@x.test' }], 'one entry, for the real change');
+});
