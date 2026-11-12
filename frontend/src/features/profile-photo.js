@@ -2,12 +2,12 @@
 //
 // A photo is fetched with the signed-in request (there is no public URL) and shown from a blob URL that is
 // cached per person and per version, so a changed photo shows up and an unchanged one is fetched once.
-// Setting one: pick a picture, it is cropped to a square and shrunk to 256px, then uploaded (PUT /api/users/me/photo).
+// Setting one: pick a picture, position it in a round window (drag, zoom), and the window's square is cut out and saved
+// at 512x512 (features/photo-crop.js), then uploaded (PUT /api/users/me/photo).
 //
 // Loaded before renderer.js; renderer.js calls paintOwnAvatar / refreshOwnProfile / setupProfilePhoto.
 
 const photoUrlCache = new Map(); // "id:version" -> Promise<blob URL | null>
-const PHOTO_SIZE = 256;
 
 // The photo as a Blob, or null when the person has none (or it cannot be fetched).
 async function userPhotoBlob(person) {
@@ -176,18 +176,111 @@ async function refreshOwnProfile() {
   }
 }
 
-// A square, 256px JPEG cut from the middle of the chosen picture.
-async function squarePhoto(file) {
-  const bitmap = await createImageBitmap(file);
-  const side = Math.min(bitmap.width, bitmap.height);
-  const canvas = new OffscreenCanvas(PHOTO_SIZE, PHOTO_SIZE);
-  canvas.getContext('2d').drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
-  return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+// Show the chosen picture in a round window so the person can center their face: drag to move, scroll or the slider to
+// zoom. Resolves with a 512x512 JPEG of what is in the window, or null when they cancel.
+function openPhotoCropper(file) {
+  return new Promise((resolve) => {
+    const VIEW = 320;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); showToast('That file could not be read as a picture.', 'error'); resolve(null); };
+    img.onload = () => {
+      let crop = initialState(img.naturalWidth, img.naturalHeight, VIEW);
+      const overlay = document.createElement('div');
+      overlay.className = 'photo-crop-overlay';
+      overlay.innerHTML = `
+        <form class="photo-crop-dialog" role="dialog" aria-modal="true" aria-label="Position your photo">
+          <h3>Position your photo</h3>
+          <p class="photo-crop-hint">Drag the picture so your face is in the middle of the circle. Scroll or use the slider to zoom.</p>
+          <div class="photo-crop-window" id="photo-crop-window" style="width:${VIEW}px;height:${VIEW}px;">
+            <img id="photo-crop-image" alt="" draggable="false">
+            <div class="photo-crop-mask"></div>
+            <div class="photo-crop-guides"></div>
+          </div>
+          <div class="photo-crop-zoom"><span aria-hidden="true">−</span><input id="photo-crop-slider" type="range" min="1" max="${MAX_ZOOM}" step="0.01" value="1" aria-label="Zoom"><span aria-hidden="true">+</span></div>
+          <div class="photo-crop-actions">
+            <button type="button" class="btn" id="photo-crop-reset">Reset</button>
+            <span class="photo-crop-spacer"></span>
+            <button type="button" class="btn" id="photo-crop-cancel">Cancel</button>
+            <button type="submit" class="btn primary">Use this photo</button>
+          </div>
+        </form>`;
+      document.body.appendChild(overlay);
+      const view = overlay.querySelector('#photo-crop-window');
+      const shown = overlay.querySelector('#photo-crop-image');
+      const slider = overlay.querySelector('#photo-crop-slider');
+      shown.src = url;
+
+      const paint = () => {
+        const scale = scaleOf(crop);
+        shown.style.width = `${crop.w * scale}px`;
+        shown.style.height = `${crop.h * scale}px`;
+        shown.style.transform = `translate(${crop.ox}px, ${crop.oy}px)`;
+        slider.value = String(crop.zoom);
+      };
+      paint();
+
+      let drag = null;
+      view.addEventListener('pointerdown', (event) => { drag = { x: event.clientX, y: event.clientY }; view.setPointerCapture(event.pointerId); view.classList.add('dragging'); });
+      view.addEventListener('pointermove', (event) => {
+        if (!drag) return;
+        crop = moveBy(crop, event.clientX - drag.x, event.clientY - drag.y);
+        drag = { x: event.clientX, y: event.clientY };
+        paint();
+      });
+      const endDrag = () => { drag = null; view.classList.remove('dragging'); };
+      view.addEventListener('pointerup', endDrag);
+      view.addEventListener('pointercancel', endDrag);
+      view.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const box = view.getBoundingClientRect();
+        crop = zoomAbout(crop, crop.zoom * Math.exp(-event.deltaY * 0.0015), event.clientX - box.left, event.clientY - box.top);
+        paint();
+      }, { passive: false });
+      slider.addEventListener('input', () => { crop = zoomAbout(crop, Number(slider.value), VIEW / 2, VIEW / 2); paint(); });
+      // arrow keys nudge the picture, + and - zoom (the window is focusable)
+      view.tabIndex = 0;
+      view.addEventListener('keydown', (event) => {
+        const step = event.shiftKey ? 20 : 6;
+        const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+        if (moves[event.key]) { crop = moveBy(crop, ...moves[event.key]); paint(); event.preventDefault(); }
+        else if (event.key === '+' || event.key === '=') { crop = zoomAbout(crop, crop.zoom * 1.1, VIEW / 2, VIEW / 2); paint(); }
+        else if (event.key === '-') { crop = zoomAbout(crop, crop.zoom / 1.1, VIEW / 2, VIEW / 2); paint(); }
+      });
+      overlay.querySelector('#photo-crop-reset').addEventListener('click', () => { crop = initialState(img.naturalWidth, img.naturalHeight, VIEW); paint(); });
+
+      const finish = (blob) => {
+        document.removeEventListener('keydown', onKey, true);
+        overlay.remove();
+        URL.revokeObjectURL(url);
+        resolve(blob);
+      };
+      const onKey = (event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(null); } };
+      document.addEventListener('keydown', onKey, true);
+      overlay.querySelector('#photo-crop-cancel').addEventListener('click', () => finish(null));
+      overlay.querySelector('form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const { sx, sy, size } = sourceRect(crop);
+        const canvas = document.createElement('canvas');
+        canvas.width = PHOTO_STORE_SIZE;
+        canvas.height = PHOTO_STORE_SIZE;
+        const context = canvas.getContext('2d');
+        context.imageSmoothingQuality = 'high';
+        context.fillStyle = '#ffffff'; // a transparent PNG becomes white, not black, in a JPEG
+        context.fillRect(0, 0, PHOTO_STORE_SIZE, PHOTO_STORE_SIZE);
+        context.drawImage(img, sx, sy, size, size, 0, 0, PHOTO_STORE_SIZE, PHOTO_STORE_SIZE);
+        canvas.toBlob((blob) => finish(blob), 'image/jpeg', 0.9);
+      });
+      view.focus();
+    };
+    img.src = url;
+  });
 }
 
 async function setOwnPhoto(file) {
   try {
-    const blob = await squarePhoto(file);
+    const blob = await openPhotoCropper(file);
+    if (!blob) return; // they cancelled
     const form = new FormData();
     form.append('file', blob, 'photo.jpg');
     const res = await fetch(`${API_BASE}/api/users/me/photo`, { method: 'PUT', headers: { Authorization: `Bearer ${state.token}` }, body: form });

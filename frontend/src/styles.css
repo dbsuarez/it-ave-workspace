@@ -6871,3 +6871,23 @@ h4.cv-h { font-size: 15px; }
   border: 3px dashed var(--purple); border-radius: 16px; background: rgba(124, 58, 237, 0.12);
   color: var(--purple); font-size: 20px; font-weight: 700; pointer-events: none; backdrop-filter: blur(1px);
 }
+
+/* Positioning a profile photo */
+.photo-crop-overlay { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); }
+.photo-crop-dialog { width: 380px; max-width: 94vw; padding: 20px 24px 18px; border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4); }
+.photo-crop-dialog h3 { margin: 0 0 4px; }
+.photo-crop-hint { margin: 0 0 14px; font-size: 13px; color: var(--text-muted); }
+.photo-crop-window { position: relative; margin: 0 auto; overflow: hidden; border-radius: 8px; background: #111; cursor: grab; touch-action: none; outline: none; }
+.photo-crop-window.dragging { cursor: grabbing; }
+.photo-crop-window:focus-visible { box-shadow: 0 0 0 3px var(--purple); }
+.photo-crop-window img { position: absolute; top: 0; left: 0; max-width: none; user-select: none; -webkit-user-drag: none; }
+/* the round guide: everything outside the circle is dimmed */
+.photo-crop-mask { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 400px rgba(0, 0, 0, 0.55); border: 2px solid rgba(255, 255, 255, 0.9); pointer-events: none; }
+/* a faint cross at the center, and a line where the eyes usually sit, to line the face up */
+.photo-crop-guides { position: absolute; inset: 0; pointer-events: none; background:
+  linear-gradient(rgba(255,255,255,0.35), rgba(255,255,255,0.35)) center / 1px 100% no-repeat,
+  linear-gradient(rgba(255,255,255,0.35), rgba(255,255,255,0.35)) center 42% / 100% 1px no-repeat; }
+.photo-crop-zoom { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; }
+.photo-crop-zoom input { flex: 1; }
+.photo-crop-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.photo-crop-spacer { flex: 1; }
