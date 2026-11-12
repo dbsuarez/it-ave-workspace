@@ -4,7 +4,7 @@
 // Loaded before renderer.js; defines functions only.
 
 function adminState() {
-  if (!state.admin) state.admin = { users: [], invitations: [], mode: 'open', lastCode: null };
+  if (!state.admin) state.admin = { users: [], invitations: [], mode: 'open', lastCode: null, lastCreated: null, bulkText: '', importNotes: [] };
   return state.admin;
 }
 
@@ -69,6 +69,35 @@ function invitationStatusLabel(invitation) {
   return `Pending · expires ${new Date(invitation.expiresAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
 }
 
+// What came back from creating accounts: the passwords (shown once) and the rows that were skipped, with why.
+function adminCreatedHtml(result) {
+  if (!result) return '';
+  const made = result.created.length;
+  return `<div class="admin-created">
+    ${made ? `<h3>${made} account${made === 1 ? '' : 's'} created</h3>
+      <p class="admin-help">These temporary passwords are shown only now. Save or copy them before you leave this page.</p>
+      <table class="admin-table"><thead><tr><th>Username</th><th>Email</th><th>Temporary password</th></tr></thead><tbody>
+        ${result.created.map((c) => `<tr><td>${escapeHtml(c.username)}</td><td>${escapeHtml(c.email)}</td><td><code>${escapeHtml(c.password)}</code></td></tr>`).join('')}
+      </tbody></table>
+      <div class="admin-actions"><button class="btn" type="button" data-admin-action="save-credentials">Save as CSV…</button><button class="btn" type="button" data-admin-action="copy-credentials">Copy all</button></div>` : '<h3>No accounts were created</h3>'}
+    ${result.skipped.length ? `<h3>${result.skipped.length} skipped</h3><ul class="admin-skipped">${result.skipped.map((s) => `<li><strong>${escapeHtml(s.username)}</strong>: ${escapeHtml(s.reason)}</li>`).join('')}</ul>` : ''}
+  </div>`;
+}
+
+// The lines of the box, as accounts. A line with a tab is split on tabs (so a password may hold commas);
+// otherwise on a comma or semicolon.
+function parseBulkLines(text) {
+  return String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const parts = (line.includes('\t') ? line.split('\t') : line.split(/[,;]/)).map((part) => part.trim());
+    return { username: parts[0] || '', email: parts[1] || '', password: parts[2] || '' };
+  });
+}
+
+function bulkLine(account) {
+  const fields = [account.username, account.email, account.password].filter((value, index) => index < 2 || value);
+  return fields.some((value) => value.includes(',')) ? fields.join('\t') : fields.join(', ');
+}
+
 function renderWorkspaceAdmin() {
   const section = document.getElementById('admin-workspace');
   if (!section) return;
@@ -113,6 +142,32 @@ function renderWorkspaceAdmin() {
         <button class="btn" type="button" data-admin-action="save-registration">Save</button>
       </div>
     </div>
+    <form class="moderation-card" data-admin-form="accounts">
+      <h2>Create accounts</h2>
+      <p class="admin-help">Create people's accounts yourself instead of sending each one an invitation. Each person signs in with a temporary password and is asked to choose their own.</p>
+      <div class="moderation-inline">
+        <label>Account type
+          <select name="accountType">
+            <option value="member">Member (all public channels)</option>
+            <option value="guest">Guest (only the channels below)</option>
+          </select>
+        </label>
+      </div>
+      <label class="admin-bulk-label">One person per line: <code>username, email</code> and optionally <code>, password</code>. Leave the password out and one is made for you.
+        <textarea name="bulk" id="admin-bulk" rows="6" spellcheck="false" placeholder="ann, ann@company.com&#10;bob, bob@company.com">${escapeHtml(admin.bulkText || '')}</textarea>
+      </label>
+      <div class="admin-channel-picks">
+        ${state.channels.map((channel) => `<label class="admin-inline-check"><input type="checkbox" name="channelIds" value="${channel.id}"> #${escapeHtml(channel.name)}</label>`).join('')}
+      </div>
+      <p class="admin-help">Members are added to every public channel; tick channels to add them to private ones too. Guests need at least one.</p>
+      ${(admin.importNotes || []).map((note) => `<p class="admin-note">${escapeHtml(note)}</p>`).join('')}
+      <div class="admin-actions">
+        <button class="btn" type="button" data-admin-action="import-accounts">Import CSV or Excel file…</button>
+        <button class="btn" type="button" data-admin-action="accounts-template">Download template</button>
+        <button class="btn primary" type="submit">Create accounts</button>
+      </div>
+      ${adminCreatedHtml(admin.lastCreated)}
+    </form>
     <form class="moderation-card" data-admin-form="invitation">
       <h2>Invite someone</h2>
       <div class="moderation-inline">
@@ -159,6 +214,29 @@ async function handleAdminClick(event) {
       await adminApi(`/api/admin/invitations/${button.dataset.invitationId}`, 'DELETE');
       showToast('Invitation revoked.', 'success');
       await loadWorkspaceAdmin();
+    } else if (action === 'import-accounts') {
+      const result = await window.electronAPI.importAccountsFile();
+      if (!result || result.canceled) return;
+      admin.importNotes = result.notes || [];
+      if (result.accounts && result.accounts.length) {
+        const existing = (document.getElementById('admin-bulk')?.value || '').trim();
+        admin.bulkText = [existing, ...result.accounts.map(bulkLine)].filter(Boolean).join('\n');
+        showToast(`${result.accounts.length} ${result.accounts.length === 1 ? 'person' : 'people'} read from the file. Check the list, then create.`, 'success');
+      }
+      renderWorkspaceAdmin();
+      return;
+    } else if (action === 'accounts-template') {
+      const saved = await window.electronAPI.saveAccountsCsv('template');
+      if (saved && saved.saved) showToast('Template saved.', 'success');
+      return;
+    } else if (action === 'save-credentials') {
+      const saved = await window.electronAPI.saveAccountsCsv('credentials', admin.lastCreated.created.map((c) => ({ username: c.username, email: c.email, password: c.password })));
+      if (saved && saved.saved) showToast('Saved. Keep that file private: it holds passwords.', 'success');
+      return;
+    } else if (action === 'copy-credentials') {
+      await navigator.clipboard.writeText(admin.lastCreated.created.map((c) => `${c.username}\t${c.email}\t${c.password}`).join('\n'));
+      showToast('Copied.', 'success');
+      return;
     } else if (action === 'copy-code') {
       await navigator.clipboard.writeText(admin.lastCode || '');
       showToast('Invitation code copied.', 'success');
@@ -178,7 +256,43 @@ async function handleAdminClick(event) {
   }
 }
 
+async function handleAdminAccountsSubmit(form, event) {
+  event.preventDefault();
+  const admin = adminState();
+  const values = new FormData(form);
+  const accounts = parseBulkLines(values.get('bulk'));
+  admin.bulkText = values.get('bulk') || '';
+  if (!accounts.length) { showToast('Add at least one person.', 'error'); return; }
+  const button = form.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
+  try {
+    const result = { created: [], skipped: [] };
+    for (let i = 0; i < accounts.length; i += 100) { // the server takes 100 at a time
+      const data = await adminApi('/api/admin/users', 'POST', {
+        accounts: accounts.slice(i, i + 100),
+        accountType: values.get('accountType'),
+        channelIds: values.getAll('channelIds').map(Number),
+      });
+      result.created.push(...data.created);
+      result.skipped.push(...data.skipped);
+    }
+    admin.lastCreated = result;
+    // what was created leaves the box; what was skipped stays so it can be fixed and tried again
+    const skippedNames = new Set(result.skipped.map((s) => s.username));
+    admin.bulkText = accounts.filter((a) => skippedNames.has(a.username)).map(bulkLine).join('\n');
+    admin.importNotes = [];
+    showToast(result.created.length ? `${result.created.length} account${result.created.length === 1 ? '' : 's'} created.` : 'No accounts were created.', result.created.length ? 'success' : 'error');
+    await loadWorkspaceAdmin();
+    await loadUsers();
+  } catch (err) {
+    showToast(err.message || 'Could not create the accounts.', 'error');
+    if (button) button.disabled = false;
+  }
+}
+
 async function handleAdminSubmit(event) {
+  const accountsForm = event.target.closest('[data-admin-form="accounts"]');
+  if (accountsForm) { await handleAdminAccountsSubmit(accountsForm, event); return; }
   const form = event.target.closest('[data-admin-form="invitation"]');
   if (!form) return;
   event.preventDefault();

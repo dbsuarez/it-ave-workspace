@@ -146,6 +146,11 @@ async function refreshOwnProfile() {
     state.user = { ...state.user, jobTitle: data.user.jobTitle || '', photoVersion: data.user.photoVersion || null };
     await electronAPI.storeSet('user', state.user);
     paintOwnAvatar();
+    // an account the Superadmin created starts with a temporary password: ask for a new one
+    if (data.user.mustChangePassword && typeof openAccountModal === 'function') {
+      openAccountModal();
+      showToast('Please choose your own password.', 'info');
+    }
   } catch (err) {
     console.error('Refresh profile error:', err);
   }

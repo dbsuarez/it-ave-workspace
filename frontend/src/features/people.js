@@ -8,6 +8,7 @@
 const peopleState = {
   list: [], loaded: false, error: '', tab: 'directory', query: '', department: '',
   pageId: null, page: null, editLines: false, collapsed: new Set(),
+  view: null, // the org chart's pan and zoom: { x, y, k }; null until the first fit
 };
 
 const escapeText = (value) => escapeHtml(String(value === undefined || value === null ? '' : value));
@@ -131,14 +132,13 @@ function orgNodeHtml(node, editable, everyone) {
   const size = orgTeamSize(node);
   const collapsed = peopleState.collapsed.has(p.id);
   const card = `
-    <div class="org-card${node.matched ? ' matched' : ''}">
+    <div class="org-card${node.matched ? ' matched' : ''}" data-org-card="${p.id}"${also.length ? ` title="Also reports to ${escapeText(also.map((o) => o.username).join(', '))} (dotted line)"` : ''}>
       <button type="button" class="org-card-main" data-person="${p.id}">
         ${peopleAvatar(p, 'md')}
         <span class="org-card-text">
           <strong>${escapeText(p.username)}</strong>
           <span>${escapeText(p.jobTitle) || ''}</span>
           ${p.department ? `<em>${escapeText(p.department)}</em>` : ''}
-          ${also.length ? `<span class="org-also" title="Dotted-line manager${also.length > 1 ? 's' : ''}">Also reports to ${also.map((o) => escapeText(o.username)).join(', ')}</span>` : ''}
         </span>
       </button>
       ${editable ? `<select class="org-manager-select" data-org-manager="${p.id}" aria-label="Reports to">
@@ -167,7 +167,107 @@ function renderOrgChart(body) {
   }
   const hint = editable ? '<p class="pp-hint">Choose who each person reports to: the first is the main manager and sets where they sit in the chart. Add extra managers below it; they show as "Also reports to". Changes save immediately.</p>'
     : (peopleState.list.every((p) => !p.managerId) ? '<p class="pp-hint">No reporting lines are set yet.' + (state.moderation && state.moderation.isSuperadmin ? ' Use "Edit reporting lines" to set them.' : ' The Superadmin sets them.') + '</p>' : '');
-  body.innerHTML = `${hint}<div class="org-scroll"><ul class="org-roots">${tree.map((node) => orgNodeHtml(node, editable, peopleState.list)).join('')}</ul></div>`;
+  const hasDotted = peopleState.list.some((p) => (p.secondaryManagerIds || []).length);
+  body.innerHTML = `${hint}
+    <div class="org-viewport" id="org-viewport" tabindex="0" aria-label="Org chart. Drag to move, scroll to zoom.">
+      <div class="org-tools">
+        <button type="button" data-org-zoom="out" aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" data-org-zoom="reset" id="org-zoom-label" title="Back to 100%">100%</button>
+        <button type="button" data-org-zoom="in" aria-label="Zoom in" title="Zoom in">+</button>
+        <button type="button" data-org-zoom="fit" title="Fit the whole chart">Fit</button>
+        ${hasDotted ? '<span class="org-legend"><i></i> also reports to</span>' : ''}
+      </div>
+      <div class="org-canvas" id="org-canvas">
+        <ul class="org-roots">${tree.map((node) => orgNodeHtml(node, editable, peopleState.list)).join('')}</ul>
+        <svg class="org-dotted" id="org-dotted" aria-hidden="true"></svg>
+      </div>
+    </div>`;
+  requestAnimationFrame(() => { orgApplyView(true); });
+}
+
+// ---- pan, zoom and the dotted lines ----------------------------------------------------------------
+
+const ORG_MIN_ZOOM = 0.25;
+const ORG_MAX_ZOOM = 2.5;
+
+function orgClampZoom(k) { return Math.min(ORG_MAX_ZOOM, Math.max(ORG_MIN_ZOOM, k)); }
+
+// Fit the whole chart in the viewport (never larger than 100%), centered at the top.
+function orgFitView() {
+  const viewport = document.getElementById('org-viewport');
+  const canvas = document.getElementById('org-canvas');
+  if (!viewport || !canvas) return;
+  const pad = 24;
+  const k = orgClampZoom(Math.min(1, (viewport.clientWidth - pad) / canvas.offsetWidth, (viewport.clientHeight - pad) / canvas.offsetHeight));
+  peopleState.view = { k, x: Math.max(pad / 2, (viewport.clientWidth - canvas.offsetWidth * k) / 2), y: pad / 2 };
+}
+
+function orgApplyView(initial) {
+  const canvas = document.getElementById('org-canvas');
+  if (!canvas) return;
+  if (!peopleState.view) orgFitView();
+  const view = peopleState.view;
+  if (!view) return;
+  canvas.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  const label = document.getElementById('org-zoom-label');
+  if (label) label.textContent = `${Math.round(view.k * 100)}%`;
+  if (initial) orgDrawDotted();
+}
+
+// Zoom by a factor around a point of the viewport (its center when none is given).
+function orgZoomBy(factor, clientX, clientY) {
+  const viewport = document.getElementById('org-viewport');
+  if (!viewport || !peopleState.view) return;
+  const rect = viewport.getBoundingClientRect();
+  const mx = (clientX === undefined ? rect.left + rect.width / 2 : clientX) - rect.left;
+  const my = (clientY === undefined ? rect.top + rect.height / 2 : clientY) - rect.top;
+  const view = peopleState.view;
+  const k = orgClampZoom(view.k * factor);
+  peopleState.view = { k, x: mx - (mx - view.x) * (k / view.k), y: my - (my - view.y) * (k / view.k) };
+  orgApplyView(false);
+}
+
+// A dashed curve from each extra manager's card to the person's card. Positions are measured on screen and
+// divided by the zoom, so the lines sit in the same unscaled space as the cards.
+function orgDrawDotted() {
+  const svg = document.getElementById('org-dotted');
+  const canvas = document.getElementById('org-canvas');
+  if (!svg || !canvas) return;
+  const k = (peopleState.view && peopleState.view.k) || 1;
+  const origin = canvas.getBoundingClientRect();
+  const box = (id) => {
+    const card = canvas.querySelector(`[data-org-card="${id}"]`);
+    if (!card) return null;
+    const r = card.getBoundingClientRect();
+    return { left: (r.left - origin.left) / k, right: (r.right - origin.left) / k, top: (r.top - origin.top) / k, bottom: (r.bottom - origin.top) / k };
+  };
+  const parts = [];
+  for (const person of peopleState.list) {
+    const to = (person.secondaryManagerIds || []).length ? box(person.id) : null;
+    if (!to) continue;
+    for (const managerId of person.secondaryManagerIds) {
+      const from = box(managerId);
+      if (!from) continue; // that manager's card is hidden (a collapsed team)
+      let d;
+      if (to.top > from.bottom + 8) { // person is below: bottom of the manager to top of the person
+        const x1 = (from.left + from.right) / 2; const y1 = from.bottom;
+        const x2 = (to.left + to.right) / 2; const y2 = to.top;
+        const dy = Math.max(30, (y2 - y1) / 2);
+        d = `M${x1},${y1} C${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}`;
+        parts.push(`<path d="${d}"/><circle cx="${x2}" cy="${y2}" r="4"/>`);
+      } else { // same level or above: side to side
+        const right = to.left > from.left;
+        const x1 = right ? from.right : from.left; const y1 = (from.top + from.bottom) / 2;
+        const x2 = right ? to.left : to.right; const y2 = (to.top + to.bottom) / 2;
+        const dx = Math.max(40, Math.abs(x2 - x1) / 2) * (right ? 1 : -1);
+        d = `M${x1},${y1} C${x1 + dx},${y1 - 50} ${x2 - dx},${y2 - 50} ${x2},${y2}`;
+        parts.push(`<path d="${d}"/><circle cx="${x2}" cy="${y2}" r="4"/>`);
+      }
+    }
+  }
+  svg.setAttribute('width', canvas.offsetWidth);
+  svg.setAttribute('height', canvas.offsetHeight);
+  svg.innerHTML = parts.join('');
 }
 
 async function setPersonManager(personId, managerId) {
@@ -472,5 +572,74 @@ if (typeof document !== 'undefined') {
 
   document.addEventListener('submit', (event) => {
     if (event.target.id === 'people-editor-form') savePageEditor(event);
+  });
+}
+
+// Org chart navigation: drag to pan, scroll to zoom, buttons for the rest.
+if (typeof document !== 'undefined') {
+  let pan = null;
+  let justPanned = false;
+
+  document.addEventListener('pointerdown', (event) => {
+    const viewport = event.target.closest && event.target.closest('#org-viewport');
+    if (!viewport || event.button !== 0 || event.target.closest('select, input, textarea, .org-tools, .org-chip')) return;
+    pan = { x: event.clientX, y: event.clientY, vx: peopleState.view.x, vy: peopleState.view.y, moved: false };
+  });
+
+  window.addEventListener('pointermove', (event) => {
+    if (!pan || !peopleState.view) return;
+    const dx = event.clientX - pan.x;
+    const dy = event.clientY - pan.y;
+    if (!pan.moved && Math.hypot(dx, dy) < 5) return;
+    pan.moved = true;
+    peopleState.view.x = pan.vx + dx;
+    peopleState.view.y = pan.vy + dy;
+    document.getElementById('org-viewport')?.classList.add('panning');
+    orgApplyView(false);
+  });
+
+  const endPan = () => {
+    if (!pan) return;
+    if (pan.moved) { justPanned = true; setTimeout(() => { justPanned = false; }, 0); }
+    pan = null;
+    document.getElementById('org-viewport')?.classList.remove('panning');
+  };
+  window.addEventListener('pointerup', endPan);
+  window.addEventListener('pointercancel', endPan);
+
+  // a drag that ends on a card must not also open that person's page
+  document.addEventListener('click', (event) => {
+    if (justPanned) { event.stopPropagation(); event.preventDefault(); }
+  }, true);
+
+  document.addEventListener('wheel', (event) => {
+    if (!event.target.closest || !event.target.closest('#org-viewport')) return;
+    event.preventDefault();
+    orgZoomBy(Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0015)), event.clientX, event.clientY);
+  }, { passive: false });
+
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest && event.target.closest('[data-org-zoom]');
+    if (!button) return;
+    const action = button.dataset.orgZoom;
+    if (action === 'in') orgZoomBy(1.25);
+    else if (action === 'out') orgZoomBy(1 / 1.25);
+    else if (action === 'reset') { orgZoomBy(1 / peopleState.view.k); }
+    else if (action === 'fit') { orgFitView(); orgApplyView(false); }
+    orgDrawDotted();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (!event.target.closest || !event.target.closest('#org-viewport') || event.target.closest('select, input')) return;
+    const step = 60;
+    if (event.key === '+' || event.key === '=') orgZoomBy(1.25);
+    else if (event.key === '-') orgZoomBy(1 / 1.25);
+    else if (event.key === '0') { orgFitView(); orgApplyView(false); }
+    else if (event.key === 'ArrowLeft') { peopleState.view.x += step; orgApplyView(false); }
+    else if (event.key === 'ArrowRight') { peopleState.view.x -= step; orgApplyView(false); }
+    else if (event.key === 'ArrowUp') { peopleState.view.y += step; orgApplyView(false); }
+    else if (event.key === 'ArrowDown') { peopleState.view.y -= step; orgApplyView(false); }
+    else return;
+    event.preventDefault();
   });
 }

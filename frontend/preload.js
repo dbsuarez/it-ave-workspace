@@ -40,6 +40,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTraySetting: (enabled) => ipcRenderer.invoke('tray:set', enabled),
   showWindow: () => ipcRenderer.invoke('app:showWindow'),
 
+  // Creating accounts from a CSV or Excel file, and saving the issued passwords
+  importAccountsFile: () => ipcRenderer.invoke('admin:importAccounts'),
+  saveAccountsCsv: (kind, created) => ipcRenderer.invoke('admin:saveCsv', kind, created),
+
   // Canvas export: PDF, Word or Markdown. The main process asks where to save it.
   exportCanvas: (request) => ipcRenderer.invoke('canvas:export', request),
 

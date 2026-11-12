@@ -6489,6 +6489,19 @@ h4.cv-h { font-size: 15px; }
 
 /* org chart */
 .org-scroll { overflow: auto; padding-bottom: 24px; }
+.people-chart-body { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 20px; }
+.org-viewport { position: relative; flex: 1; min-height: 360px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--muted-bg); cursor: grab; touch-action: none; outline: none; }
+.org-viewport.panning { cursor: grabbing; user-select: none; }
+.org-viewport.panning .org-card-main { cursor: grabbing; }
+.org-canvas { position: absolute; top: 0; left: 0; width: max-content; transform-origin: 0 0; padding: 16px 24px 24px; will-change: transform; }
+.org-tools { position: absolute; z-index: 3; top: 10px; right: 10px; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); cursor: default; }
+.org-tools button { min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.org-tools button:hover { background: var(--muted-bg); }
+.org-legend { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; color: var(--text-muted); }
+.org-legend i { display: inline-block; width: 22px; border-top: 2px dashed var(--purple); }
+.org-dotted { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; z-index: 2; }
+.org-dotted path { fill: none; stroke: var(--purple); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.85; }
+.org-dotted circle { fill: var(--purple); }
 .org-roots { display: flex; flex-direction: column; align-items: center; gap: 36px; list-style: none; margin: 0; padding: 0; min-width: max-content; }
 
 .org-children {
@@ -6607,6 +6620,17 @@ h4.cv-h { font-size: 15px; }
 .pp-mini { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .pp-mini span { display: flex; flex-direction: column; min-width: 0; }
 .pp-mini em { font-size: 12px; font-style: normal; color: var(--text-muted); }
+.admin-help { margin: 6px 0; font-size: 12px; color: var(--text-muted); }
+.admin-note { margin: 6px 0; font-size: 12px; color: var(--purple); }
+.admin-bulk-label { display: block; margin-top: 10px; font-size: 13px; }
+.admin-bulk-label textarea { display: block; width: 100%; max-height: none; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: 13px/1.45 ui-monospace, Consolas, monospace; resize: vertical; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.admin-created { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.admin-created h3 { margin: 0 0 6px; font-size: 14px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.admin-table th, .admin-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+.admin-table code { user-select: all; }
+.admin-skipped { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
 .org-also { display: block; margin-top: 2px; font-size: 11px; font-style: italic; color: var(--muted, #6b7280); }
 .org-also-edit { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .org-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px dashed var(--border); border-radius: 999px; font-size: 11px; }

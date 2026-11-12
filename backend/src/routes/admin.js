@@ -1,5 +1,8 @@
 const express = require('express');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { query } = require('../db');
+const { passwordProblem } = require('../authLimits');
 const authenticateToken = require('../middleware/auth');
 const {
   newInviteCode, hashInviteCode, invitationProblem, normalizeInviteCode,
@@ -214,6 +217,77 @@ router.get('/invitations', async (req, res) => {
     res.json({ invitations: result.rows.map(serializeInvitation) });
   } catch (err) {
     sendError(res, err, 'List invitations error');
+  }
+});
+
+// ---- Creating accounts directly ----
+const MAX_NEW_ACCOUNTS = 100;
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// no 0/O, 1/l/I: a temporary password gets read out and typed
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+
+function temporaryPassword() {
+  let out = '';
+  for (let i = 0; i < 12; i += 1) out += PASSWORD_ALPHABET[crypto.randomInt(PASSWORD_ALPHABET.length)];
+  return out;
+}
+
+// POST /api/admin/users - create one or many accounts at once.
+// { accounts: [{ username, email, password? }], accountType, channelIds }
+// A missing password is generated. Each person must replace it at their first sign-in.
+// The passwords are returned once; only hashes are stored.
+router.post('/users', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const { accounts, accountType = 'member', channelIds = [] } = req.body || {};
+    if (!ACCOUNT_TYPES.includes(accountType)) throw fail(400, 'Account type must be member or guest');
+    if (!Array.isArray(accounts) || accounts.length === 0) throw fail(400, 'Give at least one account');
+    if (accounts.length > MAX_NEW_ACCOUNTS) throw fail(400, `At most ${MAX_NEW_ACCOUNTS} accounts at a time`);
+    if (!Array.isArray(channelIds) || channelIds.some((id) => !parseId(id))) throw fail(400, 'channelIds must be a list of channel IDs');
+    const extraChannels = [...new Set(channelIds.map(Number))];
+    if (accountType === 'guest' && extraChannels.length === 0) throw fail(400, 'Choose at least one channel for a guest');
+    if (extraChannels.length) {
+      const found = await query('SELECT id FROM channels WHERE id = ANY($1::int[])', [extraChannels]);
+      if (found.rows.length !== extraChannels.length) throw fail(404, 'One or more channels were not found');
+    }
+    const publicChannels = accountType === 'member'
+      ? (await query('SELECT id FROM channels WHERE is_private = false')).rows.map((row) => Number(row.id)) : [];
+    const joinIds = [...new Set([...publicChannels, ...extraChannels])];
+
+    const created = [];
+    const skipped = [];
+    const seen = new Set();
+    for (const entry of accounts) {
+      const username = typeof entry?.username === 'string' ? entry.username.trim() : '';
+      const email = typeof entry?.email === 'string' ? entry.email.trim() : '';
+      const label = username || email || '(blank)';
+      if (!username || username.length > 50 || /\s/.test(username)) { skipped.push({ username: label, reason: 'The username must be 1 to 50 characters with no spaces' }); continue; }
+      if (!EMAIL_SHAPE.test(email) || email.length > 255) { skipped.push({ username, reason: 'The email address is not valid' }); continue; }
+      const key = `${username.toLowerCase()}|${email.toLowerCase()}`;
+      if (seen.has(username.toLowerCase()) || seen.has(email.toLowerCase())) { skipped.push({ username, reason: 'Listed twice' }); continue; }
+      seen.add(username.toLowerCase()); seen.add(email.toLowerCase());
+      let password = entry.password;
+      if (password === undefined || password === null || password === '') password = temporaryPassword();
+      const problem = passwordProblem(password, username);
+      if (problem) { skipped.push({ username, reason: problem }); continue; }
+      const exists = await query('SELECT 1 FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2', [username.toLowerCase(), email.toLowerCase()]);
+      if (exists.rows.length) { skipped.push({ username, reason: 'That username or email already exists' }); continue; }
+      const hash = await bcrypt.hash(password, 10);
+      const inserted = await query(
+        `INSERT INTO users (username, email, password_hash, account_type, must_change_password)
+         VALUES ($1, $2, $3, $4, true) RETURNING id`,
+        [username, email, hash, accountType]
+      );
+      const userId = inserted.rows[0].id;
+      for (const channelId of joinIds) {
+        await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, userId]);
+      }
+      await audit(req.user.userId, 'user_created', userId, { accountType, key });
+      created.push({ id: userId, username, email, password });
+    }
+    res.status(created.length ? 201 : 200).json({ created, skipped });
+  } catch (err) {
+    sendError(res, err, 'Create accounts error');
   }
 });
 

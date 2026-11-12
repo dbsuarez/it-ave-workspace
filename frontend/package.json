@@ -40,7 +40,8 @@
   },
   "dependencies": {
     "docx": "^9.15.3",
-    "electron-store": "^8.1.0"
+    "electron-store": "^8.1.0",
+    "read-excel-file": "^5.8.5"
   },
   "build": {
     "appId": "com.itavenue.workspace",

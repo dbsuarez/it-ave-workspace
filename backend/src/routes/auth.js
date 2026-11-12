@@ -164,7 +164,7 @@ router.post('/login', async (req, res) => {
 
     // Find user
     const result = await query(
-      'SELECT id, username, email, password_hash, avatar_color, is_superadmin, token_version FROM users WHERE username = $1',
+      'SELECT id, username, email, password_hash, avatar_color, is_superadmin, token_version, must_change_password FROM users WHERE username = $1',
       [username]
     );
 
@@ -206,6 +206,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         avatarColor: user.avatar_color,
         isSuperadmin: user.is_superadmin,
+        mustChangePassword: Boolean(user.must_change_password),
       },
     });
   } catch (err) {
@@ -218,7 +219,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at, job_title, photo_file, photo_updated_at FROM users WHERE id = $1',
+      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at, job_title, photo_file, photo_updated_at, must_change_password FROM users WHERE id = $1',
       [req.user.userId]
     );
 
@@ -238,6 +239,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         lastSeen: user.last_seen,
         createdAt: user.created_at,
         jobTitle: user.job_title || '',
+        mustChangePassword: Boolean(user.must_change_password),
         photoVersion: user.photo_file && user.photo_updated_at ? new Date(user.photo_updated_at).getTime() : null,
       },
     });
@@ -348,6 +350,7 @@ router.put('/me/account', authenticateToken, async (req, res) => {
       `UPDATE users
        SET email = COALESCE($1, email),
            password_hash = COALESCE($2, password_hash),
+           must_change_password = CASE WHEN $2::text IS NULL THEN must_change_password ELSE false END,
            token_version = token_version + $3
        WHERE id = $4
        RETURNING id, username, email, avatar_color, is_superadmin, token_version`,

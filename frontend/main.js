@@ -348,6 +348,60 @@ async function printHtmlToPdf(html) {
   }
 }
 
+// Creating accounts from a spreadsheet: the person picks a .csv or .xlsx file, it is read here (never by the page)
+// and only the rows go back. For automated tests only, IAV_TEST_IMPORT_FILE names the file and no dialog is shown.
+handleTrusted('admin:importAccounts', async (event) => {
+  let file = process.env.IAV_TEST_IMPORT_FILE;
+  if (!file) {
+    const parent = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    const chosen = await dialog.showOpenDialog(parent, {
+      title: 'Choose a list of people',
+      properties: ['openFile'],
+      filters: [{ name: 'Spreadsheet or CSV', extensions: ['csv', 'xlsx', 'txt'] }],
+    });
+    if (chosen.canceled || !chosen.filePaths.length) return { canceled: true };
+    file = chosen.filePaths[0];
+  }
+  try {
+    const { readAccountFile } = require('./accounts-import');
+    return await readAccountFile(file);
+  } catch (err) {
+    return { accounts: [], notes: [err && err.message ? `Could not read that file: ${err.message}` : 'Could not read that file.'] };
+  }
+});
+
+// Saving the new accounts' passwords (or a blank template) as a CSV the person chooses where to keep.
+const CSV_SAVES = { credentials: 'new-accounts.csv', template: 'accounts-template.csv' };
+handleTrusted('admin:saveCsv', async (event, kind, created) => {
+  if (!Object.prototype.hasOwnProperty.call(CSV_SAVES, kind)) throw new Error('Unknown file');
+  const { credentialsCsv } = require('./accounts-import');
+  let text;
+  if (kind === 'template') {
+    text = ['username,email,password', 'ann,ann@example.com,', 'bob,bob@example.com,', ''].join('\r\n');
+  } else {
+    if (!Array.isArray(created) || created.length > 500 || created.some((c) => !c || [c.username, c.email, c.password].some((v) => typeof v !== 'string'))) {
+      throw new Error('Invalid file contents');
+    }
+    text = credentialsCsv(created);
+  }
+  let target;
+  const testDir = process.env.IAV_TEST_EXPORT_DIR;
+  if (testDir) {
+    target = path.join(testDir, CSV_SAVES[kind]);
+  } else {
+    const parent = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    const chosen = await dialog.showSaveDialog(parent, {
+      title: kind === 'credentials' ? 'Save the new accounts' : 'Save the template',
+      defaultPath: path.join(app.getPath('documents'), CSV_SAVES[kind]),
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (chosen.canceled || !chosen.filePath) return { canceled: true };
+    target = chosen.filePath;
+  }
+  fs.writeFileSync(target, text, { encoding: 'utf8', mode: 0o600 });
+  return { saved: true, path: target };
+});
+
 // Canvas export. The renderer sends the content; the user chooses the file in a save dialog (or, for
 // automated tests only, IAV_TEST_EXPORT_DIR in the environment names a folder and no dialog is shown).
 handleTrusted('canvas:export', async (event, request) => {

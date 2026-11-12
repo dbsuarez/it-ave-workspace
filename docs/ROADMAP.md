@@ -380,3 +380,9 @@ board view for Lists and per-list access levels were deliberately left out (see 
 ## Canvas comment-only role and edit-access requests (2026-11-12)
 
 Canvas roles are now viewer, commenter, editor, owner. A commenter reads and comments (cannot edit, resolve threads or share); it can be granted to a person or a channel. A reader can press **Request edit access** and the owner gets it in Activity (one request per person per canvas per hour). Guests stay view-only on channel and direct-message canvases. Share links stay viewer/editor. Tests: `backend/test/canvas-commenter.test.js`. Board view for Lists and per-list access levels remain deliberately out of scope.
+
+## Org chart and accounts (2026-11-12)
+
+- **Extra managers:** besides the main manager (`users.manager_id`), a person can have up to 5 dotted-line managers (`user_secondary_managers`, set by the Superadmin). The chart draws them as dashed curves; employee pages list them (and the dotted-line reports of a manager).
+- **Org chart pan and zoom:** drag to move, scroll or the buttons to zoom (25 to 250%), Fit, and keyboard (arrows, + - 0).
+- **Create accounts (Moderation, Superadmin):** one or many at once, pasted or imported from a CSV or Excel (.xlsx) file; the temporary passwords are shown once and can be saved as CSV. New accounts must choose their own password at first sign-in (`users.must_change_password`, cleared by Account settings). Tests: `backend/test/admin-create-users.test.js`, `frontend/test/accounts-import.test.js`.
