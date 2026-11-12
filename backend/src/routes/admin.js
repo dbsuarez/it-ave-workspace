@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { query } = require('../db');
 const { passwordProblem } = require('../authLimits');
 const { hrActor, canManageEmployees, temporaryPassword, applyChecklist } = require('../hr');
+const prelaunch = require('../prelaunch');
 const authenticateToken = require('../middleware/auth');
 const {
   newInviteCode, hashInviteCode, invitationProblem, normalizeInviteCode,
@@ -233,6 +234,7 @@ router.post('/users', async (req, res) => {
     const actor = await hrActor(req.user.userId);
     if (!canManageEmployees(actor)) throw fail(403, 'Only the Superadmin or HR can create accounts');
     const { accounts, accountType = 'member', channelIds = [] } = req.body || {};
+    const sharedPassword = accountType === 'member' && await prelaunch.isEnabled(); // pre-launch: one known password, no forced change
     if (accountType === 'guest' && !actor.is_superadmin) throw fail(403, 'Only the Superadmin can create guest accounts');
     if (!ACCOUNT_TYPES.includes(accountType)) throw fail(400, 'Account type must be member or guest');
     if (!Array.isArray(accounts) || accounts.length === 0) throw fail(400, 'Give at least one account');
@@ -261,7 +263,7 @@ router.post('/users', async (req, res) => {
       if (seen.has(username.toLowerCase()) || seen.has(email.toLowerCase())) { skipped.push({ username, reason: 'Listed twice' }); continue; }
       seen.add(username.toLowerCase()); seen.add(email.toLowerCase());
       let password = entry.password;
-      if (password === undefined || password === null || password === '') password = temporaryPassword();
+      if (password === undefined || password === null || password === '') password = sharedPassword ? prelaunch.PASSWORD : temporaryPassword();
       const problem = passwordProblem(password, username);
       if (problem) { skipped.push({ username, reason: problem }); continue; }
       const names = {};
@@ -277,8 +279,8 @@ router.post('/users', async (req, res) => {
       const hash = await bcrypt.hash(password, 10);
       const inserted = await query(
         `INSERT INTO users (username, email, password_hash, account_type, must_change_password, last_name, first_name, middle_name)
-         VALUES ($1, $2, $3, $4, true, $5, $6, $7) RETURNING id`,
-        [username, email, hash, accountType, names.lastName, names.firstName, names.middleName]
+         VALUES ($1, $2, $3, $4, $8, $5, $6, $7) RETURNING id`,
+        [username, email, hash, accountType, names.lastName, names.firstName, names.middleName, !(sharedPassword && password === prelaunch.PASSWORD)]
       );
       const userId = inserted.rows[0].id;
       for (const channelId of joinIds) {
@@ -291,6 +293,57 @@ router.post('/users', async (req, res) => {
     res.status(created.length ? 201 : 200).json({ created, skipped });
   } catch (err) {
     sendError(res, err, 'Create accounts error');
+  }
+});
+
+// ---- pre-launch shared test password (Superadmin) ----
+
+// GET /api/admin/prelaunch - is it on, and what is the password
+router.get('/prelaunch', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    res.json({ enabled: await prelaunch.isEnabled(), password: prelaunch.PASSWORD });
+  } catch (err) {
+    sendError(res, err, 'Get pre-launch mode error');
+  }
+});
+
+// PUT /api/admin/prelaunch - { enabled } switch it on or off (off does not change anyone's password)
+router.put('/prelaunch', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    if (typeof (req.body && req.body.enabled) !== 'boolean') throw fail(400, 'enabled must be true or false');
+    await prelaunch.setEnabled(req.body.enabled);
+    await audit(req.user.userId, req.body.enabled ? 'prelaunch_password_on' : 'prelaunch_password_off', null, {});
+    res.json({ enabled: req.body.enabled });
+  } catch (err) {
+    sendError(res, err, 'Set pre-launch mode error');
+  }
+});
+
+// POST /api/admin/prelaunch/apply - give every employee the shared password now (Superadmins keep theirs)
+router.post('/prelaunch/apply', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    if (!(await prelaunch.isEnabled())) throw fail(409, 'Switch the shared test password on first');
+    const changed = await prelaunch.applyToAll();
+    changed.forEach((id) => req.io?.in(`user_${id}`).disconnectSockets(true));
+    await audit(req.user.userId, 'prelaunch_password_applied', null, { employees: changed.length });
+    res.json({ changed: changed.length });
+  } catch (err) {
+    sendError(res, err, 'Apply pre-launch password error');
+  }
+});
+
+// POST /api/admin/prelaunch/go-live - switch off, and everyone must choose a new password at their next sign-in
+router.post('/prelaunch/go-live', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const required = await prelaunch.goLive();
+    await audit(req.user.userId, 'prelaunch_went_live', null, { employees: required.length });
+    res.json({ enabled: false, mustChange: required.length });
+  } catch (err) {
+    sendError(res, err, 'Go live error');
   }
 });
 

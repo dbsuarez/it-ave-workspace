@@ -4,7 +4,7 @@
 // Loaded before renderer.js; defines functions only.
 
 function adminState() {
-  if (!state.admin) state.admin = { users: [], invitations: [], mode: 'open', lastCode: null, lastCreated: null, bulkText: '', importNotes: [] };
+  if (!state.admin) state.admin = { users: [], invitations: [], mode: 'open', lastCode: null, lastCreated: null, bulkText: '', importNotes: [], prelaunch: { enabled: false, password: '' } };
   return state.admin;
 }
 
@@ -47,11 +47,13 @@ async function loadWorkspaceAdmin() {
   section.innerHTML = '<div class="loading-state">Loading workspace administration…</div>';
   const admin = adminState();
   try {
-    const [users, invitations, registration] = await Promise.all([
+    const [users, invitations, registration, prelaunch] = await Promise.all([
       adminApi('/api/admin/users'),
       adminApi('/api/admin/invitations'),
       adminApi('/api/admin/registration'),
+      adminApi('/api/admin/prelaunch'),
     ]);
+    admin.prelaunch = prelaunch;
     admin.users = users.users || [];
     admin.invitations = invitations.invitations || [];
     admin.mode = registration.mode || 'open';
@@ -175,6 +177,18 @@ function renderWorkspaceAdmin() {
     </div>`).join('');
 
   section.innerHTML = `
+    <div class="moderation-card${admin.prelaunch.enabled ? ' prelaunch-on' : ''}">
+      <h2>Before go-live: shared test password</h2>
+      <p class="admin-help">While you are testing, every employee can use one known password. It does not apply to Superadmins, guests or deactivated accounts. <strong>Turn it off and go live before real use</strong>: anyone who knows the password can sign in as any employee.</p>
+      <p><strong>${admin.prelaunch.enabled ? 'On' : 'Off'}</strong>${admin.prelaunch.enabled ? ` · password <code class="emp-password">${escapeHtml(admin.prelaunch.password)}</code>. New accounts get it and are not asked to change it.` : '. New accounts get a random temporary password and must choose their own.'}</p>
+      <div class="admin-actions">
+        ${admin.prelaunch.enabled
+    ? `<button class="btn primary" type="button" data-admin-action="prelaunch-apply">Give every employee the test password now</button>
+           <button class="btn danger" type="button" data-admin-action="prelaunch-golive">Go live: everyone must choose a new password…</button>
+           <button class="btn" type="button" data-admin-action="prelaunch-off">Switch off</button>`
+    : '<button class="btn" type="button" data-admin-action="prelaunch-on">Switch on</button>'}
+      </div>
+    </div>
     <div class="moderation-card">
       <h2>Sign-up</h2>
       <div class="moderation-inline">
@@ -234,6 +248,22 @@ async function handleAdminClick(event) {
       await adminApi(`/api/admin/invitations/${button.dataset.invitationId}`, 'DELETE');
       showToast('Invitation revoked.', 'success');
       await loadWorkspaceAdmin();
+    } else if (action === 'prelaunch-on' || action === 'prelaunch-off') {
+      await adminApi('/api/admin/prelaunch', 'PUT', { enabled: action === 'prelaunch-on' });
+      showToast(action === 'prelaunch-on' ? 'Shared test password is on. Use "Give every employee…" to set it for existing employees.' : 'Shared test password is off. Existing passwords are unchanged.', 'success');
+      await loadWorkspaceAdmin();
+      return;
+    } else if (action === 'prelaunch-apply') {
+      if (!confirm('Set the shared test password for every employee now?\n\nThey are signed out and their current passwords stop working. Superadmins and guests are not changed.')) return;
+      const data = await adminApi('/api/admin/prelaunch/apply', 'POST', {});
+      showToast(`${data.changed} employee${data.changed === 1 ? '' : 's'} now use the test password.`, 'success');
+      return;
+    } else if (action === 'prelaunch-golive') {
+      if (!confirm('Go live?\n\nThe shared test password is switched off, and every employee must choose a new password the next time they sign in. Until they do, the test password still works for them.')) return;
+      const data = await adminApi('/api/admin/prelaunch/go-live', 'POST', {});
+      showToast(`Live. ${data.mustChange} employee${data.mustChange === 1 ? ' is' : 's are'} asked to choose a new password.`, 'success');
+      await loadWorkspaceAdmin();
+      return;
     } else if (action === 'import-accounts') {
       const result = await window.electronAPI.importAccountsFile();
       if (!result || result.canceled) return;

@@ -4,6 +4,7 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
+const prelaunch = require('../prelaunch');
 const { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin, temporaryPassword, applyChecklist } = require('../hr');
 
 const router = express.Router();
@@ -342,10 +343,12 @@ router.post('/employees/:id/reset-password', async (req, res) => {
     const target = await memberRow(id);
     if (target.deactivated_at) throw fail(400, 'Reactivate this account first');
     if (target.is_superadmin && !actor.is_superadmin) throw fail(403, 'Only the Superadmin can reset a Superadmin\'s password');
-    const password = temporaryPassword();
+    // pre-launch: employees use the shared test password and are not forced to change it
+    const shared = !target.is_superadmin && await prelaunch.isEnabled();
+    const password = shared ? prelaunch.PASSWORD : temporaryPassword();
     await query(
-      'UPDATE users SET password_hash = $1, must_change_password = true, token_version = token_version + 1 WHERE id = $2',
-      [await bcrypt.hash(password, 10), id]
+      'UPDATE users SET password_hash = $1, must_change_password = $3, token_version = token_version + 1 WHERE id = $2',
+      [await bcrypt.hash(password, 10), id, !shared]
     );
     req.io?.in(`user_${id}`).disconnectSockets(true);
     res.json({ username: target.username, password });

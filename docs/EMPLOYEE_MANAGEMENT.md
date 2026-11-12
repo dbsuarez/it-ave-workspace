@@ -53,3 +53,7 @@ Guests have none of this.
 ## Tests
 
 `backend/test/hr.test.js` (records, departments, HR role, export, deactivate, reset, checklists, username), `backend/test/leave.test.js`, `backend/test/leave-days.test.js`, `backend/test/attendance.test.js`, `backend/test/attendance-rules.test.js`, plus the schema test that guards `database/init.sql` and `backend/src/migrations.js` staying in step.
+
+## Before go-live: the shared test password
+
+Moderation (Superadmin) has a **Before go-live: shared test password** card. Switched on, new employee accounts get `testpass123` (override with `PRELAUNCH_PASSWORD`) and are not asked to change it, password resets give the same one, and **Give every employee the test password now** sets it for all existing employees (they are signed out). Superadmins, guests and deactivated accounts are never touched, and guests never get it. **Go live** switches it off and makes every employee choose a new password at their next sign-in. Do not leave it on for real use: anyone who knows it can sign in as any employee. Every step is in the audit log.
