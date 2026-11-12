@@ -1758,31 +1758,97 @@ function showToast(text, type) {
 // ============================================================
 // Messages
 // ============================================================
+// ---- the message list ----------------------------------------------------------------------------------------------------
+// Sending or receiving one message must not rebuild the whole list: that threw the view back to the top and made pictures
+// reload. Each message element carries a key (its client id while pending, else its id); when the new list is the old one with
+// messages added at the end, only the changed elements are replaced and the new ones appended. Anything else (another
+// conversation, a deletion, older history loaded) rebuilds the list as before.
+const messageKeyOf = (message) => String(message.clientMessageId || message.id);
+const nearBottom = (container) => container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+
+// Keeps the view at the bottom while pictures and avatars finish loading, until the person scrolls up themselves.
+function keepBottomWhileLoading(container) {
+  if (container._stickyBottom) return;
+  container._stickyBottom = true;
+  container._pinned = true;
+  container.addEventListener('scroll', () => { container._pinned = nearBottom(container); }, { passive: true });
+  container.addEventListener('load', () => { if (container._pinned) container.scrollTop = container.scrollHeight; }, true);
+}
+
+function scrollToBottom(container) {
+  container._pinned = true;
+  container.scrollTop = container.scrollHeight;
+}
+
+function dateSeparator(message) {
+  const sep = document.createElement('div');
+  sep.className = 'date-sep';
+  sep.textContent = new Date(message.createdAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  return sep;
+}
+
 function renderMessages(containerId, messages) {
   const container = document.getElementById(containerId);
-  container.innerHTML = '';
+  keepBottomWhileLoading(container);
 
   if (!messages || messages.length === 0) {
+    container._messageList = null;
     container.innerHTML = emptyRecordMarkup('No messages yet', 'Send the first message.');
     return;
   }
 
+  const allowReply = containerId === 'messages';
+  const keys = messages.map(messageKeyOf);
+  const previous = container._messageList;
+  const onlyAdded = previous && previous.keys.length > 0 && previous.keys.length <= keys.length
+    && previous.keys.every((key, index) => key === keys[index])
+    // the list on screen is still the one we drew (something else may have cleared or changed the container)
+    && [...container.children].filter((child) => child.dataset && child.dataset.messageKey).length === previous.keys.length;
+
+  if (onlyAdded) {
+    const wasAtBottom = nearBottom(container);
+    messages.slice(0, previous.keys.length).forEach((message, index) => {
+      const signature = JSON.stringify(message);
+      if (signature === previous.signatures[index]) return;
+      previous.signatures[index] = signature;
+      const old = [...container.children].find((child) => child.dataset && child.dataset.messageKey === keys[index]);
+      if (!old) return;
+      const fresh = renderMessageEl(message, allowReply);
+      fresh.dataset.messageKey = keys[index];
+      old.replaceWith(fresh);
+    });
+    let lastDate = new Date(messages[previous.keys.length - 1].createdAt).toDateString();
+    for (let index = previous.keys.length; index < messages.length; index += 1) {
+      const message = messages[index];
+      const day = new Date(message.createdAt).toDateString();
+      if (day !== lastDate) { lastDate = day; container.appendChild(dateSeparator(message)); }
+      const el = renderMessageEl(message, allowReply);
+      el.dataset.messageKey = keys[index];
+      container.appendChild(el);
+      previous.signatures.push(JSON.stringify(message));
+    }
+    const added = messages.length > previous.keys.length;
+    previous.keys = keys;
+    const lastOne = messages[messages.length - 1];
+    const mine = Number(lastOne.userId ?? lastOne.senderId) === Number(state.user && state.user.id);
+    if (added && (wasAtBottom || mine)) scrollToBottom(container);
+    return;
+  }
+
+  container.innerHTML = '';
   let lastDate = null;
-  messages.forEach((msg) => {
+  messages.forEach((msg, index) => {
     const msgDate = new Date(msg.createdAt).toDateString();
     if (msgDate !== lastDate) {
       lastDate = msgDate;
-      const sep = document.createElement('div');
-      sep.className = 'date-sep';
-      sep.textContent = new Date(msg.createdAt).toLocaleDateString(undefined, {
-        weekday: 'long', month: 'long', day: 'numeric',
-      });
-      container.appendChild(sep);
+      container.appendChild(dateSeparator(msg));
     }
-    container.appendChild(renderMessageEl(msg, containerId === 'messages'));
+    const el = renderMessageEl(msg, allowReply);
+    el.dataset.messageKey = keys[index];
+    container.appendChild(el);
   });
-
-  container.scrollTop = container.scrollHeight;
+  container._messageList = { keys, signatures: messages.map((message) => JSON.stringify(message)) };
+  scrollToBottom(container);
 }
 
 function upsertMessage(messages, message) {
