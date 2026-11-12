@@ -6716,7 +6716,6 @@ h4.cv-h { font-size: 15px; }
 .emp-task-add input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
 .emp-account { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .emp-password { padding: 3px 8px; border-radius: 6px; background: var(--muted-bg); font-size: 14px; user-select: all; }
-.btn.danger { color: #dc2626; border-color: rgba(220, 38, 38, 0.4); }
 .dept-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 80px auto auto; align-items: center; gap: 8px; margin-bottom: 8px; }
 .dept-row input, .dept-row select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; min-width: 0; }
 .emp-wide-modal { width: min(760px, 94vw); }
