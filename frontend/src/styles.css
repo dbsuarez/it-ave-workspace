@@ -6959,3 +6959,9 @@ body.view-as .input-area { opacity: 0.45; pointer-events: none; }
 .launch-check.ok .launch-mark { color: #16a34a; }
 .launch-check.warn .launch-mark { color: #b45309; }
 .launch-check.blocker .launch-mark { color: #dc2626; }
+
+/* People: the back arrow before an employee's name */
+.people-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.people-back { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; flex: none; }
+.people-back:hover { background: rgba(128, 128, 128, 0.14); }
+.people-back[hidden] { display: none; }

@@ -61,14 +61,18 @@ function renderPeople() {
   const tabsRow = document.getElementById('people-tabs-row');
   if (!title || !actions) return;
   if (peopleState.pageId !== null) {
-    // the back button sits at the left, under the title, where people look for it
-    if (tabsRow) { tabsRow.hidden = false; tabsRow.innerHTML = '<button type="button" class="btn pp-back" data-people-back>← People</button>'; }
+    // the back button is an arrow before the person's name, where people look for it
+    if (tabsRow) tabsRow.hidden = true;
+    const back = document.getElementById('people-back');
+    if (back) back.hidden = false;
     title.textContent = peopleState.page ? personName(peopleState.page.person) : 'Person';
     sub.textContent = 'Employee page';
     actions.innerHTML = '';
     renderPersonPage();
     return;
   }
+  const backButton = document.getElementById('people-back');
+  if (backButton) backButton.hidden = true;
   title.textContent = 'People';
   sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : peopleState.tab === 'manage' ? 'Employee records, departments and accounts.' : peopleState.tab === 'leave' ? 'Time off: balances, requests, approvals and who is away.' : peopleState.tab === 'attendance' ? 'Clock in and out, timesheets, and the payroll export.' : 'Everyone in the workspace.';
   const departments = Array.from(new Set(peopleState.list.map((p) => p.department).filter(Boolean))).sort();
