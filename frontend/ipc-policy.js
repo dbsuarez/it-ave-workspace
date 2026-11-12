@@ -20,7 +20,7 @@ function isPlainObject(value) {
 }
 
 function isAllowedStoreKey(key) {
-  return key === 'authToken' || key === 'user' || (typeof key === 'string' && /^preferences:\d{1,12}$/.test(key));
+  return key === 'authToken' || key === 'user' || key === 'viewAsReturn' || (typeof key === 'string' && /^preferences:\d{1,12}$/.test(key));
 }
 
 // null when the write is acceptable, otherwise a short reason.
@@ -30,8 +30,10 @@ function validateStoreWrite(key, value) {
     return typeof value === 'string' && value.length > 0 && value.length <= MAX_TOKEN_LENGTH
       ? null : 'Invalid session token';
   }
-  const limit = key === 'user' ? MAX_USER_JSON : MAX_PREFERENCES_JSON;
+  const limit = key === 'user' ? MAX_USER_JSON : key === 'viewAsReturn' ? MAX_USER_JSON + MAX_TOKEN_LENGTH : MAX_PREFERENCES_JSON;
   if (!isPlainObject(value)) return 'Expected an object';
+  // the Owner's own sign-in, kept aside during View as: { token, user }
+  if (key === 'viewAsReturn' && !(typeof value.token === 'string' && value.token.length <= MAX_TOKEN_LENGTH && isPlainObject(value.user))) return 'Invalid saved sign-in';
   let size;
   try {
     size = JSON.stringify(value).length;

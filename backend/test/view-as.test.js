@@ -1,0 +1,111 @@
+// "View as": the pure rules, and the real flow against PostgreSQL (an Owner gets a read-only token for another person).
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const { viewAsRefusal } = require('../src/viewAs');
+const { createScratchDatabase } = require('./helpers/scratchDb');
+
+test('View as may read channels, channel messages, people and lists, and nothing that writes or is private', () => {
+  for (const path of ['/api/auth/me', '/api/channels', '/api/channels/my', '/api/channels/4/members', '/api/messages/4', '/api/messages/4?limit=50',
+    '/api/messages/4/pins', '/api/messages/4/threads/9', '/api/people', '/api/people/3', '/api/users', '/api/user-groups',
+    '/api/roles/mentionable', '/api/moderation/access', '/api/canvas/channel/4', '/api/lists', '/api/lists/2']) {
+    assert.equal(viewAsRefusal('GET', path), null, path);
+  }
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.match(viewAsRefusal(method, '/api/people'), /read-only/);
+  for (const path of ['/api/conversations', '/api/conversations/3', '/api/notes', '/api/saved', '/api/reminders', '/api/scheduled', '/api/search?q=a',
+    '/api/files', '/api/canvas/dm/3', '/api/canvases', '/api/leave/summary', '/api/attendance/today', '/api/hr/employees', '/api/admin/users',
+    '/api/settings', '/api/activity', '/api/users/heartbeat']) {
+    assert.match(viewAsRefusal('GET', path), /private/, path);
+  }
+});
+
+let scratch;
+let admin;
+let server;
+let baseUrl;
+let pool;
+let config;
+const ids = {};
+
+test.before(async () => {
+  scratch = await createScratchDatabase();
+  if (!scratch) return;
+  admin = await scratch.open();
+  await scratch.applyInit(admin);
+  await scratch.applyMigrations(admin);
+  process.env.DATABASE_URL = scratch.url;
+  process.env.JWT_SECRET = 'viewas-secret';
+  config = require('../src/config');
+  pool = require('../src/db').pool;
+  const user = async (name, superadmin = false) => (await admin.query(
+    'INSERT INTO users (username, email, password_hash, is_superadmin) VALUES ($1, $2, $3, $4) RETURNING id', [name, `${name}@x.test`, 'x', superadmin]
+  )).rows[0].id;
+  ids.boss = await user('boss', true);
+  ids.other = await user('otherboss', true);
+  ids.ann = await user('ann');
+  ids.bob = await user('bob');
+  const app = express();
+  app.use(express.json());
+  app.use('/api/roles', require('../src/routes/roles'));
+  app.use('/api/people', require('../src/routes/people'));
+  app.use('/api/conversations', require('../src/routes/conversations'));
+  server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  baseUrl = `http://127.0.0.1:${server.address().port}`;
+});
+
+test.after(async () => {
+  if (server) await new Promise((resolve) => server.close(resolve));
+  if (pool) await pool.end();
+  if (admin) await admin.end();
+  if (scratch) await scratch.drop();
+});
+
+const skip = (t) => { if (!scratch) { t.skip('no PostgreSQL reachable'); return true; } return false; };
+const tokenFor = (userId, extra = {}) => jwt.sign({ userId, username: 'u', tokenVersion: 0, ...extra }, config.JWT_SECRET);
+const call = async (token, method, path, body) => {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return { status: res.status, json: await res.json().catch(() => ({})) };
+};
+
+test('only an Owner can start View as, for a person who is not an Owner', async (t) => {
+  if (skip(t)) return;
+  assert.equal((await call(tokenFor(ids.ann), 'POST', '/api/roles/view-as', { userId: ids.bob })).status, 403);
+  assert.equal((await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', {})).status, 400);
+  assert.equal((await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.other })).status, 400, 'not another Owner');
+  assert.equal((await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: 99999 })).status, 404);
+  const started = await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.ann });
+  assert.equal(started.status, 200);
+  assert.equal(started.json.user.id, ids.ann);
+  assert.equal(started.json.user.isSuperadmin, false);
+  const claims = jwt.verify(started.json.token, config.JWT_SECRET);
+  assert.equal(claims.userId, ids.ann);
+  assert.equal(claims.viewAs, ids.boss);
+  assert.ok(claims.exp - claims.iat <= 3600, 'one hour at most');
+  ids.viewToken = started.json.token;
+  const audit = await admin.query("SELECT actor_id, target_user_id FROM moderation_audit_log WHERE action = 'view_as_started'");
+  assert.deepEqual(audit.rows, [{ actor_id: ids.boss, target_user_id: ids.ann }]);
+});
+
+test('the View as token can read what roles decide, and is refused writes and private things', async (t) => {
+  if (skip(t)) return;
+  assert.equal((await call(ids.viewToken, 'GET', '/api/people')).status, 200);
+  const write = await call(ids.viewToken, 'POST', '/api/roles/view-as', { userId: ids.bob });
+  assert.equal(write.status, 403);
+  assert.match(write.json.error, /read-only/);
+  const dms = await call(ids.viewToken, 'GET', '/api/conversations');
+  assert.equal(dms.status, 403);
+  assert.match(dms.json.error, /private/);
+});
+
+test('the View as token stops working when the Owner who started it is no longer an Owner', async (t) => {
+  if (skip(t)) return;
+  await admin.query('UPDATE users SET is_superadmin = FALSE WHERE id = $1', [ids.boss]);
+  assert.equal((await call(ids.viewToken, 'GET', '/api/people')).status, 403);
+  await admin.query('UPDATE users SET is_superadmin = TRUE WHERE id = $1', [ids.boss]);
+  assert.equal((await call(ids.viewToken, 'GET', '/api/people')).status, 200);
+});

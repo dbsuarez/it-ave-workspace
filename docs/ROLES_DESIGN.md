@@ -129,3 +129,12 @@ with the reason it is allowed or not, and every channel with can-see / send / at
 /api/roles/check`, `explainPermission` in `permissions.js`, kept equal to `resolvePermission` by a test). It never acts as
 anyone. A read-only "View as" (the app opened as that person, every write refused, DMs hidden, audited) is the planned
 next step.
+
+**View as (2026-11-12):** an Owner opens Moderation > Roles > Check access, picks a person, and presses "View as". The app
+reopens as that person for one hour with an orange bar ("Viewing as ... Read-only. Exit View as"). Rules
+(`backend/src/viewAs.js`, applied in `middleware/auth.js`): the token is read-only (any write is refused), it may read only
+channels, channel messages, people, groups, lists and channel canvases, and everything private to the person is refused
+(direct messages, notes, saved items, reminders, search, files they sent, leave, attendance, settings); the live socket
+refuses it, so nothing is received or shown online as them; it stops working if the Owner who started it stops being
+an Owner; starting it is written to the audit log (`view_as_started`). Not available for another Owner. The Owner's own
+sign-in is kept in the `viewAsReturn` store key and restored by Exit.

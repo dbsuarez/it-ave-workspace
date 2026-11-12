@@ -192,6 +192,12 @@ module.exports = (io, socket) => {
   socket.on('authenticate', async (token) => {
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
+      if (decoded.viewAs) {
+        // View as is read-only and never joins the live connection (it would show them online and receive their messages)
+        socket.emit('auth_error', { error: 'View as does not use the live connection' });
+        socket.disconnect();
+        return;
+      }
 
       // One account per connection. A second `authenticate` may repeat the same account
       // but can never switch to another one, which would keep the first account's rooms.

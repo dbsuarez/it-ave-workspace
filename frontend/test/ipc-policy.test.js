@@ -100,3 +100,12 @@ test('the suggested file name is safe', () => {
   assert.equal(exportFileName('x'.repeat(200), 'pdf').length, 80 + '.pdf'.length);
   assert.ok(!/[\\/]/.test(exportFileName('../../etc/passwd', 'md')));
 });
+
+test('an Owner own sign-in may be kept aside for View as, and only in the right shape', () => {
+  assert.equal(isAllowedStoreKey('viewAsReturn'), true);
+  assert.equal(validateStoreWrite('viewAsReturn', { token: 'abc', user: { id: 1 } }), null);
+  assert.ok(validateStoreWrite('viewAsReturn', { token: 5, user: { id: 1 } }));
+  assert.ok(validateStoreWrite('viewAsReturn', { token: 'abc' }));
+  assert.ok(validateStoreWrite('viewAsReturn', 'text'));
+  assert.ok(validateStoreWrite('viewAsReturn', { token: 'x'.repeat(5000), user: {} }));
+});

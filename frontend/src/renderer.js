@@ -264,9 +264,19 @@ async function init() {
   if (storedToken && storedUser) {
     state.token = storedToken;
     state.user = storedUser;
+    const viewing = typeof viewAsClaims === 'function' ? viewAsClaims(storedToken) : null;
     showApp();
     updateRail('home');
     showPane('home');
+    if (viewing) {
+      // View as: read-only, no live connection, and none of the person's private things (see features/view-as.js)
+      applyViewAsMode(viewing);
+      loadChannels();
+      loadUsers();
+      loadModerationAccess();
+      loadUserGroups();
+      loadRoleMentions();
+    } else {
     connectSocket();
     loadChannels();
     loadUsers();
@@ -281,6 +291,7 @@ async function init() {
     loadRoleMentions();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
+    }
   } else {
     showLogin();
   }

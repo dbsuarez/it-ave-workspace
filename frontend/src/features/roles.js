@@ -87,8 +87,10 @@ async function runAccessCheck() {
     <td class="role-col">${accessMark(c.visible)}</td>
     ${keys.slice(1).map((k) => `<td class="role-col" title="${escapeHtml(c.checks[k.key].reason)}">${accessMark(c.checks[k.key].allowed)}</td>`).join('')}
     <td class="access-reason">${escapeHtml(c.visible ? (c.checks.send_messages.allowed ? '' : c.checks.send_messages.reason) : (c.member === false && c.checks.view_channel.allowed ? 'Not a member of this channel' : c.checks.view_channel.reason))}</td></tr>`).join('');
+  const canViewAs = data.subject.type === 'person' && state.moderation && state.moderation.isSuperadmin && typeof startViewAs === 'function';
   host.innerHTML = `
-    <h3 class="access-title">${escapeHtml(data.subject.name)} <span class="role-tag">${data.subject.type === 'role' ? 'Role' : 'Person'}</span></h3>
+    <h3 class="access-title">${escapeHtml(data.subject.name)} <span class="role-tag">${data.subject.type === 'role' ? 'Role' : 'Person'}</span>
+      ${canViewAs ? `<button type="button" class="btn small" data-view-as="${data.subject.id}">View as ${escapeHtml(data.subject.name)}</button>` : ''}</h3>
     <h4 class="modal-section-title">Workspace</h4>
     <table class="role-table"><tbody>${own}</tbody></table>
     <h4 class="modal-section-title">Channels</h4>
@@ -291,6 +293,8 @@ async function handleRolesClick(event) {
     return true;
   }
   if (target.closest('[data-access-check]')) { runAccessCheck(); return true; }
+  const viewAs = target.closest('[data-view-as]');
+  if (viewAs) { startViewAs(viewAs.dataset.viewAs); return true; }
   const save = target.closest('[data-role-assign-save]');
   if (save) {
     const roleIds = [...document.querySelectorAll(`#${save.dataset.box || 'role-assign-box'} input[name="assign"]:checked`)].map((box) => Number(box.value));

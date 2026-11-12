@@ -6942,3 +6942,9 @@ h4.cv-h { font-size: 15px; }
 .access-yes { color: #16a34a; font-weight: 700; }
 .access-no { color: #dc2626; font-weight: 700; }
 .access-reason { color: var(--text-muted); font-size: 13px; }
+
+/* View as: a read-only session as another person */
+.view-as-bar { position: sticky; top: 0; z-index: 9500; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 6px 12px; background: #b45309; color: #fff; font-size: 13px; }
+.view-as-bar .btn { background: #fff; color: #7c2d12; border-color: #fff; }
+body.view-as .input-area { opacity: 0.45; pointer-events: none; }
+body.view-as [data-rail="dms"], body.view-as #dm-list, body.view-as [data-rail="later"], body.view-as [data-rail="notes"], body.view-as [data-rail="activity"] { display: none !important; }

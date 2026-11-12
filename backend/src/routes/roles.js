@@ -6,6 +6,7 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { PERMISSIONS, can, loadAccess, explainPermission } = require('../permissions');
+const { VIEW_AS_MINUTES } = require('../viewAs');
 const { actorProfile, canManageRole, ungrantable, cleanRoleInput, roleHandle, MAX_CUSTOM_ROLES } = require('../roles');
 
 const router = express.Router();
@@ -127,6 +128,39 @@ router.get('/check', async (req, res) => {
     }
     res.json({ subject, permissions, channels: rows, channelPermissions: CHECKED_IN_CHANNEL.map((key) => ({ key, label: label(key) })) });
   } catch (err) { sendError(res, err, 'Access check error'); }
+});
+
+// Start "View as": a one-hour read-only token for another person, for an Owner only (it shows what their roles show them).
+router.post('/view-as', async (req, res) => {
+  try {
+    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1 AND deactivated_at IS NULL', [req.user.userId])).rows[0];
+    if (!actor || !actor.is_superadmin || req.user.viewAs) throw fail(403, 'Only an Owner can use View as');
+    const userId = req.body && Number.isInteger(req.body.userId) ? req.body.userId : null;
+    if (!userId) throw fail(400, 'Choose a person');
+    const target = (await query(
+      `SELECT id, username, email, avatar_color, is_superadmin, job_title, first_name, middle_name, last_name, token_version,
+              (SELECT r.color FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = users.id ORDER BY r.position, r.id LIMIT 1) AS role_color
+       FROM users WHERE id = $1 AND account_type = 'member' AND deactivated_at IS NULL`, [userId]
+    )).rows[0];
+    if (!target) throw fail(404, 'Person not found');
+    if (target.is_superadmin) throw fail(400, 'View as is for people who are not Owners');
+    const jwt = require('jsonwebtoken');
+    const config = require('../config');
+    const token = jwt.sign(
+      { userId: target.id, username: target.username, tokenVersion: Number(target.token_version || 0), viewAs: req.user.userId },
+      config.JWT_SECRET, { expiresIn: `${VIEW_AS_MINUTES}m` }
+    );
+    await audit(req.user.userId, 'view_as_started', target.id, { minutes: VIEW_AS_MINUTES });
+    res.json({
+      token,
+      expiresAt: new Date(Date.now() + VIEW_AS_MINUTES * 60000).toISOString(),
+      user: {
+        id: target.id, username: target.username, email: target.email, avatarColor: target.avatar_color, isSuperadmin: false,
+        jobTitle: target.job_title || '', firstName: target.first_name || '', middleName: target.middle_name || '',
+        lastName: target.last_name || '', roleColor: target.role_color || null, mustChangePassword: false,
+      },
+    });
+  } catch (err) { sendError(res, err, 'View as error'); }
 });
 
 router.get('/permissions', async (req, res) => {
