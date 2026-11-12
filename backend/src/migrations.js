@@ -323,6 +323,8 @@ module.exports = [
 
   // Pre-launch: everyone uses one shared test password until the Superadmin goes live (src/prelaunch.js)
   'ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS prelaunch_password BOOLEAN NOT NULL DEFAULT false',
+  // the go-live switch (src/launch.js)
+  'ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS go_live BOOLEAN NOT NULL DEFAULT false',
 
   // Employee management: HR role, employee records and departments
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hr BOOLEAN NOT NULL DEFAULT false',

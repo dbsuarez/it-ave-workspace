@@ -6948,3 +6948,15 @@ h4.cv-h { font-size: 15px; }
 .view-as-bar .btn { background: #fff; color: #7c2d12; border-color: #fff; }
 body.view-as .input-area { opacity: 0.45; pointer-events: none; }
 body.view-as [data-rail="dms"], body.view-as #dm-list, body.view-as [data-rail="later"], body.view-as [data-rail="notes"], body.view-as [data-rail="activity"] { display: none !important; }
+
+/* Launch mode card */
+.launch-card.is-live { border-color: #16a34a; }
+.launch-state { color: #b45309; }
+.launch-card.is-live .launch-state { color: #16a34a; }
+.launch-checks { display: grid; gap: 6px; margin-top: 10px; }
+.launch-check { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); }
+.launch-check small { display: block; color: var(--text-muted); }
+.launch-mark { width: 20px; text-align: center; font-weight: 700; }
+.launch-check.ok .launch-mark { color: #16a34a; }
+.launch-check.warn .launch-mark { color: #b45309; }
+.launch-check.blocker .launch-mark { color: #dc2626; }

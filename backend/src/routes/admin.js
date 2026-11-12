@@ -403,6 +403,53 @@ router.post('/prelaunch/go-live', async (req, res) => {
   }
 });
 
+// ---- the go-live switch (src/launch.js) ----
+const launch = require('../launch');
+const launchContext = (req) => ({
+  query, prelaunch,
+  secure: Boolean(req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'),
+  proxied: Boolean(req.headers['x-forwarded-for']),
+});
+
+// GET /api/admin/launch - Pre-launch or Live, and what is not ready
+router.get('/launch', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    res.json(await launch.readiness(launchContext(req)));
+  } catch (err) {
+    sendError(res, err, 'Launch status error');
+  }
+});
+
+// POST /api/admin/launch/go-live - turn the rules on together (refused while a blocker remains)
+router.post('/launch/go-live', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const state = await launch.readiness(launchContext(req));
+    if (state.blockers.length) throw fail(409, state.checks.filter((c) => state.blockers.includes(c.id)).map((c) => c.detail).join(' '));
+    const required = await prelaunch.goLive();
+    await query('UPDATE attendance_settings SET network_only = TRUE WHERE id = 1');
+    await query('UPDATE moderation_settings SET go_live = TRUE WHERE id = 1');
+    await audit(req.user.userId, 'went_live', null, { employees: required.length });
+    res.json({ ...(await launch.readiness(launchContext(req))), mustChange: required.length });
+  } catch (err) {
+    sendError(res, err, 'Go live error');
+  }
+});
+
+// POST /api/admin/launch/pre-launch - relax clocking again; passwords are NOT touched
+router.post('/launch/pre-launch', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    await query('UPDATE attendance_settings SET network_only = FALSE WHERE id = 1');
+    await query('UPDATE moderation_settings SET go_live = FALSE WHERE id = 1');
+    await audit(req.user.userId, 'back_to_prelaunch', null, {});
+    res.json(await launch.readiness(launchContext(req)));
+  } catch (err) {
+    sendError(res, err, 'Return to pre-launch error');
+  }
+});
+
 // Creates an invitation. The code is returned once and only its hash is stored.
 router.post('/invitations', async (req, res) => {
   try {

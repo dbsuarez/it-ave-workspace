@@ -522,6 +522,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}'::
 CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id) WHERE manager_id IS NOT NULL;
 ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS default_slowmode_seconds INTEGER NOT NULL DEFAULT 5 CHECK (default_slowmode_seconds BETWEEN 0 AND 3600);
 ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS prelaunch_password BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS go_live BOOLEAN NOT NULL DEFAULT false;
 -- Employee management; mirrors backend/src/migrations.js.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hr BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_no VARCHAR(40);

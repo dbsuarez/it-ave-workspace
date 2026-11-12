@@ -2529,9 +2529,10 @@ async function loadModerationView() {
       <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
     </div>` : ''}
     ${channels.length ? '<div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>' : ''}
-    ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit" data-mod-tab="rules"></div>' : ''}
+    ${state.moderation.isSuperadmin ? '<div id="moderation-launch" data-mod-tab="rules"></div><div id="moderation-workspace-audit" data-mod-tab="rules"></div>' : ''}
     ${canRoles ? '<div id="moderation-roles" data-mod-tab="roles"></div>' : ''}`;
   if (canRoles && state.moderation.tab === 'roles') loadRolesPanel();
+  if (state.moderation.isSuperadmin && typeof loadLaunchCard === 'function') loadLaunchCard();
   if (state.moderation.isSuperadmin) {
     try {
       const response = await api('/api/moderation/settings');
