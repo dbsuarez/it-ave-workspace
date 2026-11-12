@@ -6837,3 +6837,9 @@ h4.cv-h { font-size: 15px; }
 .att-punch-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .att-punch-row input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
 .emp-remote { align-self: end; }
+
+/* Standard checklists: each list is the full width of the dialog, with its Save button underneath */
+#checklists-modal .form-group { display: block; margin-bottom: 18px; }
+#checklists-modal .form-group > label { display: block; margin-bottom: 6px; font-weight: 700; }
+.tpl-area { display: block; width: 100%; max-height: none; min-height: 150px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; line-height: 1.5; resize: vertical; }
+.tpl-actions { display: flex; justify-content: flex-end; margin-top: 8px; }

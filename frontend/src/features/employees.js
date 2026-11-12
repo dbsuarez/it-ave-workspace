@@ -350,8 +350,8 @@ async function openChecklistTemplates() {
     <div class="modal-body pp-editor-body">
       <p class="form-note">New accounts start with the onboarding list. Deactivating an account starts the offboarding list. One task per line. Changing a list does not change lists people already have.</p>
       ${['onboarding', 'offboarding'].map((kind) => `<div class="form-group"><label for="tpl-${kind}">${kind === 'onboarding' ? 'Onboarding' : 'Offboarding'}</label>
-        <textarea id="tpl-${kind}" rows="7" maxlength="6000">${escapeText((data[kind] || []).join('\n'))}</textarea>
-        <button type="button" class="btn" data-tpl-save="${kind}">Save ${kind}</button></div>`).join('')}
+        <textarea id="tpl-${kind}" class="tpl-area" rows="7" maxlength="6000">${escapeText((data[kind] || []).join('\n'))}</textarea>
+        <div class="tpl-actions"><button type="button" class="btn primary" data-tpl-save="${kind}">Save ${kind}</button></div></div>`).join('')}
     </div>`;
   openSettingsModal(modal);
 }
