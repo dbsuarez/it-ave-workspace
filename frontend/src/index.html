@@ -150,6 +150,7 @@
         <button class="rail-item" data-rail="people">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span>People</span>
+          <span class="rail-badge" id="people-badge" hidden></span>
         </button>
         <button class="rail-item" data-rail="huddle">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
@@ -925,6 +926,8 @@
     <div class="modal people-editor-modal" id="people-editor-modal" role="dialog" aria-label="Edit my page"></div>
     <div class="modal people-editor-modal" id="employee-modal" role="dialog" aria-label="Employee record"></div>
     <div class="modal people-editor-modal" id="departments-modal" role="dialog" aria-label="Departments"></div>
+    <div class="modal people-editor-modal" id="leave-modal" role="dialog" aria-label="Request leave"></div>
+    <div class="modal people-editor-modal emp-wide-modal" id="leave-settings-modal" role="dialog" aria-label="Leave settings"></div>
     <div class="modal people-editor-modal" id="checklists-modal" role="dialog" aria-label="Checklists"></div>
     <div class="modal people-editor-modal emp-wide-modal" id="add-people-modal" role="dialog" aria-label="Add people"></div>
 
@@ -1081,6 +1084,7 @@
   <script src="features/org-chart.js"></script>
   <script src="features/people.js"></script>
   <script src="features/employees.js"></script>
+  <script src="features/leave.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

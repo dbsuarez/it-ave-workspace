@@ -108,7 +108,7 @@ router.get('/employees', async (req, res) => {
 // PUT /api/hr/employees/:id - change a record. Only the fields sent are changed.
 router.put('/employees/:id', async (req, res) => {
   try {
-    await requireHr(req.user.userId);
+    const actor = await requireHr(req.user.userId);
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     const body = req.body || {};
@@ -116,6 +116,15 @@ router.put('/employees/:id', async (req, res) => {
     const values = [];
     const set = (column, value) => { values.push(value); sets.push(`${column} = $${values.length}`); };
 
+    if (body.username !== undefined) {
+      // the name they sign in with: only the Superadmin changes it
+      if (!actor.is_superadmin) throw fail(403, 'Only the Superadmin can change a username');
+      const username = text(body.username, 50, 'Username');
+      if (!username || /\s/.test(username)) throw fail(400, 'A username is 1 to 50 characters with no spaces');
+      const taken = await query('SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id <> $2', [username, id]);
+      if (taken.rows.length) throw fail(409, 'That username is already taken');
+      set('username', username);
+    }
     if (body.employeeNo !== undefined) {
       const number = text(body.employeeNo, 40, 'Employee number');
       if (number) {
@@ -151,8 +160,15 @@ router.put('/employees/:id', async (req, res) => {
     }
     if (!sets.length) throw fail(400, 'Nothing to change');
     values.push(id);
+    const before = body.username !== undefined ? (await query('SELECT username FROM users WHERE id = $1', [id])).rows[0] : null;
     const updated = await query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} AND account_type = 'member' RETURNING id`, values);
     if (!updated.rows.length) throw fail(404, 'Person not found');
+    if (before && before.username !== body.username.trim()) {
+      await query(
+        "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'username_changed', $3)",
+        [actor.id, id, JSON.stringify({ from: before.username, to: body.username.trim() })]
+      );
+    }
     const row = (await query(`${EMPLOYEE_SELECT} WHERE u.id = $1`, [id])).rows[0];
     res.json({ employee: mapEmployee(row) });
   } catch (err) {

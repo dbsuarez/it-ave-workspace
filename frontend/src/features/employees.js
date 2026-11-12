@@ -95,6 +95,7 @@ function renderEmployeeManagement(body) {
       <span class="emp-spacer"></span>
       <button type="button" class="btn" data-emp-departments>Departments</button>
       <button type="button" class="btn" data-emp-checklists>Checklists</button>
+      <button type="button" class="btn" data-emp-leave-settings>Leave settings</button>
       <button type="button" class="btn" data-emp-export>Export CSV</button>
       <button type="button" class="btn primary" data-emp-add>Add people</button>
     </div>
@@ -128,6 +129,7 @@ function openEmployeeEditor(id) {
       <button class="modal-close" type="button" data-emp-close aria-label="Close">&times;</button></div>
     <form id="employee-form">
       <div class="modal-body pp-editor-body">
+        ${state.moderation.isSuperadmin ? `<div class="form-group"><label for="emp-username">Username (what they sign in with)</label><input id="emp-username" type="text" maxlength="50" value="${escapeText(e.username)}"><p class="form-note">Changing it does not change old @mentions in messages and canvases.</p></div>` : ''}
         <div class="pp-edit-triple">
           <div class="form-group"><label for="emp-last">Last name</label><input id="emp-last" type="text" maxlength="100" value="${escapeText(e.lastName)}"></div>
           <div class="form-group"><label for="emp-first">First name</label><input id="emp-first" type="text" maxlength="100" value="${escapeText(e.firstName)}"></div>
@@ -152,6 +154,8 @@ function openEmployeeEditor(id) {
         </div>
         ${state.moderation.isSuperadmin ? `<label class="preference-toggle"><input type="checkbox" id="emp-hr"${e.isHr ? ' checked' : ''}><span>HR: can manage employee records, departments and reporting lines</span></label>` : ''}
         <p class="form-note">Email: ${escapeText(e.email)}${e.phone ? ` · Phone: ${escapeText(e.phone)}` : ''}. The employee edits their own photo, phone and page.</p>
+        <h4 class="modal-section-title">Leave balances</h4>
+        <div id="emp-leave"><p class="pp-muted">Loading…</p></div>
         <h4 class="modal-section-title">Checklists</h4>
         <div id="emp-tasks" class="emp-tasks"><p class="pp-muted">Loading…</p></div>
         <h4 class="modal-section-title">Account</h4>
@@ -170,6 +174,7 @@ function openEmployeeEditor(id) {
     </form>`;
   openSettingsModal(modal);
   loadEmployeeTasks(id);
+  if (typeof loadEmployeeLeave === 'function') loadEmployeeLeave(id);
 }
 
 async function saveEmployeeRecord(event) {
@@ -183,6 +188,8 @@ async function saveEmployeeRecord(event) {
     departmentId: value('emp-department') === '' ? null : Number(value('emp-department')),
     employmentStatus: value('emp-status'), hireDate: value('emp-hired') || null, separationDate: value('emp-lastday') || null,
   };
+  const usernameField = document.getElementById('emp-username');
+  if (usernameField && usernameField.value.trim() !== e.username) record.username = usernameField.value;
   try {
     await hrApi(`/api/hr/employees/${e.id}`, 'PUT', record);
     const manager = value('emp-manager') === '' ? null : Number(value('emp-manager'));

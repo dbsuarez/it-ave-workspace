@@ -6647,6 +6647,42 @@ h4.cv-h { font-size: 15px; }
 .emp-status-active { background: rgba(34, 197, 94, 0.15); color: #15803d; }
 .emp-status-on_leave { background: rgba(245, 158, 11, 0.18); color: #b45309; }
 .emp-status-resigned { background: rgba(107, 114, 128, 0.18); color: var(--text-muted); }
+.lv-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.lv-tab { padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-muted); font: inherit; font-weight: 600; cursor: pointer; }
+.lv-tab.active { border-bottom-color: var(--purple); color: var(--text); }
+.lv-tabs .btn { margin-bottom: 6px; }
+.lv-h { margin: 22px 0 8px; font-size: 14px; }
+.lv-balances { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.lv-balance { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.lv-balance strong { font-size: 28px; line-height: 1.1; }
+.lv-balance-name { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.lv-status { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.lv-pending { background: rgba(245, 158, 11, 0.18); color: #b45309; }
+.lv-approved { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.lv-rejected { background: rgba(220, 38, 38, 0.13); color: #b91c1c; }
+.lv-cancelled { background: rgba(107, 114, 128, 0.18); color: var(--text-muted); }
+.lv-by { display: block; margin-top: 2px; font-size: 11px; font-style: normal; color: var(--text-muted); }
+.lv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.lv-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.lv-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lv-reason { margin: 0; padding: 6px 10px; border-left: 3px solid var(--border); color: var(--text-muted); font-size: 13px; }
+.lv-cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.lv-cal-head strong { min-width: 150px; text-align: center; }
+.lv-dow, .lv-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.lv-dow span { padding: 4px 6px; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+.lv-grid { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.lv-day { min-height: 92px; padding: 4px 6px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.lv-day:nth-child(7n) { border-right: 0; }
+.lv-weekend { background: var(--muted-bg); }
+.lv-holiday { background: rgba(124, 58, 237, 0.08); }
+.lv-blank { background: var(--muted-bg); opacity: 0.5; }
+.lv-daynum { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.lv-holiday-name { font-size: 10px; color: var(--purple); }
+.lv-chip { display: block; padding: 1px 6px; border-radius: 4px; background: var(--purple); color: #fff; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-chip-pending { background: transparent; color: var(--purple); border: 1px dashed var(--purple); }
+.lv-more { font-size: 10px; color: var(--text-muted); }
+.lv-type-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto auto; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lv-type-row input[type="text"], .lv-type-row input[type="date"], .lv-type-row input[type="number"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; min-width: 0; }
 .emp-progress { display: block; margin-top: 3px; font-size: 11px; color: var(--text-muted); }
 .emp-tasks { display: grid; gap: 14px; }
 .emp-task-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }

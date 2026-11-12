@@ -953,6 +953,7 @@ function connectSocket() {
   });
 
   state.socket.on('user_photo_updated', handleUserPhotoUpdated);
+  state.socket.on('leave_updated', handleLeaveUpdated);
   state.socket.on('huddle:joined', handleHuddleJoined);
   state.socket.on('huddle:invite', handleHuddleInvite);
   state.socket.on('huddle:invite-cancelled', handleHuddleInviteCancelled);
@@ -2461,6 +2462,7 @@ async function loadModerationAccess() {
     if (!res.ok) throw new Error(data.error || 'Could not load moderation access');
     state.moderation.isSuperadmin = Boolean(data.isSuperadmin);
     state.moderation.isHr = Boolean(data.isHr);
+    if (typeof refreshLeaveSummary === 'function' && state.moderation.accountType !== 'guest') refreshLeaveSummary();
     state.moderation.moderatorChannelIds = data.moderatorChannelIds || [];
     state.moderation.accountType = data.accountType || 'member';
     applyAccountRestrictions();

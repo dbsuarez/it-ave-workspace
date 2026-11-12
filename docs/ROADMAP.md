@@ -386,3 +386,7 @@ Canvas roles are now viewer, commenter, editor, owner. A commenter reads and com
 - **Extra managers:** besides the main manager (`users.manager_id`), a person can have up to 5 dotted-line managers (`user_secondary_managers`, set by the Superadmin). The chart draws them as dashed curves; employee pages list them (and the dotted-line reports of a manager).
 - **Org chart pan and zoom:** drag to move, scroll or the buttons to zoom (25 to 250%), Fit, and keyboard (arrows, + - 0).
 - **Create accounts (Moderation, Superadmin):** one or many at once, pasted or imported from a CSV or Excel (.xlsx) file; the temporary passwords are shown once and can be saved as CSV. New accounts must choose their own password at first sign-in (`users.must_change_password`, cleared by Account settings). Tests: `backend/test/admin-create-users.test.js`, `frontend/test/accounts-import.test.js`.
+
+## Employee management (2026-11-12)
+
+HR role, employee records, departments, deactivate/reactivate, password reset, onboarding/offboarding checklists, leave (types, balances, requests, approval, calendar, holidays) and Superadmin username changes. See [EMPLOYEE_MANAGEMENT.md](EMPLOYEE_MANAGEMENT.md) for roles, rules and what is left out (attendance, accrual, multi-step approval).

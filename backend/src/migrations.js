@@ -547,4 +547,50 @@ $$`,
    ) AS v(kind, title, position)
    WHERE NOT EXISTS (SELECT 1 FROM schema_markers WHERE name = 'hr_task_templates_v1')`,
   "INSERT INTO schema_markers (name) VALUES ('hr_task_templates_v1') ON CONFLICT DO NOTHING",
+
+  // Leave: types, per-person adjustments, requests and company holidays
+  `CREATE TABLE IF NOT EXISTS leave_types (
+     id SERIAL PRIMARY KEY,
+     name VARCHAR(60) NOT NULL,
+     days_per_year NUMERIC(5,1) NOT NULL DEFAULT 0 CHECK (days_per_year >= 0),
+     paid BOOLEAN NOT NULL DEFAULT true,
+     active BOOLEAN NOT NULL DEFAULT true,
+     position INTEGER NOT NULL DEFAULT 0
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_leave_types_name ON leave_types (LOWER(name))`,
+  `CREATE TABLE IF NOT EXISTS leave_entitlements (
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     leave_type_id INTEGER NOT NULL REFERENCES leave_types(id) ON DELETE CASCADE,
+     year SMALLINT NOT NULL,
+     adjustment NUMERIC(5,1) NOT NULL DEFAULT 0,
+     PRIMARY KEY (user_id, leave_type_id, year)
+   )`,
+  `CREATE TABLE IF NOT EXISTS leave_requests (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     leave_type_id INTEGER NOT NULL REFERENCES leave_types(id) ON DELETE RESTRICT,
+     start_date DATE NOT NULL,
+     end_date DATE NOT NULL,
+     days NUMERIC(4,1) NOT NULL,
+     half_day BOOLEAN NOT NULL DEFAULT false,
+     reason VARCHAR(500) NOT NULL DEFAULT '',
+     status VARCHAR(12) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+     decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     decided_at TIMESTAMP WITH TIME ZONE,
+     decision_note VARCHAR(300) NOT NULL DEFAULT '',
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     CHECK (end_date >= start_date)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_leave_requests_user ON leave_requests(user_id, start_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status, start_date)`,
+  `CREATE TABLE IF NOT EXISTS company_holidays (
+     day DATE PRIMARY KEY,
+     name VARCHAR(100) NOT NULL
+   )`,
+  `INSERT INTO leave_types (name, days_per_year, paid, position)
+   SELECT v.name, v.days, v.paid, v.position FROM (VALUES
+     ('Vacation Leave', 15, true, 1), ('Sick Leave', 10, true, 2), ('Emergency Leave', 3, true, 3), ('Unpaid Leave', 0, false, 4)
+   ) AS v(name, days, paid, position)
+   WHERE NOT EXISTS (SELECT 1 FROM schema_markers WHERE name = 'leave_types_v1')`,
+  `INSERT INTO schema_markers (name) VALUES ('leave_types_v1') ON CONFLICT DO NOTHING`,
 ];

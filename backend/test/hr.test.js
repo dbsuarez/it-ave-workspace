@@ -264,3 +264,22 @@ test('checklists: new accounts start onboarding, tasks can be ticked, added and 
   assert.equal((await call(ids.hr, 'PUT', '/hr/task-templates', { kind: 'nope', titles: [] })).status, 400);
   assert.equal((await call(ids.hr, 'GET', `/hr/employees/${fresh}/tasks`)).json.tasks.filter((x) => x.kind === 'onboarding').length, 4, 'people keep the list they have');
 });
+
+test('only the Superadmin changes a username; it must be free, and the change is logged', async (t) => {
+  if (skip(t)) return;
+  const who = await makeMember('oldname');
+  assert.equal((await call(ids.hr, 'PUT', `/hr/employees/${who}`, { username: 'newname' })).status, 403, 'HR cannot');
+  assert.equal((await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: 'ann' })).status, 409, 'already taken');
+  assert.equal((await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: 'ANN' })).status, 409);
+  assert.equal((await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: 'has space' })).status, 400);
+  assert.equal((await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: '' })).status, 400);
+  assert.equal((await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: 'x'.repeat(51) })).status, 400);
+  const done = await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: 'newname' });
+  assert.equal(done.status, 200);
+  assert.equal(done.json.employee.username, 'newname');
+  assert.equal((await call(0, 'POST', '/auth/login', { username: 'newname', password: 'Old-pass-123' })).status, 200, 'they sign in with the new name');
+  assert.equal((await call(0, 'POST', '/auth/login', { username: 'oldname', password: 'Old-pass-123' })).status, 401);
+  const log = (await admin.query("SELECT details FROM moderation_audit_log WHERE action = 'username_changed' AND target_user_id = $1", [who])).rows;
+  assert.deepEqual(log.map((r) => r.details), [{ from: 'oldname', to: 'newname' }]);
+  assert.equal((await call(ids.boss, 'PUT', `/hr/employees/${who}`, { username: 'newname' })).status, 200, 'saving the same name again is fine');
+});

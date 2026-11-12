@@ -67,12 +67,13 @@ function renderPeople() {
     return;
   }
   title.textContent = 'People';
-  sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : peopleState.tab === 'manage' ? 'Employee records, departments and accounts.' : 'Everyone in the workspace.';
+  sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : peopleState.tab === 'manage' ? 'Employee records, departments and accounts.' : peopleState.tab === 'leave' ? 'Time off: balances, requests, approvals and who is away.' : 'Everyone in the workspace.';
   const departments = Array.from(new Set(peopleState.list.map((p) => p.department).filter(Boolean))).sort();
   actions.innerHTML = `
     <div class="pp-tabs" role="tablist">
       <button type="button" class="pp-tab${peopleState.tab === 'directory' ? ' active' : ''}" data-people-tab="directory" role="tab">Directory</button>
       <button type="button" class="pp-tab${peopleState.tab === 'chart' ? ' active' : ''}" data-people-tab="chart" role="tab">Org chart</button>
+      <button type="button" class="pp-tab${peopleState.tab === 'leave' ? ' active' : ''}" data-people-tab="leave" role="tab">Leave${typeof leaveState !== 'undefined' && leaveState.waiting ? ` (${leaveState.waiting})` : ''}</button>
       ${canManageEmployees() ? `<button type="button" class="pp-tab${peopleState.tab === 'manage' ? ' active' : ''}" data-people-tab="manage" role="tab">Manage</button>` : ''}
     </div>
     <input type="search" id="people-search" class="pp-search" placeholder="Search name, title, department…" value="${escapeText(peopleState.query)}" aria-label="Search people">
@@ -91,8 +92,8 @@ function renderPeopleBody() {
     return;
   }
   if (peopleState.tab === 'manage' && !canManageEmployees()) peopleState.tab = 'directory';
-  body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : peopleState.tab === 'manage' ? 'people-manage-body' : 'people-directory-body'}`;
-  if (peopleState.tab === 'chart') renderOrgChart(body); else if (peopleState.tab === 'manage') renderEmployeeManagement(body); else renderDirectory(body);
+  body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : peopleState.tab === 'manage' || peopleState.tab === 'leave' ? 'people-manage-body' : 'people-directory-body'}`;
+  if (peopleState.tab === 'chart') renderOrgChart(body); else if (peopleState.tab === 'manage') renderEmployeeManagement(body); else if (peopleState.tab === 'leave') renderLeave(body); else renderDirectory(body);
   paintPeoplePhotos(body);
 }
 
