@@ -44,7 +44,7 @@ async function handleUserGroupsUpdated() {
 }
 
 function userGroupsAdminHtml() {
-  return '<div class="moderation-card" id="admin-user-groups"></div>';
+  return '<div class="moderation-card" id="admin-user-groups" data-mod-tab="people"></div>';
 }
 
 function renderUserGroupsAdmin() {

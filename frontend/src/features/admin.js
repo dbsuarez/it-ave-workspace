@@ -177,7 +177,7 @@ function renderWorkspaceAdmin() {
     </div>`).join('');
 
   section.innerHTML = `
-    <div class="moderation-card${admin.prelaunch.enabled ? ' prelaunch-on' : ''}">
+    <div class="moderation-card${admin.prelaunch.enabled ? ' prelaunch-on' : ''}" data-mod-tab="signup">
       <h2>Before go-live: shared test password</h2>
       <p class="admin-help">While you are testing, every employee can use one known password. It does not apply to Superadmins, guests or deactivated accounts. <strong>Turn it off and go live before real use</strong>: anyone who knows the password can sign in as any employee.</p>
       <p><strong>${admin.prelaunch.enabled ? 'On' : 'Off'}</strong>${admin.prelaunch.enabled ? ` · password <code class="emp-password">${escapeHtml(admin.prelaunch.password)}</code>. New accounts get it and are not asked to change it.` : '. New accounts get a random temporary password and must choose their own.'}</p>
@@ -189,7 +189,7 @@ function renderWorkspaceAdmin() {
     : '<button class="btn" type="button" data-admin-action="prelaunch-on">Switch on</button>'}
       </div>
     </div>
-    <div class="moderation-card">
+    <div class="moderation-card" data-mod-tab="signup">
       <h2>Sign-up</h2>
       <div class="moderation-inline">
         <label>Who can create an account
@@ -201,8 +201,8 @@ function renderWorkspaceAdmin() {
         <button class="btn" type="button" data-admin-action="save-registration">Save</button>
       </div>
     </div>
-    <div data-accounts-host>${accountsFormHtml(admin, true)}</div>
-    <form class="moderation-card" data-admin-form="invitation">
+    <div data-accounts-host data-mod-tab="people">${accountsFormHtml(admin, true)}</div>
+    <form class="moderation-card" data-admin-form="invitation" data-mod-tab="signup">
       <h2>Invite someone</h2>
       <div class="moderation-inline">
         <label>Account type
@@ -227,8 +227,8 @@ function renderWorkspaceAdmin() {
       <button class="btn primary" type="submit">Create invitation code</button>
       ${admin.lastCode ? `<p class="admin-invite-code">New code: <code id="admin-last-code">${escapeHtml(admin.lastCode)}</code> <button class="btn" type="button" data-admin-action="copy-code">Copy</button><br><small>Share it now. It is shown only once and works for one sign-up.</small></p>` : ''}
     </form>
-    <div class="moderation-card"><h2>Invitations</h2><div class="moderation-list">${invitationRows || '<p>No invitations yet.</p>'}</div></div>
-    <div class="moderation-card"><h2>Workspace members</h2><div class="moderation-list">${userRows}</div></div>
+    <div class="moderation-card" data-mod-tab="signup"><h2>Invitations</h2><div class="moderation-list">${invitationRows || '<p>No invitations yet.</p>'}</div></div>
+    <div class="moderation-card" data-mod-tab="people"><h2>Workspace members</h2><div class="moderation-list">${userRows}</div></div>
     ${userGroupsAdminHtml()}`;
   renderUserGroupsAdmin();
 }

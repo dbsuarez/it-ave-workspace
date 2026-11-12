@@ -6821,3 +6821,10 @@ h4.cv-h { font-size: 15px; }
 .lv-f-date input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
 
 .moderation-card.prelaunch-on { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18); }
+
+/* Moderation tabs: only the blocks of the open tab show */
+.mod-tabs { margin-bottom: 16px; }
+#moderation-content:not([data-tab="channels"]) [data-mod-tab="channels"],
+#moderation-content:not([data-tab="people"]) [data-mod-tab="people"],
+#moderation-content:not([data-tab="signup"]) [data-mod-tab="signup"],
+#moderation-content:not([data-tab="rules"]) [data-mod-tab="rules"] { display: none; }

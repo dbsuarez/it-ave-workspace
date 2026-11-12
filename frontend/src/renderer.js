@@ -143,7 +143,7 @@ let state = {
     statusType: '',
   },
   files: [],
-  moderation: { isSuperadmin: false, isHr: false, moderatorChannelIds: [], channel: null, settings: null },
+  moderation: { isSuperadmin: false, isHr: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels' },
   notes: [],
   lists: [],
   listMembers: [],
@@ -2490,20 +2490,26 @@ async function loadModerationView() {
   }
   const selectedId = channels.some((channel) => Number(channel.id) === Number(state.moderation.channel?.id))
     ? Number(state.moderation.channel.id) : Number(channels[0].id);
+  // Moderation is split into tabs for the Superadmin; a channel moderator only has Channels.
+  const tabs = state.moderation.isSuperadmin
+    ? [['channels', 'Channels'], ['people', 'People and groups'], ['signup', 'Sign-up and invitations'], ['rules', 'Rules and audit log']] : [];
+  if (!tabs.some(([key]) => key === state.moderation.tab)) state.moderation.tab = 'channels';
+  container.dataset.tab = state.moderation.tab;
   container.innerHTML = `
-    <div class="moderation-toolbar">
+    ${tabs.length ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" role="tab">${label}</button>`).join('')}</div>` : ''}
+    <div class="moderation-toolbar" data-mod-tab="channels">
       <label for="moderation-channel-select">Channel</label>
       <select id="moderation-channel-select">${channels.map((channel) => `<option value="${channel.id}"${Number(channel.id) === selectedId ? ' selected' : ''}>#${escapeHtml(channel.name)}</option>`).join('')}</select>
     </div>
     ${state.moderation.isSuperadmin ? `
-      <form class="moderation-card moderation-settings" data-moderation-form="settings">
+      <form class="moderation-card moderation-settings" data-moderation-form="settings" data-mod-tab="rules">
         <h2>Workspace timeout policy</h2>
         <label>Default timeout (minutes)<input name="defaultTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.defaultTimeoutMinutes || 5}" required></label>
         <label>Maximum timeout (minutes)<input name="maxTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.maxTimeoutMinutes || 10080}" required></label>
         <button class="btn primary" type="submit">Save timeout policy</button>
       </form>` : ''}
-    <div id="moderation-channel-data" class="moderation-channel-data"><div class="loading-state">Loading channel moderation…</div></div>
-    ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit"></div>' : ''}`;
+    <div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>
+    ${state.moderation.isSuperadmin ? '<div id="moderation-workspace-audit" data-mod-tab="rules"></div>' : ''}`;
   if (state.moderation.isSuperadmin) {
     try {
       const response = await api('/api/moderation/settings');
@@ -2595,6 +2601,14 @@ async function loadModerationChannel(channelId) {
 }
 
 async function handleModerationClick(event) {
+  const tabButton = event.target.closest('[data-mod-tab-button]');
+  if (tabButton) {
+    state.moderation.tab = tabButton.dataset.modTabButton;
+    const host = document.getElementById('moderation-content');
+    if (host) host.dataset.tab = state.moderation.tab;
+    host?.querySelectorAll('[data-mod-tab-button]').forEach((b) => b.classList.toggle('active', b === tabButton));
+    return;
+  }
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const channelId = Number(document.getElementById('moderation-channel-select')?.value);
