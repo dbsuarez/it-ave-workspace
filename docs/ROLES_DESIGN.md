@@ -166,3 +166,9 @@ conversation per person and a sample group), notes, saved items, files list, act
 samples (`backend/src/viewAsDemo.js`), and the sidebar items are visible again; their preferences and sidebar layout are
 real (settings, not content). Still refused, not yet sampled: leave and attendance (about 18 endpoints with their own
 shapes). A test seeds a real direct message and a real note and proves neither comes back.
+
+**Leave and attendance samples after go-live (2026-11-12, last):** Live View as also shows the person's own Leave screens (types,
+balances, requests, holidays, approvals, calendar) and Attendance (today, a month timesheet, corrections) as fixed samples; the
+sample attendance days are worked out by the real rules (`evaluateDay`) from made-up 08:00-17:00 punches with one late
+morning and one leave day. The HR and manager views (all records, the board, networks, devices, schedules, exports) stay
+refused. (`backend/src/viewAsDemo.js`.)

@@ -5,6 +5,7 @@
 // fixed, obviously made-up sample. A channel the person cannot open is still refused, so what they cannot see stays unseen.
 // Fixed content (no randomness) so the same screen always looks the same. Pure builders are covered by test/view-as-demo.test.js.
 const { ensureChannelMembership } = require('./security');
+const { eachDay, weekdayOf, evaluateDay, totalsFor } = require('./attendance');
 
 const SAMPLE_PEOPLE = [
   { id: -1, username: 'Sample Person A', avatarColor: '#6B21A8' },
@@ -96,6 +97,71 @@ function sampleActivity(channel, now = new Date()) {
   ] };
 }
 
+// ---- leave and attendance samples ----
+const SAMPLE_TYPES = [
+  { id: -1, name: 'Vacation leave (sample)', daysPerYear: 15, paid: true, active: true },
+  { id: -2, name: 'Sick leave (sample)', daysPerYear: 10, paid: true, active: true },
+  { id: -3, name: 'Unpaid leave (sample)', daysPerYear: 0, paid: false, active: true },
+];
+
+function sampleLeave(year, now = new Date()) {
+  const balances = [
+    { typeId: -1, name: SAMPLE_TYPES[0].name, paid: true, capped: true, entitled: 15, adjustment: 0, used: 3, pending: 1, remaining: 11 },
+    { typeId: -2, name: SAMPLE_TYPES[1].name, paid: true, capped: true, entitled: 10, adjustment: 0, used: 1, pending: 0, remaining: 9 },
+    { typeId: -3, name: SAMPLE_TYPES[2].name, paid: false, capped: false, entitled: 0, adjustment: 0, used: 0, pending: 0, remaining: null },
+  ];
+  const request = (id, type, start, end, days, status, reason) => ({
+    id, userId: -1, username: 'Sample Person A', employeeNo: '', department: 'Sample department', firstName: 'Sample', middleName: '', lastName: 'Person',
+    typeId: type.id, typeName: type.name, startDate: start, endDate: end, days, halfDay: false, reason, status,
+    decidedBy: status === 'approved' ? 'Sample Manager' : null, decidedAt: status === 'approved' ? iso(now, 5000) : null, decisionNote: '', createdAt: iso(now, 9000),
+  });
+  return {
+    year, balances,
+    requests: [
+      request(-1, SAMPLE_TYPES[0], `${year}-03-10`, `${year}-03-12`, 3, 'approved', 'Sample reason'),
+      request(-2, SAMPLE_TYPES[0], `${year}-12-22`, `${year}-12-22`, 1, 'pending', 'Another sample reason'),
+    ],
+    holidays: [{ day: `${year}-12-25`, name: 'Sample holiday' }, { day: `${year}-01-01`, name: 'Sample new year' }],
+    approvalsWaiting: 0, canManage: false, hasManager: true,
+  };
+}
+
+// A month of sample attendance for one person, worked out by the real rules (evaluateDay) from made-up punches: 08:00-17:00,
+// one late morning, one leave day, nothing on weekends or in the future.
+function sampleTimesheet(viewedUserId, from, to, today) {
+  const dates = eachDay(from, to);
+  const monday = dates.find((d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 1);
+  const workDays = [...new Set(dates.filter((d) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay(); return w >= 1 && w <= 5; }).map((d) => weekdayOf(d)))];
+  const days = dates.map((date, index) => {
+    const workday = workDays.includes(weekdayOf(date));
+    const lateDay = monday && index === dates.indexOf(monday) + 8;
+    const leaveDay = monday && index === dates.indexOf(monday) + 17;
+    const past = date < today;
+    const punch = workday && past && !leaveDay
+      ? { clockIn: new Date(`${date}T${lateDay ? '08:25' : '08:00'}:00Z`), clockOut: new Date(`${date}T17:00:00Z`) } : null;
+    const evaluated = evaluateDay({
+      date, today, isHoliday: false, leave: leaveDay ? 1 : 0, overtimeEligible: true, punches: punch ? [punch] : [],
+      schedule: { workDays, breakMinutes: 60, graceMinutes: 5, overtimeMinMinutes: 30, start: new Date(`${date}T08:00:00Z`), end: new Date(`${date}T17:00:00Z`) },
+    });
+    const text = punch ? [{ in: lateDay ? '08:25' : '08:00', out: '17:00', flagged: false }] : [];
+    return { ...evaluated, punches: text, deviceFlag: false, clockIn: text.length ? text[0].in : null, clockOut: text.length ? text[0].out : null, note: '', source: text.length ? 'self' : null };
+  });
+  return {
+    from, to, timezone: 'Asia/Manila',
+    person: { id: viewedUserId, username: 'Sample Person', firstName: 'Sample', middleName: '', lastName: 'Person', employeeNo: '', department: 'Sample department', jobLevel: 'rank_and_file' },
+    schedule: { id: -1, name: 'Sample schedule', start: '08:00', end: '17:00', breakMinutes: 60, graceMinutes: 5, workDays },
+    days, totals: totalsFor(days),
+  };
+}
+
+function sampleToday(viewedUserId, today) {
+  const sheet = sampleTimesheet(viewedUserId, today, today, '9999-12-31');
+  return {
+    today, timezone: 'Asia/Manila', schedule: sheet.schedule, day: sheet.days[0], clockedIn: false, openSince: null,
+    network: { enforced: false, exempt: true, allowed: true, ip: 'sample' }, isManager: false, correctionsWaiting: 0,
+  };
+}
+
 // The first channel the person is really in (so a sample item can point somewhere that opens); a stand-in when they have none.
 async function firstChannel(query, userId) {
   const row = (await query(
@@ -113,6 +179,19 @@ const PRIVATE_SAMPLES = [
   [/^\/api\/reminders$/, async () => ({ reminders: [] })],
   [/^\/api\/activity$/, async (ctx) => sampleActivity(await firstChannel(ctx.query, ctx.userId))],
   [/^\/api\/files$/, async (ctx) => ({ files: sampleFiles(await firstChannel(ctx.query, ctx.userId)) })],
+  [/^\/api\/leave\/types$/, async () => ({ types: SAMPLE_TYPES })],
+  [/^\/api\/leave\/me$/, async (ctx) => sampleLeave(ctx.params.get('year') ? Number(ctx.params.get('year')) : new Date().getUTCFullYear())],
+  [/^\/api\/leave\/holidays$/, async () => ({ year: new Date().getUTCFullYear(), holidays: sampleLeave(new Date().getUTCFullYear()).holidays })],
+  [/^\/api\/leave\/(approvals)$/, async () => ({ requests: [] })],
+  [/^\/api\/leave\/calendar$/, async (ctx) => ({ month: ctx.params.get('month') || new Date().toISOString().slice(0, 7), scope: 'team', requests: [], holidays: [] })],
+  [/^\/api\/attendance\/today$/, async (ctx) => sampleToday(ctx.userId, new Date().toISOString().slice(0, 10))],
+  [/^\/api\/attendance\/timesheet$/, async (ctx) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const month = /^\d{4}-\d{2}$/.test(ctx.params.get('month') || '') ? ctx.params.get('month') : today.slice(0, 7);
+    const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+    return sampleTimesheet(ctx.userId, `${month}-01`, `${month}-${String(last).padStart(2, '0')}`, today);
+  }],
+  [/^\/api\/attendance\/corrections\/mine$/, async () => ({ corrections: [] })],
 ];
 
 const ID = '(\\d+)';
@@ -132,7 +211,7 @@ async function demoResponse(path, { userId, query }) {
   const clean = String(path || '').split('?')[0].replace(/\/+$/, '');
   for (const [pattern, build] of PRIVATE_SAMPLES) {
     const match = pattern.exec(clean);
-    if (match) return { status: 200, body: await build({ userId, query }, match) };
+    if (match) return { status: 200, body: await build({ userId, query, params: new URL(String(path), 'http://x').searchParams }, match) };
   }
   for (const [pattern, kind] of ROUTES) {
     const match = pattern.exec(clean);
@@ -158,5 +237,5 @@ async function demoResponse(path, { userId, query }) {
 }
 
 module.exports = {
-  SAMPLE_PEOPLE, sampleMessages, sampleCanvas, sampleDirectMessages, sampleConversation, sampleNotes, sampleSaved, sampleFiles, sampleActivity, demoResponse,
+  SAMPLE_PEOPLE, sampleMessages, sampleCanvas, sampleDirectMessages, sampleConversation, sampleNotes, sampleSaved, sampleFiles, sampleActivity, sampleLeave, sampleTimesheet, sampleToday, demoResponse,
 };

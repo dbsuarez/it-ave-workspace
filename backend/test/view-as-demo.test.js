@@ -37,3 +37,18 @@ test('the private screens have fixed samples with fake ids, and never real conte
   assert.ok(sampleFiles(channel, now).every((f) => f.id < 0 && /sample/i.test(f.name)));
   assert.ok(sampleActivity(channel, now).items.every((i) => i.messageId < 0));
 });
+
+test('the sample timesheet is worked out by the real rules from made-up punches', () => {
+  const { sampleTimesheet, sampleLeave } = require('../src/viewAsDemo');
+  const sheet = sampleTimesheet(5, '2026-10-01', '2026-10-31', '2026-11-12');
+  assert.deepEqual(sheet, sampleTimesheet(5, '2026-10-01', '2026-10-31', '2026-11-12'), 'fixed');
+  assert.equal(sheet.days.length, 31);
+  assert.ok(sheet.totals.presentDays >= 15 && sheet.totals.lateCount === 1 && sheet.totals.lateMinutes === 25, JSON.stringify(sheet.totals));
+  assert.ok(sheet.days.some((d) => d.status === 'leave'));
+  assert.ok(sheet.days.filter((d) => d.status === 'rest').length >= 8, 'weekends');
+  assert.ok(sheet.days.every((d) => d.punches.every((p) => !p.inIp)), 'no addresses');
+  const future = sampleTimesheet(5, '2026-12-01', '2026-12-31', '2026-11-12');
+  assert.ok(future.days.every((d) => d.status === 'upcoming' || d.status === 'rest' || d.status === 'leave'), 'nothing worked in the future');
+  const leave = sampleLeave(2026);
+  assert.ok(leave.balances.every((b) => b.typeId < 0));
+});

@@ -69,6 +69,7 @@ test.before(async () => {
   app.use('/api/activity', require('../src/routes/activity'));
   app.use('/api/reminders', require('../src/routes/reminders'));
   app.use('/api/leave', require('../src/routes/leave'));
+  app.use('/api/attendance', require('../src/routes/attendance'));
   app.use('/api/messages', require('../src/routes/messages'));
   app.use('/api/canvas', require('../src/routes/canvas'));
   app.use('/api/lists', require('../src/routes/lists'));
@@ -142,7 +143,16 @@ test('once the workspace is Live, View as goes back to what the roles decide and
     }
     const dm = await call(ids.viewToken, 'GET', `/api/users/${ids.bob}/direct-messages`);
     assert.ok(dm.json.messages.length >= 3 && dm.json.messages.every((m) => m.id < 0), 'a sample conversation');
-    assert.equal((await call(ids.viewToken, 'GET', '/api/leave/summary')).status, 403, 'leave and attendance are still refused');
+    // leave and attendance: samples for their own screens, and the HR views stay refused
+    const leave = await call(ids.viewToken, 'GET', '/api/leave/me');
+    assert.equal(leave.status, 200);
+    assert.ok(leave.json.balances.every((b) => b.typeId < 0) && leave.json.requests.every((r) => r.id < 0));
+    const sheet = await call(ids.viewToken, 'GET', '/api/attendance/timesheet?month=2026-10');
+    assert.equal(sheet.status, 200);
+    assert.ok(sheet.json.days.length === 31 && sheet.json.totals.presentDays > 10, 'a month of sample days, worked out by the real rules');
+    assert.equal((await call(ids.viewToken, 'GET', '/api/attendance/today')).status, 200);
+    assert.equal((await call(ids.viewToken, 'GET', '/api/leave/records')).status, 403, 'HR views are refused');
+    assert.equal((await call(ids.viewToken, 'GET', '/api/attendance/board')).status, 403);
     const fresh = await call(tokenFor(ids.boss), 'POST', '/api/roles/view-as', { userId: ids.ann });
     assert.equal(fresh.json.full, false);
     // real content never comes back: channel messages are made-up samples, and a channel the person is not in is still refused
