@@ -409,3 +409,13 @@ The Files view and Saved items show a small thumbnail for PNG, JPEG, GIF, WebP a
 ## Done: HTTPS on localhost with mkcert (2026-11-12)
 
 Made with mkcert: a locally trusted certificate so the backend and the phone app can be served over https during development. It also lets the phone app's service worker and web push run (both need https), and it is a rehearsal for the real domain/TLS step on the Linux host. Set up with `deploy/local-https.ps1` and `deploy/Caddyfile.local` (see `deploy/README.md`). Verified: trusted HTTPS on localhost, 127.0.0.1 and the LAN address, and the desktop app over it with a live WebSocket. Not yet tried: the phone app over https from a real phone (needs the root certificate installed on it).
+
+## Next: View as with dummy data after go-live (idea from 2026-11-12)
+
+After go-live, View as should show the person's real structure (their channels, tabs, buttons, people, role colors, what is
+read-only or private for them) but only sample content: made-up channel messages, direct messages, notes, saved items,
+files, leave and attendance ("Sample message 1", "Sample file.pdf"), so employees' private content is never exposed in
+production yet the Owner still sees a full-looking screen as that person. It replaces today's behavior (after go-live the
+private screens are simply refused). Design: a server-side set of sample responses for the sensitive endpoints, used for View
+as tokens when the workspace is Live; every other path stays refused by default, so a forgotten screen cannot leak real
+data. While Pre-launch the real-data testing view stays. Not started.
