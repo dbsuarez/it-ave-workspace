@@ -8,6 +8,7 @@ const {
   ensureDirectMessageAccess,
 } = require('../security');
 const { findMentionedUsers } = require('../mentions');
+const { roleHandle } = require('../roles');
 const {
   insertChannelMessage, insertDirectMessage, parseAttachmentIds, ATTACHMENT_UNAVAILABLE,
 } = require('../attachments');
@@ -67,6 +68,27 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
           [mentionedGroups.map((group) => group.id), messageData.channelId]
         );
         groupMembers.rows.forEach((user) => mentionedById.set(Number(user.id), user));
+      }
+
+      // @team-lead style mentions of a role reach everyone who holds it (and is in this channel)
+      try {
+        const roleRows = (await query("SELECT id, name, builtin_key FROM roles WHERE builtin_key IS DISTINCT FROM 'everyone' AND builtin_key IS DISTINCT FROM 'owner'")).rows
+          .map((r) => ({ id: r.id, username: roleHandle(r.name), builtin_key: r.builtin_key }))
+          .filter((r) => r.username);
+        const mentionedRoles = findMentionedUsers(messageData.content, roleRows);
+        if (mentionedRoles.length) {
+          const holders = await query(
+            `SELECT DISTINCT u.id FROM users u
+             JOIN channel_members cm ON cm.user_id = u.id AND cm.channel_id = $2
+             WHERE u.deactivated_at IS NULL
+               AND (u.id IN (SELECT user_id FROM user_roles WHERE role_id = ANY($1::int[]))
+                    OR ($3::boolean AND u.is_hr))`,
+            [mentionedRoles.map((r) => r.id), messageData.channelId, mentionedRoles.some((r) => r.builtin_key === 'hr')]
+          );
+          holders.rows.forEach((user) => mentionedById.set(Number(user.id), user));
+        }
+      } catch (roleErr) {
+        console.error('Role mention error:', roleErr);
       }
 
       const mentioned = [...mentionedById.values()]

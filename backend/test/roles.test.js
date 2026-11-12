@@ -193,3 +193,34 @@ test('a person\'s roles come with them in the people directory, highest rank fir
     await new Promise((resolve) => srv.close(resolve));
   }
 });
+
+test('role mentions: the handle is the name in lowercase with hyphens, and any member can list the mentionable roles', async (t) => {
+  const { roleHandle } = require('../src/roles');
+  assert.equal(roleHandle('Team lead'), 'team-lead');
+  assert.equal(roleHandle('  HR / People Ops! '), 'hr-people-ops');
+  assert.equal(roleHandle('???'), '');
+  if (skip(t)) return;
+  const listed = await call(ids.ann, 'GET', '/mentionable');
+  assert.equal(listed.status, 200);
+  const handles = listed.json.roles.map((r) => r.handle);
+  assert.ok(handles.includes('hr') && handles.includes('table-role'));
+  assert.ok(!handles.includes('everyone') && !handles.includes('owner'), 'Everyone and Owner are not mentionable');
+  assert.equal(listed.json.roles.find((r) => r.handle === 'table-role').memberCount, 1);
+});
+
+test('mentioning @table-role notifies the people who hold it, only those in the channel, and not the author', async (t) => {
+  if (skip(t)) return;
+  const { notifyMessageActivity } = require('../src/sockets/chat');
+  const channel = (await admin.query("INSERT INTO channels (name) VALUES ('role-mention-room') RETURNING id")).rows[0].id;
+  const roleId = (await admin.query("SELECT id FROM roles WHERE name = 'Table role'")).rows[0].id;
+  const holderIn = ids.bob; // holds Table role (set in an earlier test)
+  const holderOut = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('holder_out', 'ho@x.test', 'x') RETURNING id")).rows[0].id;
+  await admin.query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [holderOut, roleId]);
+  for (const id of [ids.ann, holderIn]) await admin.query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)', [channel, id]);
+  const sent = [];
+  const io = { to: (room) => ({ emit: (event, payload) => sent.push({ room, event, type: payload && payload.type }) }) };
+  const messageId = (await admin.query("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, 'hello @table-role') RETURNING id", [channel, ids.ann])).rows[0].id;
+  await notifyMessageActivity(io, (sql, params) => admin.query(sql, params), { id: messageId, channelId: channel, userId: ids.ann, username: 'ann', avatarColor: '#000000', content: 'hello @table-role', createdAt: new Date() }, null);
+  const mentions = sent.filter((s) => s.event === 'activity' && s.type === 'mention').map((s) => s.room);
+  assert.deepEqual(mentions, [`user_${holderIn}`]);
+});

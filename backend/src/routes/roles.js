@@ -6,7 +6,7 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { PERMISSIONS, can } = require('../permissions');
-const { actorProfile, canManageRole, ungrantable, cleanRoleInput, MAX_CUSTOM_ROLES } = require('../roles');
+const { actorProfile, canManageRole, ungrantable, cleanRoleInput, roleHandle, MAX_CUSTOM_ROLES } = require('../roles');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -48,6 +48,22 @@ const mapRole = (row, actor) => ({
   id: row.id, name: row.name, color: row.color, position: row.position, permissions: row.permissions,
   builtin: row.builtin_key || null, memberCount: Number(row.member_count || 0),
   canManage: canManageRole(actor, row), canRename: !row.builtin_key,
+});
+
+// Roles anyone can @mention (every role but Everyone), for the composer: [{ id, name, handle, color, memberCount }].
+router.get('/mentionable', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT r.id, r.name, r.color,
+              CASE r.builtin_key
+                WHEN 'owner' THEN (SELECT COUNT(*) FROM users WHERE is_superadmin AND deactivated_at IS NULL)
+                WHEN 'hr' THEN (SELECT COUNT(*) FROM users WHERE is_hr AND deactivated_at IS NULL)
+                ELSE (SELECT COUNT(*) FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_id = r.id AND u.deactivated_at IS NULL)
+              END AS member_count
+       FROM roles r WHERE r.builtin_key IS DISTINCT FROM 'everyone' AND r.builtin_key IS DISTINCT FROM 'owner' ORDER BY r.position, r.id`
+    );
+    res.json({ roles: result.rows.filter((r) => roleHandle(r.name)).map((r) => ({ id: r.id, name: r.name, handle: roleHandle(r.name), color: r.color, memberCount: Number(r.member_count) })) });
+  } catch (err) { sendError(res, err, 'Mentionable roles error'); }
 });
 
 router.get('/permissions', async (req, res) => {

@@ -18,18 +18,37 @@ async function loadUserGroups() {
 }
 
 function userGroupHandles() {
-  return (state.userGroups || []).map((group) => group.handle);
+  return [...(state.userGroups || []).map((group) => group.handle), ...(state.roleMentions || []).map((role) => role.handle)];
 }
 
 // Entries for the @ picker, shaped like channel members.
 function groupMentionCandidates() {
-  return (state.userGroups || []).map((group) => ({
+  const groups = (state.userGroups || []).map((group) => ({
     id: `group-${group.id}`,
     username: group.handle,
     avatarColor: '#1264A3',
     role: `group · ${group.members.length}`,
     isGroup: true,
   }));
+  const roles = (state.roleMentions || []).map((role) => ({
+    id: `role-${role.id}`,
+    username: role.handle,
+    avatarColor: role.color,
+    role: `role · ${role.memberCount}`,
+    isGroup: true,
+  }));
+  return [...groups, ...roles];
+}
+
+// The roles anyone can @mention, loaded at start and whenever roles change.
+async function loadRoleMentions() {
+  try {
+    const res = await api('/api/roles/mentionable');
+    const data = await res.json();
+    if (res.ok) state.roleMentions = data.roles || [];
+  } catch (err) {
+    console.error('Load role mentions error:', err);
+  }
 }
 
 async function handleUserGroupsUpdated() {

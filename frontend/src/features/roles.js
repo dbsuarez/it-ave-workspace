@@ -10,6 +10,11 @@ function roleDot(role) {
   return `<span class="role-dot" style="background:${escapeHtml(role.color)}"></span>`;
 }
 
+// Same rule as the server's roleHandle: lowercase, other characters become one hyphen.
+function roleHandleOf(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 function roleSummary(role) {
   if (role.builtin === 'owner') return 'Everything, always';
   const count = role.permissions.length;
@@ -26,7 +31,7 @@ function renderRolesPanel() {
     return `<div class="role-row" data-role-id="${role.id}">
       ${roleDot(role)}
       <div class="role-row-main"><strong>${escapeHtml(role.name)}</strong>${role.builtin ? ` <span class="role-tag">Built in</span>` : ''}
-        <small>${escapeHtml(roleSummary(role))} · ${role.memberCount} ${role.memberCount === 1 ? 'person' : 'people'}</small></div>
+        <small>${escapeHtml(roleSummary(role))} · ${role.memberCount} ${role.memberCount === 1 ? 'person' : 'people'}${role.builtin === 'everyone' || role.builtin === 'owner' ? '' : ` · mention with @${escapeHtml(roleHandleOf(role.name))}`}</small></div>
       <div class="role-row-actions">
         ${movable ? `<button type="button" class="btn small" data-role-move="up" ${customIndex <= 0 ? 'disabled' : ''} aria-label="Move ${escapeHtml(role.name)} up">&uarr;</button>
         <button type="button" class="btn small" data-role-move="down" ${customIndex === custom.length - 1 ? 'disabled' : ''} aria-label="Move ${escapeHtml(role.name)} down">&darr;</button>` : ''}
@@ -139,6 +144,7 @@ async function loadRolesPanel() {
     rolesState.people = (people.people || []).slice().sort((a, b) => personName(a).localeCompare(personName(b), undefined, { sensitivity: 'base' }));
     rolesState.loaded = true;
     renderRolesPanel();
+    if (typeof loadRoleMentions === 'function') loadRoleMentions(); // the @ picker follows the role list
   } catch (err) {
     console.error('Load roles error:', err);
     host.innerHTML = emptyRecordMarkup('Roles could not load', err.message || 'Try again.');

@@ -56,4 +56,10 @@ function cleanRoleInput(body, existing = null) {
   return { name, color, permissions };
 }
 
-module.exports = { NAME_MAX, MAX_CUSTOM_ROLES, actorProfile, canManageRole, ungrantable, cleanRoleInput };
+// The @handle a role is mentioned by: its name in lowercase with runs of anything else turned into one hyphen
+// ("Team lead" -> team-lead). Built-in Everyone is not mentionable.
+function roleHandle(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+module.exports = { roleHandle, NAME_MAX, MAX_CUSTOM_ROLES, actorProfile, canManageRole, ungrantable, cleanRoleInput };

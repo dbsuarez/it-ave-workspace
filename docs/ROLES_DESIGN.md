@@ -116,3 +116,10 @@ file deletion, topic editing and channel deletion also accept the matching role 
 their roles as colored chips (`roles` on `/api/people`). `mention_everyone` is reserved: the app has no @everyone yet, so
 nothing enforces it. Still open: role colors next to names in messages, role mentions (@role), and moving the rest of the
 old flag checks (canvases, remaining sockets) onto `can()`.
+
+**Phase 4 done:** message authors show their full name (username when none) in the color of their highest custom role
+(`roleColor` on `/api/users` and `/api/auth/me`); roles can be @mentioned by a handle made from the name (`Team lead` is
+`@team-lead`; HR is `@hr`), offered in the composer's @ picker, highlighted in messages, and notifying everyone who holds
+the role and is in the channel (`/api/roles/mentionable`, `notifyMessageActivity`). Any member may mention a role.
+Left as they are on purpose: canvases keep their own viewer/commenter/editor/owner roles with the Owner bypass, and
+guest accounts are unchanged.

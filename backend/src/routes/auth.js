@@ -222,7 +222,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at, job_title, photo_file, photo_updated_at, must_change_password, first_name, middle_name, last_name FROM users WHERE id = $1',
+      'SELECT id, username, email, avatar_color, is_superadmin, status, last_seen, created_at, job_title, photo_file, photo_updated_at, must_change_password, first_name, middle_name, last_name, (SELECT r.color FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = users.id ORDER BY r.position, r.id LIMIT 1) AS role_color FROM users WHERE id = $1',
       [req.user.userId]
     );
 
@@ -246,6 +246,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         firstName: user.first_name || '',
         middleName: user.middle_name || '',
         lastName: user.last_name || '',
+        roleColor: user.role_color || null,
         photoVersion: user.photo_file && user.photo_updated_at ? new Date(user.photo_updated_at).getTime() : null,
       },
     });

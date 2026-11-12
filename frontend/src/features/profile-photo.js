@@ -161,7 +161,7 @@ async function refreshOwnProfile() {
     state.user = {
       ...state.user, username: u.username, email: u.email, avatarColor: u.avatarColor, isSuperadmin: u.isSuperadmin,
       firstName: u.firstName || '', middleName: u.middleName || '', lastName: u.lastName || '',
-      jobTitle: u.jobTitle || '', photoVersion: u.photoVersion || null,
+      jobTitle: u.jobTitle || '', photoVersion: u.photoVersion || null, roleColor: u.roleColor || null,
     };
     await electronAPI.storeSet('user', state.user);
     paintAccountMenu();

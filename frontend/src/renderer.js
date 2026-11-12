@@ -278,6 +278,7 @@ async function init() {
     loadReminders();
     loadSidebarLayout();
     loadUserGroups();
+    loadRoleMentions();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
   } else {
@@ -957,6 +958,9 @@ function connectSocket() {
     permissionsTimer = setTimeout(async () => {
       await loadChannels();
       await loadModerationAccess();
+      loadUsers();
+      loadRoleMentions();
+      if (typeof refreshOwnProfile === 'function') refreshOwnProfile();
       if (state.currentChannelId && !state.channels.some((c) => Number(c.id) === Number(state.currentChannelId))) {
         state.currentChannelId = null;
         if (state.channels.length) await openChannel(state.channels[0].id);
@@ -1802,9 +1806,17 @@ function applyReactionsInPlace(containerId, list, messageId, reactions) {
   if (fresh) old.replaceWith(fresh);
 }
 
+// How a message author is shown: their full name (username when they have none), in their top role's color.
+function messageAuthor(userId, username) {
+  const person = Number(userId) === Number(state.user && state.user.id) ? state.user : (state.users || []).find((u) => Number(u.id) === Number(userId));
+  const name = person && typeof personName === 'function' ? personName(person) : '';
+  return { name: name || username, color: person && /^#[0-9a-fA-F]{6}$/.test(person.roleColor || '') ? person.roleColor : '' };
+}
+
 function renderMessageEl(msg, allowReply = false) {
   const isYou = (msg.userId ?? msg.senderId) === state.user.id;
   const username = msg.username || msg.senderUsername || 'Unknown';
+  const author = messageAuthor(msg.userId ?? msg.senderId, username);
   const avatarColor = msg.avatarColor || msg.senderAvatarColor || '#A855F7';
   const initials = username.charAt(0).toUpperCase();
   const isPinned = Boolean(msg.pinned || msg.pinnedAt);
@@ -1871,7 +1883,7 @@ function renderMessageEl(msg, allowReply = false) {
     <div class="avatar-mini" style="background:${avatarColor};" data-user-id="${escapeHtml(String(msg.userId ?? msg.senderId ?? ''))}" role="button" tabindex="0" title="View profile" aria-label="View profile">${initials}</div>
     <div class="message-body">
       <div class="message-header">
-        <span class="name">${escapeHtml(username)}</span>
+        <span class="name"${author.color ? ` style="color:${escapeHtml(author.color)}"` : ''}>${escapeHtml(author.name)}</span>
         ${isYou ? '<span class="you">You</span>' : ''}
         <span class="time">${shortTime(msg.createdAt)}</span>
         ${allowReply ? messageEditedHtml(msg) : ''}
