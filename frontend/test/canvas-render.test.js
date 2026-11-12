@@ -30,6 +30,16 @@ test('paragraphs keep emphasis and line breaks', () => {
   assert.ok(html.includes('one <strong>two</strong><br>three'));
 });
 
+test('font colors render from the narrow saved syntax without allowing arbitrary attributes', () => {
+  const html = render('paragraph', 'Plain <span data-color="#c2410c">orange and **bold**</span>.');
+  assert.ok(html.includes('<span data-color="#c2410c" style="color:#c2410c">orange and <strong>bold</strong></span>'));
+  const unsafe = render('paragraph', '<span data-color="#c2410c" onclick="bad()">no</span>');
+  assert.ok(!unsafe.includes('onclick="bad()"'));
+  assert.ok(unsafe.includes('&lt;span'));
+  assert.ok(render('list', '- <span data-color="#2563eb">blue</span>').includes('style="color:#2563eb"'));
+  assert.ok(render('quote', '> <span data-color="#15803d">green</span>').includes('style="color:#15803d"'));
+});
+
 test('checklists render interactive boxes that name their section and item', () => {
   const html = render('checklist', '- [ ] write\n- [x] review\n  nested note');
   assert.ok(html.includes('data-cv-toggle="0-abc123:0"'));

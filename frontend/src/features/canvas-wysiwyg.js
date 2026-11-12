@@ -50,6 +50,8 @@ const canvasWysiwyg = (() => {
     { id: 'bold', label: 'B', cls: 'bold', title: 'Bold (Ctrl+B)', active: (e) => e.isActive('bold'), run: (c) => c.toggleBold() },
     { id: 'italic', label: 'I', cls: 'italic', title: 'Italic (Ctrl+I)', active: (e) => e.isActive('italic'), run: (c) => c.toggleItalic() },
     { id: 'strike', label: 'S', cls: 'strike', title: 'Strikethrough', active: (e) => e.isActive('strike'), run: (c) => c.toggleStrike() },
+    { id: 'color', label: 'Color', title: 'Font color', active: (e) => e.isActive('textColor'), run: null },
+    { id: 'color-clear', label: 'Clear color', title: 'Use the default font color', active: () => false, run: (c) => c.unsetTextColor() },
     { id: 'link', label: 'Link', title: 'Link (Ctrl+K)', active: (e) => e.isActive('link'), run: null },
     { sep: true },
     { id: 'h1', label: 'H1', title: 'Heading 1', active: (e) => e.isActive('heading', { level: 1 }), run: (c) => c.toggleHeading({ level: 1 }) },
@@ -161,6 +163,9 @@ const canvasWysiwyg = (() => {
     container.classList.add('cw-host');
     inst.toolbar = make('div', 'cw-toolbar', { role: 'toolbar', 'aria-label': 'Formatting' });
     TOOLS.forEach((tool) => inst.toolbar.appendChild(toolButton(tool)));
+    inst.colorInput = make('input', 'cw-color-input', { type: 'color', value: '#2563eb', title: 'Choose font color', 'aria-label': 'Choose font color' });
+    inst.colorInput.hidden = true;
+    inst.toolbar.appendChild(inst.colorInput);
     inst.contextual = make('div', 'cw-context');
     inst.contextual.hidden = true;
     inst.calloutBar = make('span', 'cw-callout-types');
@@ -542,6 +547,7 @@ const canvasWysiwyg = (() => {
       const editor = inst.editor;
       const id = button.dataset.tool;
       if (id === 'link') { openLink(inst); return; }
+      if (id === 'color') { inst.colorInput.click(); return; }
       if (id === 'image') {
         pickCanvasImage(() => canvasViews[inst.which].id(), ({ fileId, name }) => insertPicture(inst, fileId, name));
         return;
@@ -553,6 +559,7 @@ const canvasWysiwyg = (() => {
       const tool = TOOLS.find((t) => t.id === id) || TABLE_TOOLS.find((t) => t.id === id);
       if (tool && tool.run) tool.run(editor.chain().focus()).run();
     };
+    inst.colorInput.addEventListener('input', () => inst.editor.chain().focus().setTextColor(inst.colorInput.value).run());
     // keep the selection in the page while a button is pressed
     [inst.toolbar, inst.contextual].forEach((bar) => {
       bar.addEventListener('mousedown', (event) => { if (event.target.closest('button')) event.preventDefault(); });

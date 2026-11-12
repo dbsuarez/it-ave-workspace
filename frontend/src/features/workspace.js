@@ -115,7 +115,7 @@ async function handleScheduledFailed({ error }) {
 // Personal sidebar sections
 // ============================================================
 function sidebarLayout() {
-  if (!state.sidebarLayout) state.sidebarLayout = { sections: [] };
+  if (!state.sidebarLayout) state.sidebarLayout = { sections: [], workspaceSections: [], workspaceCollapsed: [], canManageWorkspaceSections: false };
   return state.sidebarLayout;
 }
 
@@ -124,7 +124,7 @@ async function loadSidebarLayout() {
     const res = await api('/api/settings/sidebar');
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not load your sidebar sections');
-    state.sidebarLayout = data.layout || { sections: [] };
+    state.sidebarLayout = data.layout || { sections: [], workspaceSections: [], workspaceCollapsed: [], canManageWorkspaceSections: false };
   } catch (err) {
     console.error('Load sidebar layout error:', err);
   }
@@ -153,7 +153,12 @@ function channelNavItem(channel) {
 // Fills #channel-list: the user's own sections first, then everything else.
 function renderChannelNav() {
   const list = els.channelList;
-  const sections = sidebarLayout().sections.filter((section) => Array.isArray(section.channelIds));
+  const layout = sidebarLayout();
+  const collapsedWorkspace = new Set(layout.workspaceCollapsed || []);
+  const workspaceSections = (layout.workspaceSections || [])
+    .filter((section) => Array.isArray(section.channelIds))
+    .map((section) => ({ ...section, collapsed: collapsedWorkspace.has(section.id), workspace: true }));
+  const sections = [...workspaceSections, ...layout.sections.filter((section) => Array.isArray(section.channelIds))];
   const placed = new Set();
   const paneHome = document.getElementById('pane-home');
   paneHome?.classList.toggle('has-sections', sections.length > 0);
@@ -168,8 +173,9 @@ function renderChannelNav() {
     label.type = 'button';
     label.className = 'nav-label nav-section-label';
     label.dataset.sectionId = section.id;
+    label.dataset.workspaceSection = section.workspace ? '1' : '0';
     label.setAttribute('aria-expanded', String(!section.collapsed));
-    label.innerHTML = `<span class="nav-section-caret">${section.collapsed ? '▸' : '▾'}</span><span class="nav-section-name">${escapeHtml(section.name)}</span>${section.collapsed && unread ? `<span class="unread-badge">${unread}</span>` : ''}`;
+    label.innerHTML = `<span class="nav-section-caret">${section.collapsed ? '▸' : '▾'}</span><span class="nav-section-name">${escapeHtml(section.name)}</span>${section.workspace ? '<span class="nav-section-lock" title="Workspace section" aria-label="Workspace section">◆</span>' : ''}${section.collapsed && unread ? `<span class="unread-badge">${unread}</span>` : ''}`;
     list.appendChild(label);
     if (!section.collapsed) {
       if (!channels.length) {
@@ -204,6 +210,16 @@ function renderChannelNav() {
 
 async function toggleSidebarSection(sectionId) {
   const layout = JSON.parse(JSON.stringify(sidebarLayout()));
+  const workspace = (layout.workspaceSections || []).find((item) => item.id === sectionId);
+  if (workspace) {
+    const collapsed = new Set(layout.workspaceCollapsed || []);
+    if (collapsed.has(sectionId)) collapsed.delete(sectionId); else collapsed.add(sectionId);
+    layout.workspaceCollapsed = [...collapsed];
+    state.sidebarLayout = layout;
+    renderSidebar();
+    try { await saveSidebarLayout(layout); } catch (err) { console.error('Save workspace section collapse error:', err); }
+    return;
+  }
   const section = layout.sections.find((item) => item.id === sectionId);
   if (!section) return;
   section.collapsed = !section.collapsed;
@@ -219,13 +235,27 @@ async function toggleSidebarSection(sectionId) {
 // ---- Organize dialog ----
 function openSidebarModal() {
   state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
+  state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
   renderSidebarModal();
   openSettingsModal(document.getElementById('modal-sidebar'));
 }
 
 function renderSidebarModal() {
   const draft = state.sidebarDraft;
-  const sectionOf = (channelId) => draft.sections.find((section) => section.channelIds.map(Number).includes(Number(channelId)))?.id || '';
+  const workspaceDraft = state.workspaceSidebarDraft || { sections: [] };
+  const canManageWorkspace = Boolean(draft.canManageWorkspaceSections);
+  document.getElementById('workspace-sidebar-editor').hidden = !canManageWorkspace;
+  document.getElementById('workspace-sidebar-sections').innerHTML = workspaceDraft.sections.length
+    ? workspaceDraft.sections.map((section, index) => `
+      <div class="sidebar-section-row workspace" data-workspace-section-index="${index}">
+        <input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-workspace-section-name aria-label="Workspace section name">
+        <button class="btn" type="button" data-workspace-section-move="-1" ${index === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button class="btn" type="button" data-workspace-section-move="1" ${index === workspaceDraft.sections.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+        <button class="btn" type="button" data-workspace-section-delete>Delete</button>
+      </div>`).join('')
+    : '<p class="form-note">No workspace sections yet.</p>';
+  const workspaceSectionOf = (channelId) => workspaceDraft.sections.find((section) => section.channelIds.map(Number).includes(Number(channelId)))?.id || '';
+  const personalSectionOf = (channelId) => draft.sections.find((section) => section.channelIds.map(Number).includes(Number(channelId)))?.id || '';
   document.getElementById('sidebar-sections').innerHTML = draft.sections.length
     ? draft.sections.map((section, index) => `
       <div class="sidebar-section-row" data-section-index="${index}">
@@ -238,9 +268,10 @@ function renderSidebarModal() {
   document.getElementById('sidebar-channels').innerHTML = state.channels.map((channel) => `
     <label class="sidebar-channel-row">
       <span>#${escapeHtml(channel.name)}</span>
-      <select data-channel-section="${channel.id}" aria-label="Section for #${escapeHtml(channel.name)}">
+      <select data-channel-section="${channel.id}" aria-label="Section for #${escapeHtml(channel.name)}"${workspaceSectionOf(channel.id) && !canManageWorkspace ? ' disabled' : ''}>
         <option value="">Channels (no section)</option>
-        ${draft.sections.map((section) => `<option value="${escapeHtml(section.id)}"${sectionOf(channel.id) === section.id ? ' selected' : ''}>${escapeHtml(section.name || 'Untitled')}</option>`).join('')}
+        ${(workspaceSectionOf(channel.id) || canManageWorkspace) ? workspaceDraft.sections.map((section) => `<option value="w:${escapeHtml(section.id)}"${workspaceSectionOf(channel.id) === section.id ? ' selected' : ''}>Workspace: ${escapeHtml(section.name || 'Untitled')}</option>`).join('') : ''}
+        ${!workspaceSectionOf(channel.id) ? draft.sections.map((section) => `<option value="p:${escapeHtml(section.id)}"${personalSectionOf(channel.id) === section.id ? ' selected' : ''}>Mine: ${escapeHtml(section.name || 'Untitled')}</option>`).join('') : ''}
       </select>
     </label>`).join('');
 }
@@ -248,13 +279,22 @@ function renderSidebarModal() {
 // Copies what is typed in the dialog back into the draft before re-rendering.
 function syncSidebarDraft() {
   const draft = state.sidebarDraft;
+  const workspaceDraft = state.workspaceSidebarDraft || { sections: [] };
   document.querySelectorAll('#sidebar-sections [data-section-index]').forEach((row) => {
     const section = draft.sections[Number(row.dataset.sectionIndex)];
     if (section) section.name = row.querySelector('[data-section-name]').value;
   });
   draft.sections.forEach((section) => { section.channelIds = []; });
+  document.querySelectorAll('#workspace-sidebar-sections [data-workspace-section-index]').forEach((row) => {
+    const section = workspaceDraft.sections[Number(row.dataset.workspaceSectionIndex)];
+    if (section) section.name = row.querySelector('[data-workspace-section-name]').value;
+  });
+  workspaceDraft.sections.forEach((section) => { section.channelIds = []; });
   document.querySelectorAll('#sidebar-channels [data-channel-section]').forEach((select) => {
-    const section = draft.sections.find((item) => item.id === select.value);
+    const [scope, id] = String(select.value).split(':');
+    const section = scope === 'w'
+      ? workspaceDraft.sections.find((item) => item.id === id)
+      : draft.sections.find((item) => item.id === id);
     if (section) section.channelIds.push(Number(select.dataset.channelSection));
   });
 }
@@ -268,6 +308,29 @@ function handleSidebarModalClick(event) {
     renderSidebarModal();
     const inputs = document.querySelectorAll('#sidebar-sections [data-section-name]');
     inputs[inputs.length - 1]?.select();
+    return;
+  }
+  if (event.target.closest('#btn-add-workspace-sidebar-section')) {
+    syncSidebarDraft();
+    const sections = state.workspaceSidebarDraft.sections;
+    if (sections.length >= 20) { showToast('You can have at most 20 workspace sections.', 'error'); return; }
+    sections.push({ id: `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: 'New workspace section', channelIds: [] });
+    renderSidebarModal();
+    const inputs = document.querySelectorAll('#workspace-sidebar-sections [data-workspace-section-name]');
+    inputs[inputs.length - 1]?.select();
+    return;
+  }
+  const workspaceRow = event.target.closest('[data-workspace-section-index]');
+  if (workspaceRow) {
+    syncSidebarDraft();
+    const sections = state.workspaceSidebarDraft.sections;
+    const index = Number(workspaceRow.dataset.workspaceSectionIndex);
+    const move = event.target.closest('[data-workspace-section-move]');
+    if (move) {
+      const target = index + Number(move.dataset.workspaceSectionMove);
+      if (target >= 0 && target < sections.length) [sections[index], sections[target]] = [sections[target], sections[index]];
+    } else if (event.target.closest('[data-workspace-section-delete]')) sections.splice(index, 1);
+    renderSidebarModal();
     return;
   }
   const row = event.target.closest('[data-section-index]');
@@ -291,6 +354,12 @@ async function saveSidebarModal(event) {
   event.preventDefault();
   syncSidebarDraft();
   try {
+    if (state.sidebarDraft.canManageWorkspaceSections) {
+      const workspaceRes = await api('/api/settings/sidebar/workspace', { method: 'PUT', body: JSON.stringify({ layout: state.workspaceSidebarDraft }) });
+      const workspaceData = await workspaceRes.json();
+      if (!workspaceRes.ok) throw new Error(workspaceData.error || 'Could not save workspace sections');
+      state.sidebarDraft.workspaceSections = workspaceData.layout.sections;
+    }
     await saveSidebarLayout(state.sidebarDraft);
     closeSettingsModal();
     showToast('Sidebar sections saved.', 'success');
@@ -395,7 +464,15 @@ async function channelResourceHtml(tab, channelId) {
     const data = await fetchJson(`/api/canvases?channelId=${channelId}`);
     const canvases = data.canvases || [];
     return canvases.length
-      ? canvases.map((canvas) => row(`${canvas.shared ? 'data-resource-shared-canvas' : 'data-resource-canvas'}="${canvas.id}"`, escapeHtml(canvas.title || 'Untitled canvas'), `${canvas.shared ? 'Shared canvas · ' : ''}Updated ${escapeHtml(shortTime(canvas.updatedAt))}`)).join('')
+      ? canvases.map((canvas) => {
+        const owner = canvas.shared && canvas.owner;
+        const ownerHtml = owner ? `<span class="canvas-owner" title="${escapeHtml(owner.name || owner.username || 'Canvas owner')}">
+          <span class="avatar-mini canvas-owner-avatar" data-avatar-user="${owner.id}" style="background:${escapeHtml(owner.avatarColor || '#64748b')}">${escapeHtml((owner.name || owner.username || '?').charAt(0).toUpperCase())}</span>
+          <span class="sr-only">Owned by ${escapeHtml(owner.name || owner.username || 'former user')}</span>
+        </span>` : '';
+        const meta = `${canvas.shared ? `Shared canvas ${ownerHtml} · ` : ''}Updated ${escapeHtml(shortTime(canvas.updatedAt))}`;
+        return row(`${canvas.shared ? 'data-resource-shared-canvas' : 'data-resource-canvas'}="${canvas.id}"`, escapeHtml(canvas.title || 'Untitled canvas'), meta);
+      }).join('')
       : emptyRecordMarkup('No canvases in this channel', 'Create one from the Canvas section.');
   }
   if (tab === 'lists') {

@@ -996,6 +996,7 @@ function connectSocket() {
       }
     }, 400);
   });
+  state.socket.on('workspace_sections_updated', () => loadSidebarLayout());
   state.socket.on('channel_access_revoked', async ({ channelId }) => {
     state.channels = state.channels.filter((channel) => Number(channel.id) !== Number(channelId));
     delete state.messages[channelId];

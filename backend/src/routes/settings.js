@@ -1,6 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
+const { can, requirePermission } = require('../permissions');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -162,14 +163,42 @@ function normalizeSidebarLayout(input) {
     }
     return { id, name, channelIds, collapsed: Boolean(section.collapsed) };
   });
-  return { sections };
+  const workspaceCollapsed = Array.isArray(input.workspaceCollapsed)
+    ? [...new Set(input.workspaceCollapsed.filter((id) => typeof id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(id)))]
+    : [];
+  return { sections, workspaceCollapsed };
+}
+
+function normalizeWorkspaceSidebarLayout(input) {
+  const normalized = normalizeSidebarLayout(input);
+  return { sections: normalized.sections.map(({ id, name, channelIds }) => ({ id, name, channelIds })) };
+}
+
+function withoutLockedChannels(layout, workspaceLayout) {
+  const locked = new Set((workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number));
+  return {
+    sections: (layout.sections || []).map((section) => ({
+      ...section,
+      channelIds: (section.channelIds || []).filter((id) => !locked.has(Number(id))),
+    })),
+    workspaceCollapsed: layout.workspaceCollapsed || [],
+  };
 }
 
 router.get('/sidebar', async (req, res) => {
   try {
-    const result = await query('SELECT sidebar_layout FROM users WHERE id = $1', [req.user.userId]);
-    const stored = result.rows[0]?.sidebar_layout;
-    res.json({ layout: stored && Array.isArray(stored.sections) ? stored : { sections: [] } });
+    const [userResult, workspaceResult, canManageWorkspaceSections] = await Promise.all([
+      query('SELECT sidebar_layout FROM users WHERE id = $1', [req.user.userId]),
+      query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1'),
+      can(query, req.user.userId, 'manage_workspace'),
+    ]);
+    const stored = userResult.rows[0]?.sidebar_layout;
+    const workspaceLayout = workspaceResult.rows[0]?.workspace_sidebar_layout || { sections: [] };
+    const personal = withoutLockedChannels(
+      stored && Array.isArray(stored.sections) ? { sections: stored.sections, workspaceCollapsed: stored.workspaceCollapsed || [] } : { sections: [], workspaceCollapsed: [] },
+      workspaceLayout
+    );
+    res.json({ layout: { ...personal, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections } });
   } catch (err) {
     console.error('Get sidebar layout error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -179,8 +208,13 @@ router.get('/sidebar', async (req, res) => {
 router.put('/sidebar', async (req, res) => {
   try {
     const layout = normalizeSidebarLayout(req.body?.layout);
+    const workspaceLayout = (await query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1')).rows[0]?.workspace_sidebar_layout || { sections: [] };
+    const locked = new Set((workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number));
+    if (layout.sections.some((section) => section.channelIds.some((id) => locked.has(Number(id))))) {
+      return res.status(400).json({ error: 'Workspace section channels cannot be moved into personal sections' });
+    }
     await query('UPDATE users SET sidebar_layout = $1 WHERE id = $2', [JSON.stringify(layout), req.user.userId]);
-    res.json({ layout });
+    res.json({ layout: { ...layout, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections: await can(query, req.user.userId, 'manage_workspace') } });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Save sidebar layout error:', err);
@@ -188,8 +222,26 @@ router.put('/sidebar', async (req, res) => {
   }
 });
 
+router.put('/sidebar/workspace', async (req, res) => {
+  try {
+    await requirePermission(query, req.user.userId, 'manage_workspace');
+    const layout = normalizeWorkspaceSidebarLayout(req.body?.layout);
+    await query(
+      'UPDATE moderation_settings SET workspace_sidebar_layout = $1, updated_by = $2, updated_at = NOW() WHERE id = 1',
+      [JSON.stringify(layout), req.user.userId]
+    );
+    req.io?.emit('workspace_sections_updated');
+    res.json({ layout });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Save workspace sidebar layout error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
 module.exports.normalizeSidebarLayout = normalizeSidebarLayout;
+module.exports.normalizeWorkspaceSidebarLayout = normalizeWorkspaceSidebarLayout;
 module.exports.mergeNotificationPrefs = mergeNotificationPrefs;
 module.exports.isSingleEmojiOrEmpty = isSingleEmojiOrEmpty;
 module.exports.NOTIFICATION_DEFAULTS = NOTIFICATION_DEFAULTS;

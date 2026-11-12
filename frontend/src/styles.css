@@ -4099,6 +4099,11 @@ body.account-guest [data-create="channel"] {
   white-space: nowrap;
 }
 
+.nav-section-lock {
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
 .sidebar-modal-body {
   max-height: 60vh;
   overflow-y: auto;
@@ -4115,6 +4120,25 @@ body.account-guest [data-create="channel"] {
 .sidebar-section-row input {
   flex: 1;
   min-width: 0;
+}
+
+.sidebar-section-row.workspace {
+  padding-left: 8px;
+  border-left: 3px solid var(--primary);
+}
+
+.canvas-owner {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.canvas-owner-avatar {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  font-size: 9px;
+  cursor: help;
 }
 
 .sidebar-channel-row span {

@@ -761,12 +761,18 @@
       </div>
       <form id="sidebar-form">
         <div class="modal-body sidebar-modal-body">
+          <div id="workspace-sidebar-editor" hidden>
+            <h4 class="modal-section-title">Workspace sections</h4>
+            <p class="form-note">These sections are shown to everyone. Only people with Workspace settings permission can change them.</p>
+            <div id="workspace-sidebar-sections"></div>
+            <button class="btn" type="button" id="btn-add-workspace-sidebar-section">Add workspace section</button>
+          </div>
           <h4 class="modal-section-title">Your sections</h4>
           <div id="sidebar-sections"></div>
           <button class="btn" type="button" id="btn-add-sidebar-section">Add section</button>
           <h4 class="modal-section-title">Channels</h4>
           <div id="sidebar-channels"></div>
-          <p class="form-note">Sections are personal. Other people do not see them.</p>
+          <p class="form-note">Your sections are personal. Workspace sections are locked and shared with everyone.</p>
         </div>
         <div class="modal-footer">
           <button class="btn" type="button" id="btn-cancel-sidebar">Cancel</button>

@@ -325,6 +325,7 @@ module.exports = [
   'ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS prelaunch_password BOOLEAN NOT NULL DEFAULT false',
   // the go-live switch (src/launch.js)
   'ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS go_live BOOLEAN NOT NULL DEFAULT false',
+  `ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS workspace_sidebar_layout JSONB NOT NULL DEFAULT '{"sections": []}'::jsonb`,
 
   // Employee management: HR role, employee records and departments
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hr BOOLEAN NOT NULL DEFAULT false',

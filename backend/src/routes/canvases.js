@@ -52,8 +52,12 @@ router.get('/', authenticateToken, async (req, res) => {
     );
     // canvases someone shared into this channel (from the Canvas section) belong in the channel's list too
     const shared = await query(
-      `SELECT c.id, c.title, c.created_at, c.updated_at, g.role
+      `SELECT c.id, c.title, c.created_at, c.updated_at, g.role,
+              u.id AS owner_id, u.username AS owner_username, u.first_name AS owner_first_name,
+              u.middle_name AS owner_middle_name, u.last_name AS owner_last_name,
+              u.avatar_color AS owner_avatar_color, u.photo_updated_at AS owner_photo_updated_at
        FROM canvas_channel_grants g JOIN canvases c ON c.id = g.canvas_id
+       LEFT JOIN users u ON u.id = c.owner_id
        WHERE g.channel_id = $1 AND c.kind = 'standalone' AND c.deleted_at IS NULL`,
       [channelId]
     );
@@ -73,6 +77,13 @@ router.get('/', authenticateToken, async (req, res) => {
         updatedAt: canvas.updated_at,
         shared: true,
         role: canvas.role,
+        owner: canvas.owner_id ? {
+          id: canvas.owner_id,
+          username: canvas.owner_username,
+          name: [canvas.owner_first_name, canvas.owner_middle_name, canvas.owner_last_name].filter(Boolean).join(' ') || canvas.owner_username,
+          avatarColor: /^#[0-9a-f]{6}$/i.test(canvas.owner_avatar_color || '') ? canvas.owner_avatar_color : '',
+          photoVersion: canvas.owner_photo_updated_at ? new Date(canvas.owner_photo_updated_at).getTime() : null,
+        } : null,
       })),
     ].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     res.json({ canvases });

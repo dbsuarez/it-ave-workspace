@@ -9,7 +9,7 @@
 //   - callouts              "> [!info] Title" then "> body" lines (info, note, tip, warning, danger)
 //   - pictures              "![name](file:<id>)" (only canvas files; remote images are never loaded)
 //   - tables, headings, lists, quotes, code, dividers: plain GitHub-style Markdown
-const { Editor, Node, mergeAttributes } = require('@tiptap/core');
+const { Editor, Node, Mark, mergeAttributes } = require('@tiptap/core');
 const { NodeSelection, Plugin } = require('@tiptap/pm/state');
 const { Decoration, DecorationSet } = require('@tiptap/pm/view');
 const { StarterKit } = require('@tiptap/starter-kit');
@@ -18,6 +18,51 @@ const { TaskList, TaskItem } = require('@tiptap/extension-list');
 const { Placeholder } = require('@tiptap/extensions');
 const { Image } = require('@tiptap/extension-image');
 const { Markdown } = require('@tiptap/markdown');
+
+const COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+// Markdown has no native font-color syntax. Keep the color in a small, explicit span that survives
+// source mode and exports without allowing arbitrary style or HTML attributes.
+const TextColor = Mark.create({
+  name: 'textColor',
+  addAttributes() {
+    return { color: { default: '#000000' } };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-color]', getAttrs: (el) => ({ color: COLOR_RE.test(el.getAttribute('data-color') || '') ? el.getAttribute('data-color').toLowerCase() : '#000000' }) }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const color = COLOR_RE.test(HTMLAttributes.color || '') ? HTMLAttributes.color.toLowerCase() : '#000000';
+    return ['span', { 'data-color': color, style: `color: ${color}` }, 0];
+  },
+  markdownTokenizer: {
+    name: 'textColor',
+    level: 'inline',
+    start: (src) => src.toLowerCase().indexOf('<span data-color='),
+    tokenize(src, _tokens, lexer) {
+      const open = /^<span data-color=["'](#[0-9a-f]{6})["']>/i.exec(src);
+      if (!open) return undefined;
+      const close = src.toLowerCase().indexOf('</span>', open[0].length);
+      if (close < 0) return undefined;
+      const text = src.slice(open[0].length, close);
+      if (!text) return undefined;
+      return { type: 'textColor', raw: src.slice(0, close + 7), color: open[1].toLowerCase(), tokens: lexer.inlineTokens(text) };
+    },
+  },
+  parseMarkdown(token, helpers) {
+    return helpers.applyMark('textColor', helpers.parseInline(token.tokens || []), { color: token.color });
+  },
+  renderMarkdown(node, helpers) {
+    const color = COLOR_RE.test(node.attrs?.color || '') ? node.attrs.color.toLowerCase() : '#000000';
+    return `<span data-color="${color}">${helpers.renderChildren(node)}</span>`;
+  },
+  addCommands() {
+    return {
+      setTextColor: (color) => ({ commands }) => COLOR_RE.test(color || '') && commands.setMark(this.name, { color: color.toLowerCase() }),
+      unsetTextColor: () => ({ commands }) => commands.unsetMark(this.name),
+    };
+  },
+});
 
 const CALLOUT_TYPES = ['info', 'note', 'tip', 'warning', 'danger'];
 const CALLOUT_START = new RegExp(`^> \\[!(${CALLOUT_TYPES.join('|')})\\][ \\t]*([^\\n]*)`, 'i');
@@ -480,6 +525,7 @@ function buildExtensions({ placeholder } = {}) {
     Callout,
     CanvasImage.configure({ inline: true }),
     Mention,
+    TextColor,
     Placeholder.configure({ placeholder: placeholder || "Write something, or press / for commands" }),
     Markdown,
   ];

@@ -19,7 +19,44 @@ const CV_CHECK = /^(\s*(?:[-*+]|\d+[.)])\s+)\[( |x|X)\](\s.*|)$/;
 const CV_CALLOUT_ICON = { info: 'i', note: '✎', tip: '✦', warning: '!', danger: '⛔' };
 
 function cvInline(text, ctx) {
-  return cvFormat.inline(text, ctx || {});
+  const source = String(text || '');
+  const color = /<span data-color=["'](#[0-9a-f]{6})["']>(.*?)<\/span>/gi;
+  let html = '';
+  let at = 0;
+  let match;
+  while ((match = color.exec(source))) {
+    html += cvFormat.inline(source.slice(at, match.index), ctx || {});
+    const safeColor = match[1].toLowerCase();
+    html += `<span data-color="${safeColor}" style="color:${safeColor}">${cvFormat.inline(match[2], ctx || {})}</span>`;
+    at = match.index + match[0].length;
+  }
+  return html + cvFormat.inline(source.slice(at), ctx || {});
+}
+
+function cvTextBlock(text, ctx) {
+  const lines = String(text || '').split('\n');
+  const out = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (/^>\s?/.test(lines[index])) {
+      const quoted = [];
+      while (index < lines.length && /^>\s?/.test(lines[index])) quoted.push(cvInline(lines[index++].replace(/^>\s?/, ''), ctx));
+      out.push(`<blockquote class="message-quote">${quoted.join('<br>')}</blockquote>`);
+    } else if (/^[-*]\s+\S/.test(lines[index])) {
+      const items = [];
+      while (index < lines.length && /^[-*]\s+\S/.test(lines[index])) items.push(`<li>${cvInline(lines[index++].replace(/^[-*]\s+/, ''), ctx)}</li>`);
+      out.push(`<ul class="message-list">${items.join('')}</ul>`);
+    } else if (/^\d{1,3}[.)]\s+\S/.test(lines[index])) {
+      const items = [];
+      while (index < lines.length && /^\d{1,3}[.)]\s+\S/.test(lines[index])) items.push(`<li>${cvInline(lines[index++].replace(/^\d{1,3}[.)]\s+/, ''), ctx)}</li>`);
+      out.push(`<ol class="message-list">${items.join('')}</ol>`);
+    } else {
+      const plain = [];
+      while (index < lines.length && !/^>\s?/.test(lines[index]) && !/^[-*]\s+\S/.test(lines[index]) && !/^\d{1,3}[.)]\s+\S/.test(lines[index])) plain.push(cvInline(lines[index++], ctx));
+      out.push(plain.join('\n'));
+    }
+  }
+  return out.join('');
 }
 
 function cvSplitRow(line) {
@@ -115,10 +152,10 @@ function renderCanvasSection(section, ctx = {}) {
     case 'divider': html = '<hr class="cv-hr">'; break;
     case 'quote': {
       const callout = CV_CALLOUT.exec(text.split('\n')[0]);
-      html = callout ? cvCalloutHtml(callout, text, ctx) : cvFormat.block(text, ctx);
+      html = callout ? cvCalloutHtml(callout, text, ctx) : cvTextBlock(text, ctx);
       break;
     }
-    case 'list': html = cvFormat.block(text, ctx); break;
+    case 'list': html = cvTextBlock(text, ctx); break;
     default: html = cvParagraphHtml(text, ctx);
   }
   return `<div class="cv-block cv-${cvFormat.escape(section.type)}" data-section-id="${cvFormat.escape(section.id)}">${html}</div>`;

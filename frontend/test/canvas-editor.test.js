@@ -35,6 +35,19 @@ test('plain Markdown blocks come back unchanged', () => {
   }
 });
 
+test('font colors survive Markdown round trips and reject arbitrary style markup', () => {
+  const md = 'Normal <span data-color="#c2410c">orange and **bold**</span> normal.\n';
+  assert.equal(roundTrip(md), md);
+  const editor = open('Color me');
+  editor.chain().selectAll().setTextColor('#2563eb').run();
+  assert.equal(getCanvasMarkdown(editor), '<span data-color="#2563eb">Color me</span>\n');
+  assert.equal(editor.view.dom.querySelector('[data-color]').style.color, 'rgb(37, 99, 235)');
+  editor.chain().selectAll().unsetTextColor().run();
+  assert.equal(getCanvasMarkdown(editor), 'Color me\n');
+  editor.destroy();
+  assert.ok(!roundTrip('<span style="color:red" onclick="bad()">unsafe</span>\n').includes('onclick'));
+});
+
 test('a second round trip changes nothing (the saved form is stable)', () => {
   const md = '# Plan\n\n> [!info] Goal\n> Ship it.\n\n## Tasks\n\n- [ ] First\n- [x] Second\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n![pic](file:3)\n';
   const once = roundTrip(md);

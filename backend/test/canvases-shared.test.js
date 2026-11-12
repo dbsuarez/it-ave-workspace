@@ -24,7 +24,7 @@ test.before(async () => {
   process.env.JWT_SECRET = 'canvases-shared-secret';
   config = require('../src/config');
   pool = require('../src/db').pool;
-  const user = async (name) => (await admin.query('INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id', [name, `${name}@x.test`, 'x'])).rows[0].id;
+  const user = async (name) => (await admin.query("INSERT INTO users (username, email, password_hash, first_name, last_name, avatar_color, photo_updated_at) VALUES ($1, $2, $3, 'Canvas', 'Owner', '#123456', NOW()) RETURNING id", [name, `${name}@x.test`, 'x'])).rows[0].id;
   ids.owner = await user('cowner');
   ids.member = await user('cmember');
   ids.channel = (await admin.query("INSERT INTO channels (name) VALUES ('shared-room') RETURNING id")).rows[0].id;
@@ -59,5 +59,13 @@ test('the channel\'s Canvases list includes canvases shared into it, not deleted
   assert.equal(mine.status, 200);
   assert.deepEqual(mine.json.canvases.map((c) => [c.title, c.shared === true]), [['Shared plan', true]]);
   assert.equal(mine.json.canvases[0].id, ids.canvas);
+  assert.deepEqual(mine.json.canvases[0].owner, {
+    id: ids.owner,
+    username: 'cowner',
+    name: 'Canvas Owner',
+    avatarColor: '#123456',
+    photoVersion: mine.json.canvases[0].owner.photoVersion,
+  });
+  assert.equal(typeof mine.json.canvases[0].owner.photoVersion, 'number');
   assert.equal((await get(ids.member, ids.other)).status, 403, 'not a member of the other channel');
 });
