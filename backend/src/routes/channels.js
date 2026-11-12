@@ -10,7 +10,7 @@ const { ensureNotGuest } = require('../guests');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.available_to_all, c.created_at, c.created_by,
              COUNT(cm.user_id)::int AS member_count
       FROM channels c
       LEFT JOIN channel_members cm ON c.id = cm.channel_id
@@ -30,6 +30,7 @@ router.get('/', authenticateToken, async (req, res) => {
         name: ch.name,
         topic: ch.topic,
         isPrivate: ch.is_private,
+        availableToAll: ch.available_to_all,
         memberCount: ch.member_count,
         createdAt: ch.created_at,
         createdBy: ch.created_by,
@@ -45,7 +46,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/my', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.available_to_all, c.created_at, c.created_by,
              COUNT(DISTINCT cm2.user_id)::int AS member_count,
              COUNT(DISTINCT m.id)::int AS unread_count
       FROM channels c
@@ -59,7 +60,7 @@ router.get('/my', authenticateToken, async (req, res) => {
              '-infinity'::timestamptz
            )
        AND m.user_id != $1
-      WHERE cm.user_id = $1 OR EXISTS (
+      WHERE cm.user_id = $1 OR c.available_to_all = TRUE OR EXISTS (
         SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE
       )
       GROUP BY c.id
@@ -72,6 +73,7 @@ router.get('/my', authenticateToken, async (req, res) => {
         name: ch.name,
         topic: ch.topic,
         isPrivate: ch.is_private,
+        availableToAll: ch.available_to_all,
         memberCount: ch.member_count,
         createdAt: ch.created_at,
         createdBy: ch.created_by,
@@ -153,11 +155,51 @@ router.patch('/:channelId', authenticateToken, async (req, res) => {
   }
 });
 
+// Keep a channel in every employee's workspace. Superadmin only.
+router.patch('/:channelId/availability', authenticateToken, async (req, res) => {
+  try {
+    const channelId = Number(req.params.channelId);
+    const availableToAll = req.body?.availableToAll;
+    if (!Number.isInteger(channelId) || typeof availableToAll !== 'boolean') {
+      return res.status(400).json({ error: 'A valid channel and availableToAll value are required' });
+    }
+    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
+    if (!actor?.is_superadmin) return res.status(403).json({ error: 'Only the Superadmin can change channel availability' });
+    const result = await query(
+      `UPDATE channels SET available_to_all = $1 WHERE id = $2
+       RETURNING id, available_to_all`,
+      [availableToAll, channelId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Channel not found' });
+    if (availableToAll) {
+      await query(
+        `INSERT INTO channel_members (channel_id, user_id)
+         SELECT $1, id FROM users WHERE account_type = 'member' AND deactivated_at IS NULL
+         ON CONFLICT DO NOTHING`,
+        [channelId]
+      );
+    }
+    req.io?.emit?.('channel_availability_updated', { channelId, availableToAll });
+    res.json({ channelId, availableToAll });
+  } catch (err) {
+    console.error('Update channel availability error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Create a new channel
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, topic, isPrivate } = req.body;
+    const { name, topic, isPrivate, availableToAll } = req.body;
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
+
+    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
+    if (availableToAll && !actor?.is_superadmin) {
+      return res.status(403).json({ error: 'Only the Superadmin can make a channel available to all' });
+    }
+    if (availableToAll && isPrivate) {
+      return res.status(400).json({ error: 'A private channel cannot be available to all' });
+    }
 
     if (!name) {
       return res.status(400).json({ error: 'Channel name is required' });
@@ -172,17 +214,28 @@ router.post('/', authenticateToken, async (req, res) => {
     const policy = await query('SELECT default_slowmode_seconds FROM moderation_settings WHERE id = 1');
     const slowmode = policy.rows[0] && Number.isInteger(policy.rows[0].default_slowmode_seconds) ? policy.rows[0].default_slowmode_seconds : 5;
     const result = await query(
-      `INSERT INTO channels (name, topic, is_private, created_by, slowmode_seconds) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, name, topic, is_private, created_at`,
-      [name, topic || '', isPrivate || false, req.user.userId, slowmode]
+      `INSERT INTO channels (name, topic, is_private, available_to_all, created_by, slowmode_seconds)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, topic, is_private, available_to_all, created_at`,
+      [name, topic || '', isPrivate || false, Boolean(availableToAll), req.user.userId, slowmode]
     );
 
     const channel = result.rows[0];
 
-    // Add creator as member
+    if (channel.available_to_all) {
+      await query(
+        `INSERT INTO channel_members (channel_id, user_id)
+         SELECT $1, id FROM users
+         WHERE account_type = 'member' AND deactivated_at IS NULL
+         ON CONFLICT DO NOTHING`,
+        [channel.id]
+      );
+    }
+
+    // Add creator as moderator (upgrading the all-user membership when needed).
     await query(
-      "INSERT INTO channel_members (channel_id, user_id, role) VALUES ($1, $2, 'moderator')",
+      `INSERT INTO channel_members (channel_id, user_id, role) VALUES ($1, $2, 'moderator')
+       ON CONFLICT (channel_id, user_id) DO UPDATE SET role = 'moderator'`,
       [channel.id, req.user.userId]
     );
 
@@ -193,6 +246,7 @@ router.post('/', authenticateToken, async (req, res) => {
         name: channel.name,
         topic: channel.topic,
         isPrivate: channel.is_private,
+        availableToAll: channel.available_to_all,
         createdAt: channel.created_at,
       },
     });
@@ -337,7 +391,7 @@ router.get('/:channelId/read-receipts', authenticateToken, async (req, res) => {
 
     const latestMessageId = latestMessageResult.rows[0].id;
     const result = await query(
-      `SELECT u.id, u.username, u.avatar_color, mrr.read_at
+      `SELECT u.id, u.username, u.first_name, u.middle_name, u.last_name, u.avatar_color, mrr.read_at
        FROM message_read_receipts mrr
        JOIN users u ON u.id = mrr.user_id
        WHERE mrr.message_id = $1
@@ -349,6 +403,7 @@ router.get('/:channelId/read-receipts', authenticateToken, async (req, res) => {
       users: result.rows.map((u) => ({
         id: u.id,
         username: u.username,
+        name: [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' ') || u.username,
         avatarColor: u.avatar_color,
         readAt: u.read_at,
       })),

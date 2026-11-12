@@ -25,6 +25,15 @@ const emitted = [];
 const API = () => (sql, params = []) => {
   queryCalls.push({ sql, params });
   if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
+  if (sql.includes('SELECT is_superadmin FROM users WHERE id = $1')) {
+    return { rows: [{ is_superadmin: superadmins.has(Number(params[0])) }] };
+  }
+  if (sql.includes('SELECT default_slowmode_seconds')) return { rows: [{ default_slowmode_seconds: 5 }] };
+  if (sql.includes('INSERT INTO channels')) {
+    const channel = { id: 43, name: params[0], topic: params[1], is_private: params[2], available_to_all: params[3], created_by: params[4] };
+    channels.set(channel.id, channel);
+    return { rows: [channel] };
+  }
   if (sql.includes('CROSS JOIN users u')) {
     const id = Number(params[1]);
     return { rows: [{}] }; // all test users are members; superadmin ok
@@ -154,4 +163,19 @@ test('emits channel_topic_updated when the topic changes', async () => {
   assert.ok(update, 'should emit channel_topic_updated');
   assert.equal(update.room, 'channel_42');
   assert.equal(update.payload.topic, 'broadcast test');
+});
+
+test('only the superadmin can create a channel that is available to all', async () => {
+  const create = (userId, name) => fetch(`${baseUrl}/api/channels`, {
+    method: 'POST',
+    headers: { ...authHeader(userId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, availableToAll: true }),
+  });
+  assert.equal((await create(7, 'staff-only')).status, 403);
+  queryCalls.length = 0;
+  const response = await create(99, 'everyone');
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).channel.availableToAll, true);
+  assert.ok(queryCalls.some(({ sql }) => sql.includes("WHERE account_type = 'member'") && sql.includes('INSERT INTO channel_members')),
+    'current employees are added to an available-to-all channel');
 });

@@ -628,6 +628,10 @@
           <label>Topic (optional)</label>
           <input type="text" id="new-channel-topic" placeholder="What is this channel about?">
         </div>
+        <label class="admin-inline-check" id="new-channel-available-row" hidden>
+          <input type="checkbox" id="new-channel-available-all">
+          <span><strong>Available to all</strong><small>Keep this channel in every current and future employee's sidebar.</small></span>
+        </label>
       </div>
       <div class="modal-footer">
         <button class="btn" id="btn-cancel-create">Cancel</button>
@@ -763,7 +767,7 @@
         <div class="modal-body sidebar-modal-body">
           <div id="workspace-sidebar-editor" hidden>
             <h4 class="modal-section-title">Workspace sections</h4>
-            <p class="form-note">These sections are shown to everyone. Only people with Workspace settings permission can change them.</p>
+            <p class="form-note">Drag sections to reorder them. Drag a channel onto a section to place it there for everyone.</p>
             <div id="workspace-sidebar-sections"></div>
             <button class="btn" type="button" id="btn-add-workspace-sidebar-section">Add workspace section</button>
           </div>
@@ -772,7 +776,7 @@
           <button class="btn" type="button" id="btn-add-sidebar-section">Add section</button>
           <h4 class="modal-section-title">Channels</h4>
           <div id="sidebar-channels"></div>
-          <p class="form-note">Your sections are personal. Workspace sections are locked and shared with everyone.</p>
+          <p class="form-note">Drag channels onto sections, or into this Channels area to remove them from a section. Your sections are personal; workspace sections are locked and shared with everyone.</p>
         </div>
         <div class="modal-footer">
           <button class="btn" type="button" id="btn-cancel-sidebar">Cancel</button>

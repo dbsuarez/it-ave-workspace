@@ -236,6 +236,7 @@ async function toggleSidebarSection(sectionId) {
 function openSidebarModal() {
   state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
   state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
+  state.sidebarAvailabilityDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, Boolean(channel.availableToAll)]));
   renderSidebarModal();
   openSettingsModal(document.getElementById('modal-sidebar'));
 }
@@ -248,9 +249,8 @@ function renderSidebarModal() {
   document.getElementById('workspace-sidebar-sections').innerHTML = workspaceDraft.sections.length
     ? workspaceDraft.sections.map((section, index) => `
       <div class="sidebar-section-row workspace" data-workspace-section-index="${index}">
+        <span class="sidebar-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">⋮⋮</span>
         <input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-workspace-section-name aria-label="Workspace section name">
-        <button class="btn" type="button" data-workspace-section-move="-1" ${index === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
-        <button class="btn" type="button" data-workspace-section-move="1" ${index === workspaceDraft.sections.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
         <button class="btn" type="button" data-workspace-section-delete>Delete</button>
       </div>`).join('')
     : '<p class="form-note">No workspace sections yet.</p>';
@@ -259,20 +259,21 @@ function renderSidebarModal() {
   document.getElementById('sidebar-sections').innerHTML = draft.sections.length
     ? draft.sections.map((section, index) => `
       <div class="sidebar-section-row" data-section-index="${index}">
+        <span class="sidebar-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">⋮⋮</span>
         <input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-section-name aria-label="Section name">
-        <button class="btn" type="button" data-section-move="-1" ${index === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
-        <button class="btn" type="button" data-section-move="1" ${index === draft.sections.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
         <button class="btn" type="button" data-section-delete>Delete</button>
       </div>`).join('')
     : '<p class="form-note">No sections yet. Add one, then choose which channels go in it.</p>';
   document.getElementById('sidebar-channels').innerHTML = state.channels.map((channel) => `
-    <label class="sidebar-channel-row">
+    <label class="sidebar-channel-row" data-sidebar-channel-id="${channel.id}">
+      <span class="sidebar-drag-handle" draggable="true" title="Drag onto a section" aria-label="Drag onto a section">⋮⋮</span>
       <span>#${escapeHtml(channel.name)}</span>
       <select data-channel-section="${channel.id}" aria-label="Section for #${escapeHtml(channel.name)}"${workspaceSectionOf(channel.id) && !canManageWorkspace ? ' disabled' : ''}>
         <option value="">Channels (no section)</option>
         ${(workspaceSectionOf(channel.id) || canManageWorkspace) ? workspaceDraft.sections.map((section) => `<option value="w:${escapeHtml(section.id)}"${workspaceSectionOf(channel.id) === section.id ? ' selected' : ''}>Workspace: ${escapeHtml(section.name || 'Untitled')}</option>`).join('') : ''}
         ${!workspaceSectionOf(channel.id) ? draft.sections.map((section) => `<option value="p:${escapeHtml(section.id)}"${personalSectionOf(channel.id) === section.id ? ' selected' : ''}>Mine: ${escapeHtml(section.name || 'Untitled')}</option>`).join('') : ''}
       </select>
+      ${state.user?.isSuperadmin ? `<label class="sidebar-available-all"><input type="checkbox" data-channel-available-all="${channel.id}"${state.sidebarAvailabilityDraft[channel.id] ? ' checked' : ''}> Available to all</label>` : ''}
     </label>`).join('');
 }
 
@@ -297,6 +298,75 @@ function syncSidebarDraft() {
       : draft.sections.find((item) => item.id === id);
     if (section) section.channelIds.push(Number(select.dataset.channelSection));
   });
+  document.querySelectorAll('#sidebar-channels [data-channel-available-all]').forEach((input) => {
+    state.sidebarAvailabilityDraft[input.dataset.channelAvailableAll] = input.checked;
+  });
+}
+
+function moveSidebarDraftItem(kind, fromIndex, toIndex) {
+  const sections = kind === 'workspace' ? state.workspaceSidebarDraft.sections : state.sidebarDraft.sections;
+  if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex === toIndex
+      || fromIndex < 0 || toIndex < 0 || fromIndex >= sections.length || toIndex >= sections.length) return;
+  const [section] = sections.splice(fromIndex, 1);
+  sections.splice(toIndex, 0, section);
+}
+
+function assignSidebarDraftChannel(channelId, target) {
+  [...state.sidebarDraft.sections, ...state.workspaceSidebarDraft.sections].forEach((section) => {
+    section.channelIds = section.channelIds.filter((id) => Number(id) !== Number(channelId));
+  });
+  if (target) target.channelIds.push(Number(channelId));
+}
+
+function handleSidebarDragStart(event) {
+  syncSidebarDraft();
+  const workspaceRow = event.target.closest('[data-workspace-section-index]');
+  const personalRow = event.target.closest('[data-section-index]');
+  const channelRow = event.target.closest('[data-sidebar-channel-id]');
+  const payload = workspaceRow
+    ? { type: 'section', kind: 'workspace', index: Number(workspaceRow.dataset.workspaceSectionIndex) }
+    : personalRow
+      ? { type: 'section', kind: 'personal', index: Number(personalRow.dataset.sectionIndex) }
+      : channelRow ? { type: 'channel', id: Number(channelRow.dataset.sidebarChannelId) } : null;
+  if (!payload) return;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('application/x-itavenue-sidebar', JSON.stringify(payload));
+  (workspaceRow || personalRow || channelRow).classList.add('dragging');
+}
+
+function handleSidebarDragOver(event) {
+  const target = event.target.closest('[data-workspace-section-index], [data-section-index], #sidebar-channels');
+  if (!target) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  target.classList.add('drag-over');
+}
+
+function handleSidebarDrop(event) {
+  const target = event.target.closest('[data-workspace-section-index], [data-section-index], #sidebar-channels');
+  if (!target) return;
+  event.preventDefault();
+  let payload;
+  try { payload = JSON.parse(event.dataTransfer.getData('application/x-itavenue-sidebar')); } catch (_) { return; }
+  if (payload.type === 'section') {
+    const kind = target.hasAttribute('data-workspace-section-index') ? 'workspace'
+      : target.hasAttribute('data-section-index') ? 'personal' : null;
+    if (kind !== payload.kind) return;
+    const indexKey = kind === 'workspace' ? 'workspaceSectionIndex' : 'sectionIndex';
+    moveSidebarDraftItem(kind, payload.index, Number(target.dataset[indexKey]));
+  } else if (payload.type === 'channel') {
+    const section = target.hasAttribute('data-workspace-section-index')
+      ? state.workspaceSidebarDraft.sections[Number(target.dataset.workspaceSectionIndex)]
+      : target.hasAttribute('data-section-index')
+        ? state.sidebarDraft.sections[Number(target.dataset.sectionIndex)] : null;
+    assignSidebarDraftChannel(payload.id, section);
+  }
+  renderSidebarModal();
+}
+
+function clearSidebarDragState() {
+  document.querySelectorAll('#modal-sidebar .dragging, #modal-sidebar .drag-over')
+    .forEach((element) => element.classList.remove('dragging', 'drag-over'));
 }
 
 function handleSidebarModalClick(event) {
@@ -354,6 +424,16 @@ async function saveSidebarModal(event) {
   event.preventDefault();
   syncSidebarDraft();
   try {
+    if (state.user?.isSuperadmin) {
+      const changed = state.channels.filter((channel) => Boolean(channel.availableToAll) !== Boolean(state.sidebarAvailabilityDraft[channel.id]));
+      for (const channel of changed) {
+        const availableToAll = Boolean(state.sidebarAvailabilityDraft[channel.id]);
+        const response = await api(`/api/channels/${channel.id}/availability`, { method: 'PATCH', body: JSON.stringify({ availableToAll }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `Could not update #${channel.name}`);
+        channel.availableToAll = availableToAll;
+      }
+    }
     if (state.sidebarDraft.canManageWorkspaceSections) {
       const workspaceRes = await api('/api/settings/sidebar/workspace', { method: 'PUT', body: JSON.stringify({ layout: state.workspaceSidebarDraft }) });
       const workspaceData = await workspaceRes.json();
@@ -466,11 +546,14 @@ async function channelResourceHtml(tab, channelId) {
     return canvases.length
       ? canvases.map((canvas) => {
         const owner = canvas.shared && canvas.owner;
-        const ownerHtml = owner ? `<span class="canvas-owner" title="${escapeHtml(owner.name || owner.username || 'Canvas owner')}">
-          <span class="avatar-mini canvas-owner-avatar" data-avatar-user="${owner.id}" style="background:${escapeHtml(owner.avatarColor || '#64748b')}">${escapeHtml((owner.name || owner.username || '?').charAt(0).toUpperCase())}</span>
-          <span class="sr-only">Owned by ${escapeHtml(owner.name || owner.username || 'former user')}</span>
+        const ownerName = owner && (owner.name || owner.username || 'former user');
+        const ownerHtml = owner ? `<span class="canvas-owner" title="${escapeHtml(ownerName)}">
+          <span class="read-receipt-avatar canvas-owner-avatar" data-user-id="${owner.id}" role="button" tabindex="0" title="${escapeHtml(ownerName)}" aria-label="View ${escapeHtml(ownerName)}'s profile" style="background:${escapeHtml(owner.avatarColor || '#64748b')}">${escapeHtml(ownerName.charAt(0).toUpperCase())}</span>
+          <span class="canvas-owner-label">Owned by ${escapeHtml(ownerName)}</span>
         </span>` : '';
-        const meta = `${canvas.shared ? `Shared canvas ${ownerHtml} · ` : ''}Updated ${escapeHtml(shortTime(canvas.updatedAt))}`;
+        const meta = canvas.shared
+          ? `<span class="canvas-meta"><span>Shared canvas</span>${ownerHtml}<span class="canvas-meta-separator">·</span><span>Updated ${escapeHtml(shortTime(canvas.updatedAt))}</span></span>`
+          : `Updated ${escapeHtml(shortTime(canvas.updatedAt))}`;
         return row(`${canvas.shared ? 'data-resource-shared-canvas' : 'data-resource-canvas'}="${canvas.id}"`, escapeHtml(canvas.title || 'Untitled canvas'), meta);
       }).join('')
       : emptyRecordMarkup('No canvases in this channel', 'Create one from the Canvas section.');
@@ -588,6 +671,11 @@ function setupWorkspaceFeatures() {
     openSidebarModal();
   });
   document.getElementById('modal-sidebar')?.addEventListener('click', handleSidebarModalClick);
+  document.getElementById('modal-sidebar')?.addEventListener('dragstart', handleSidebarDragStart);
+  document.getElementById('modal-sidebar')?.addEventListener('dragover', handleSidebarDragOver);
+  document.getElementById('modal-sidebar')?.addEventListener('drop', handleSidebarDrop);
+  document.getElementById('modal-sidebar')?.addEventListener('dragend', clearSidebarDragState);
+  document.getElementById('modal-sidebar')?.addEventListener('dragleave', (event) => event.target.closest('.drag-over')?.classList.remove('drag-over'));
   document.getElementById('sidebar-form')?.addEventListener('submit', saveSidebarModal);
   els.channelList?.addEventListener('click', (event) => {
     const label = event.target.closest('[data-section-id]');

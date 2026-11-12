@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS channels (
   name VARCHAR(50) UNIQUE NOT NULL,
   topic TEXT DEFAULT '',
   is_private BOOLEAN DEFAULT FALSE,
+  available_to_all BOOLEAN NOT NULL DEFAULT FALSE,
   created_by INTEGER REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   slowmode_seconds INTEGER NOT NULL DEFAULT 0

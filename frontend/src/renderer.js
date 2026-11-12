@@ -1107,6 +1107,10 @@ function connectSocket() {
       updateEditTopicVisibility(channelId);
     }
   });
+  state.socket.on('channel_availability_updated', async () => {
+    await loadChannels();
+    if (typeof loadSidebarLayout === 'function') await loadSidebarLayout();
+  });
   state.socket.on('user_status_updated', handleUserStatusUpdated);
   // the owner deleted a canvas somebody else has open
   state.socket.on('canvas_deleted', (event) => {
@@ -1612,13 +1616,13 @@ function renderReadReceipts(channelId) {
   }
 
   const visibleUsers = users.slice(0, 4);
-  const names = visibleUsers.map((u) => u.username).join(', ');
+  const names = visibleUsers.map((u) => u.name || u.username).join(', ');
   const more = users.length > visibleUsers.length ? ` +${users.length - visibleUsers.length} more` : '';
 
   container.style.display = 'flex';
   container.innerHTML = `
     <div class="read-receipt-avatars">
-      ${visibleUsers.map((u) => `<span class="read-receipt-avatar" title="${escapeHtml(u.username)}" style="background:${escapeHtml(u.avatarColor || '#A855F7')};" data-user-id="${escapeHtml(String(u.id ?? u.userId ?? ''))}" role="button" tabindex="0" aria-label="View ${escapeHtml((u.username || 'user').trim())}'s profile">${escapeHtml((u.username || 'U').charAt(0).toUpperCase())}</span>`).join('')}
+      ${visibleUsers.map((u) => { const name = u.name || u.username || 'User'; return `<span class="read-receipt-avatar" title="${escapeHtml(name)}" style="background:${escapeHtml(u.avatarColor || '#A855F7')};" data-user-id="${escapeHtml(String(u.id ?? u.userId ?? ''))}" role="button" tabindex="0" aria-label="View ${escapeHtml(name.trim())}'s profile">${escapeHtml(name.charAt(0).toUpperCase())}</span>`; }).join('')}
     </div>
     <span class="read-receipt-text">Seen by ${escapeHtml(names)}${escapeHtml(more)}</span>
   `;
@@ -4649,6 +4653,8 @@ function renderMarkdown(markdown) {
 // Channel Creation Modal
 // ============================================================
 function openCreateChannelModal() {
+  document.getElementById('new-channel-available-row').hidden = !(state.user && state.user.isSuperadmin);
+  document.getElementById('new-channel-available-all').checked = false;
   document.getElementById('modal-create-channel').classList.add('open');
   document.getElementById('modal-overlay').classList.add('open');
 }
@@ -4661,13 +4667,14 @@ function closeModalCreateChannel() {
 async function saveCreateChannel() {
   const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const topic = document.getElementById('new-channel-topic').value.trim();
+  const availableToAll = Boolean(state.user && state.user.isSuperadmin && document.getElementById('new-channel-available-all').checked);
 
   if (!name) return;
 
   try {
     const res = await api('/api/channels', {
       method: 'POST',
-      body: JSON.stringify({ name, topic }),
+      body: JSON.stringify({ name, topic, availableToAll }),
     });
 
     if (!res.ok) throw new Error('Failed to create channel');

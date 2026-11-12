@@ -9,6 +9,7 @@ module.exports = [
   "ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'member'",
   'ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS available_to_all BOOLEAN NOT NULL DEFAULT FALSE',
   `
     DO $$ BEGIN
       ALTER TABLE channel_members ADD CONSTRAINT channel_members_role_check
