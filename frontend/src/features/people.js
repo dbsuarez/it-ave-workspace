@@ -67,17 +67,18 @@ function renderPeople() {
     return;
   }
   title.textContent = 'People';
-  sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : 'Everyone in the workspace.';
+  sub.textContent = peopleState.tab === 'chart' ? 'Who reports to whom.' : peopleState.tab === 'manage' ? 'Employee records, departments and accounts.' : 'Everyone in the workspace.';
   const departments = Array.from(new Set(peopleState.list.map((p) => p.department).filter(Boolean))).sort();
   actions.innerHTML = `
     <div class="pp-tabs" role="tablist">
       <button type="button" class="pp-tab${peopleState.tab === 'directory' ? ' active' : ''}" data-people-tab="directory" role="tab">Directory</button>
       <button type="button" class="pp-tab${peopleState.tab === 'chart' ? ' active' : ''}" data-people-tab="chart" role="tab">Org chart</button>
+      ${canManageEmployees() ? `<button type="button" class="pp-tab${peopleState.tab === 'manage' ? ' active' : ''}" data-people-tab="manage" role="tab">Manage</button>` : ''}
     </div>
     <input type="search" id="people-search" class="pp-search" placeholder="Search name, title, department…" value="${escapeText(peopleState.query)}" aria-label="Search people">
     ${peopleState.tab === 'directory' && departments.length ? `<select id="people-department" class="pp-select" aria-label="Department">
       <option value="">All departments</option>${departments.map((d) => `<option value="${escapeText(d)}"${d === peopleState.department ? ' selected' : ''}>${escapeText(d)}</option>`).join('')}</select>` : ''}
-    ${peopleState.tab === 'chart' && state.moderation && state.moderation.isSuperadmin
+    ${peopleState.tab === 'chart' && canManageEmployees()
       ? `<button type="button" class="btn${peopleState.editLines ? ' primary' : ''}" data-people-edit-lines>${peopleState.editLines ? 'Done editing' : 'Edit reporting lines'}</button>` : ''}`;
   renderPeopleBody();
 }
@@ -89,8 +90,9 @@ function renderPeopleBody() {
     body.innerHTML = emptyRecordMarkup('People are not available', peopleState.error);
     return;
   }
-  body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : 'people-directory-body'}`;
-  if (peopleState.tab === 'chart') renderOrgChart(body); else renderDirectory(body);
+  if (peopleState.tab === 'manage' && !canManageEmployees()) peopleState.tab = 'directory';
+  body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : peopleState.tab === 'manage' ? 'people-manage-body' : 'people-directory-body'}`;
+  if (peopleState.tab === 'chart') renderOrgChart(body); else if (peopleState.tab === 'manage') renderEmployeeManagement(body); else renderDirectory(body);
   paintPeoplePhotos(body);
 }
 
@@ -160,14 +162,14 @@ function renderOrgChart(body) {
     body.innerHTML = emptyRecordMarkup('No people yet', 'Workspace members will appear here.');
     return;
   }
-  const editable = Boolean(peopleState.editLines && state.moderation && state.moderation.isSuperadmin);
+  const editable = Boolean(peopleState.editLines && canManageEmployees());
   const tree = filterOrgTree(buildOrgTree(peopleState.list), peopleState.query);
   if (!tree.length) {
     body.innerHTML = emptyRecordMarkup('No one matches', 'Try a different search.');
     return;
   }
   const hint = editable ? '<p class="pp-hint">Choose who each person reports to: the first is the main manager and sets where they sit in the chart. Add extra managers below it; they show as "Also reports to". Changes save immediately.</p>'
-    : (peopleState.list.every((p) => !p.managerId) ? '<p class="pp-hint">No reporting lines are set yet.' + (state.moderation && state.moderation.isSuperadmin ? ' Use "Edit reporting lines" to set them.' : ' The Superadmin sets them.') + '</p>' : '');
+    : (peopleState.list.every((p) => !p.managerId) ? '<p class="pp-hint">No reporting lines are set yet.' + (canManageEmployees() ? ' Use "Edit reporting lines" to set them.' : ' The Superadmin or HR sets them.') + '</p>' : '');
   const hasDotted = peopleState.list.some((p) => (p.secondaryManagerIds || []).length);
   body.innerHTML = `${hint}
     <div class="org-viewport" id="org-viewport" tabindex="0" aria-label="Org chart. Drag to move, scroll to zoom.">
@@ -434,10 +436,8 @@ function openPageEditor() {
           <div class="form-group"><label for="pe-middle">Middle name</label><input id="pe-middle" type="text" maxlength="100" value="${escapeText(p.middleName)}"></div>
         </div>
         <div class="form-group"><label for="pe-title">Job title</label><input id="pe-title" type="text" maxlength="100" value="${escapeText(p.jobTitle)}"></div>
-        <div class="pp-edit-pair">
-          <div class="form-group"><label for="pe-department">Department</label><input id="pe-department" type="text" maxlength="100" value="${escapeText(p.department)}"></div>
-          <div class="form-group"><label for="pe-location">Location</label><input id="pe-location" type="text" maxlength="100" value="${escapeText(p.location)}"></div>
-        </div>
+        <div class="form-group"><label for="pe-location">Location</label><input id="pe-location" type="text" maxlength="100" value="${escapeText(p.location)}"></div>
+        <p class="form-note">${p.department ? `Your department is ${escapeText(p.department)}. ` : ''}HR sets your department, employee number and reporting line.</p>
         <div class="form-group"><label for="pe-phone">Phone</label><input id="pe-phone" type="text" maxlength="40" value="${escapeText(p.phone)}"></div>
         <div class="form-group"><label for="pe-about">About me</label><textarea id="pe-about" rows="4" maxlength="1500">${escapeText(p.about)}</textarea></div>
         <h4 class="modal-section-title">My sections</h4>
@@ -468,7 +468,7 @@ async function savePageEditor(event) {
   })).filter((l) => l.label.trim() || l.url.trim());
   const body = {
     lastName: value('pe-last'), firstName: value('pe-first'), middleName: value('pe-middle'),
-    jobTitle: value('pe-title'), department: value('pe-department'), location: value('pe-location'), phone: value('pe-phone'),
+    jobTitle: value('pe-title'), location: value('pe-location'), phone: value('pe-phone'),
     about: value('pe-about'), sections, links,
     hide: { email: modal.querySelector('#pe-hide-email').checked, phone: modal.querySelector('#pe-hide-phone').checked, location: modal.querySelector('#pe-hide-location').checked },
   };

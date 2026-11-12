@@ -40,7 +40,7 @@ async function audit(channelId, actorId, action, targetUserId = null, details = 
 router.get('/access', async (req, res) => {
   try {
     const result = await query(
-      `SELECT u.is_superadmin, u.account_type, cm.channel_id
+      `SELECT u.is_superadmin, u.is_hr, u.account_type, cm.channel_id
        FROM users u
        LEFT JOIN channel_members cm ON cm.user_id = u.id AND cm.role = 'moderator'
        WHERE u.id = $1`,
@@ -48,6 +48,7 @@ router.get('/access', async (req, res) => {
     );
     res.json({
       isSuperadmin: Boolean(result.rows[0]?.is_superadmin),
+      isHr: Boolean(result.rows[0]?.is_hr),
       accountType: result.rows[0]?.account_type || 'member',
       moderatorChannelIds: result.rows.filter((row) => row.channel_id !== null).map((row) => row.channel_id),
     });

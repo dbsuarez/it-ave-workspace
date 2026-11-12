@@ -520,6 +520,25 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(100) NOT NULL DEFAUL
 ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id) WHERE manager_id IS NOT NULL;
+-- Employee management; mirrors backend/src/migrations.js.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hr BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_no VARCHAR(40);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hire_date DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS separation_date DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS employment_status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (employment_status IN ('active', 'on_leave', 'resigned'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS employment_type VARCHAR(20) NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMP WITH TIME ZONE;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_employee_no ON users (LOWER(employee_no)) WHERE employee_no IS NOT NULL;
+CREATE TABLE IF NOT EXISTS departments (
+     id SERIAL PRIMARY KEY,
+     name VARCHAR(100) NOT NULL,
+     head_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_departments_name ON departments (LOWER(name));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL;
+INSERT INTO departments (name) SELECT DISTINCT ON (LOWER(department)) department FROM users WHERE department <> '' ON CONFLICT DO NOTHING;
+UPDATE users u SET department_id = d.id FROM departments d WHERE u.department_id IS NULL AND u.department <> '' AND LOWER(u.department) = LOWER(d.name);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(100) NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(100) NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS middle_name VARCHAR(100) NOT NULL DEFAULT '';

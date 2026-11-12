@@ -103,6 +103,45 @@ function bulkLine(account) {
   return fields.some((value) => value.includes(',')) ? fields.join('\t') : fields.join(', ');
 }
 
+// The "Create accounts" form. Used in Moderation (Superadmin) and in People > Manage (HR, who may add members only).
+function accountsFormHtml(admin, superadmin) {
+  return `
+    <form class="moderation-card" data-admin-form="accounts">
+      <h2>Create accounts</h2>
+      <p class="admin-help">Create people's accounts yourself instead of sending each one an invitation. Each person signs in with a temporary password and is asked to choose their own.</p>
+      <div class="moderation-inline">
+        <label>Account type
+          <select name="accountType">
+            <option value="member">Member (all public channels)</option>
+            ${superadmin ? '<option value="guest">Guest (only the channels below)</option>' : ''}
+          </select>
+        </label>
+      </div>
+      <label class="admin-bulk-label">One person per line: <code>username, email, password, last name, first name, middle name</code>. Only the username and email are needed; leave the password empty and one is made for you (for example <code>ann, ann@company.com, , Lee, Ann, Marie</code>).
+        <textarea name="bulk" id="admin-bulk" rows="6" spellcheck="false" placeholder="ann, ann@company.com&#10;bob, bob@company.com">${escapeHtml(admin.bulkText || '')}</textarea>
+      </label>
+      <div class="admin-channel-picks">
+        ${state.channels.map((channel) => `<label class="admin-inline-check"><input type="checkbox" name="channelIds" value="${channel.id}"> #${escapeHtml(channel.name)}</label>`).join('')}
+      </div>
+      <p class="admin-help">Members are added to every public channel; tick channels to add them to private ones too. Guests need at least one.</p>
+      ${(admin.importNotes || []).map((note) => `<p class="admin-note">${escapeHtml(note)}</p>`).join('')}
+      <div class="admin-actions">
+        <button class="btn" type="button" data-admin-action="import-accounts">Import CSV or Excel file…</button>
+        <button class="btn" type="button" data-admin-action="accounts-template">Download template</button>
+        <button class="btn primary" type="submit">Create accounts</button>
+      </div>
+      ${adminCreatedHtml(admin.lastCreated)}
+    </form>`;
+}
+
+// Draw the form again wherever it is on screen (its box text and the result of the last run live in adminState()).
+function refreshAccountsForms() {
+  const admin = adminState();
+  document.querySelectorAll('[data-accounts-host]').forEach((host) => {
+    host.innerHTML = accountsFormHtml(admin, Boolean(state.moderation && state.moderation.isSuperadmin));
+  });
+}
+
 function renderWorkspaceAdmin() {
   const section = document.getElementById('admin-workspace');
   if (!section) return;
@@ -120,6 +159,7 @@ function renderWorkspaceAdmin() {
             <option value="guest"${user.accountType === 'guest' ? ' selected' : ''}>Guest</option>
           </select>
           <label class="admin-inline-check"><input type="checkbox" data-admin-superadmin${user.isSuperadmin ? ' checked' : ''}${self ? ' disabled' : ''}> Superadmin</label>
+          ${user.accountType === 'member' ? `<label class="admin-inline-check" title="HR can manage employee records, departments and reporting lines"><input type="checkbox" data-admin-hr${user.isHr ? ' checked' : ''}> HR</label>` : ''}
           <button class="btn" type="button" data-admin-action="save-user"${self ? ' disabled' : ''}>Save</button>
         </div>
       </div>`;
@@ -147,32 +187,7 @@ function renderWorkspaceAdmin() {
         <button class="btn" type="button" data-admin-action="save-registration">Save</button>
       </div>
     </div>
-    <form class="moderation-card" data-admin-form="accounts">
-      <h2>Create accounts</h2>
-      <p class="admin-help">Create people's accounts yourself instead of sending each one an invitation. Each person signs in with a temporary password and is asked to choose their own.</p>
-      <div class="moderation-inline">
-        <label>Account type
-          <select name="accountType">
-            <option value="member">Member (all public channels)</option>
-            <option value="guest">Guest (only the channels below)</option>
-          </select>
-        </label>
-      </div>
-      <label class="admin-bulk-label">One person per line: <code>username, email, password, last name, first name, middle name</code>. Only the username and email are needed; leave the password empty and one is made for you (for example <code>ann, ann@company.com, , Lee, Ann, Marie</code>).
-        <textarea name="bulk" id="admin-bulk" rows="6" spellcheck="false" placeholder="ann, ann@company.com&#10;bob, bob@company.com">${escapeHtml(admin.bulkText || '')}</textarea>
-      </label>
-      <div class="admin-channel-picks">
-        ${state.channels.map((channel) => `<label class="admin-inline-check"><input type="checkbox" name="channelIds" value="${channel.id}"> #${escapeHtml(channel.name)}</label>`).join('')}
-      </div>
-      <p class="admin-help">Members are added to every public channel; tick channels to add them to private ones too. Guests need at least one.</p>
-      ${(admin.importNotes || []).map((note) => `<p class="admin-note">${escapeHtml(note)}</p>`).join('')}
-      <div class="admin-actions">
-        <button class="btn" type="button" data-admin-action="import-accounts">Import CSV or Excel file…</button>
-        <button class="btn" type="button" data-admin-action="accounts-template">Download template</button>
-        <button class="btn primary" type="submit">Create accounts</button>
-      </div>
-      ${adminCreatedHtml(admin.lastCreated)}
-    </form>
+    <div data-accounts-host>${accountsFormHtml(admin, true)}</div>
     <form class="moderation-card" data-admin-form="invitation">
       <h2>Invite someone</h2>
       <div class="moderation-inline">
@@ -228,7 +243,7 @@ async function handleAdminClick(event) {
         admin.bulkText = [existing, ...result.accounts.map(bulkLine)].filter(Boolean).join('\n');
         showToast(`${result.accounts.length} ${result.accounts.length === 1 ? 'person' : 'people'} read from the file. Check the list, then create.`, 'success');
       }
-      renderWorkspaceAdmin();
+      refreshAccountsForms();
       return;
     } else if (action === 'accounts-template') {
       const saved = await window.electronAPI.saveAccountsCsv('template');
@@ -252,6 +267,8 @@ async function handleAdminClick(event) {
       const isSuperadmin = row.querySelector('[data-admin-superadmin]').checked;
       if (accountType === 'guest' && !confirm('Make this person a guest? They keep their current channels but lose moderator roles, cannot join or create channels, and can only message people in their channels.')) return;
       await adminApi(`/api/admin/users/${userId}`, 'PATCH', { accountType, isSuperadmin });
+      const hrBox = row.querySelector('[data-admin-hr]');
+      if (hrBox && accountType === 'member') await adminApi(`/api/hr/employees/${userId}/hr-role`, 'PUT', { isHr: hrBox.checked });
       showToast('Account updated.', 'success');
       await loadWorkspaceAdmin();
       await loadUsers();
@@ -287,8 +304,10 @@ async function handleAdminAccountsSubmit(form, event) {
     admin.bulkText = accounts.filter((a) => skippedNames.has(a.username)).map(bulkLine).join('\n');
     admin.importNotes = [];
     showToast(result.created.length ? `${result.created.length} account${result.created.length === 1 ? '' : 's'} created.` : 'No accounts were created.', result.created.length ? 'success' : 'error');
-    await loadWorkspaceAdmin();
+    refreshAccountsForms();
+    if (state.moderation && state.moderation.isSuperadmin) await loadWorkspaceAdmin();
     await loadUsers();
+    if (typeof reloadEmployeeManagement === 'function') reloadEmployeeManagement();
   } catch (err) {
     showToast(err.message || 'Could not create the accounts.', 'error');
     if (button) button.disabled = false;
@@ -319,7 +338,6 @@ async function handleAdminSubmit(event) {
 }
 
 function setupAdminFeatures() {
-  const host = document.getElementById('moderation-content');
-  host?.addEventListener('click', handleAdminClick);
-  host?.addEventListener('submit', handleAdminSubmit);
+  document.addEventListener('click', handleAdminClick);
+  document.addEventListener('submit', handleAdminSubmit);
 }

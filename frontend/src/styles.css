@@ -6631,6 +6631,25 @@ h4.cv-h { font-size: 15px; }
 .pp-mini { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .pp-mini span { display: flex; flex-direction: column; min-width: 0; }
 .pp-mini em { font-size: 12px; font-style: normal; color: var(--text-muted); }
+.people-manage-body { overflow: auto; }
+.emp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.emp-spacer { flex: 1; }
+.emp-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.emp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.emp-table th { position: sticky; top: 0; padding: 9px 12px; background: var(--muted-bg); color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.emp-table td { padding: 8px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+.emp-table tbody tr { cursor: pointer; }
+.emp-table tbody tr:hover, .emp-table tbody tr:focus { background: var(--muted-bg); outline: none; }
+.emp-person { display: inline-flex; align-items: center; gap: 10px; }
+.emp-person span { display: flex; flex-direction: column; }
+.emp-person em { font-size: 11px; font-style: normal; color: var(--text-muted); }
+.emp-status { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.emp-status-active { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.emp-status-on_leave { background: rgba(245, 158, 11, 0.18); color: #b45309; }
+.emp-status-resigned { background: rgba(107, 114, 128, 0.18); color: var(--text-muted); }
+.dept-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 80px auto auto; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dept-row input, .dept-row select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; min-width: 0; }
+.emp-wide-modal { width: min(760px, 94vw); }
 .pp-edit-triple { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .pp-name-edit { display: grid; gap: 8px; }
 .pp-name-edit input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }

@@ -75,13 +75,13 @@ test('the directory lists members only, and guests cannot browse it', async (t) 
 test('someone customizes their own page', async (t) => {
   if (skip(t)) return;
   const saved = await call(ids.ann, 'PUT', '/me', {
-    jobTitle: 'IT Manager', department: 'MIS', location: 'Manila', phone: '+63 900 000 0000',
+    jobTitle: 'IT Manager', department: 'Ignored', location: 'Manila', phone: '+63 900 000 0000',
     about: 'I run the IT desk.',
     sections: [{ title: 'Ask me about', body: 'Networks, printers' }, { title: 'Hours', body: '8 to 5' }],
     links: [{ label: 'Wiki', url: 'https://wiki.example.com' }],
   });
   assert.equal(saved.status, 200);
-  assert.equal(saved.json.person.department, 'MIS');
+  assert.equal(saved.json.person.department, '', 'the department is set by HR, not on the page');
   const seen = (await call(ids.bob, 'GET', `/${ids.ann}`)).json.person;
   assert.equal(seen.jobTitle, 'IT Manager');
   assert.equal(seen.about, 'I run the IT desk.');
@@ -94,7 +94,6 @@ test('someone customizes their own page', async (t) => {
   await call(ids.ann, 'PUT', '/me', { location: 'Cebu' });
   const after = (await call(ids.bob, 'GET', `/${ids.ann}`)).json.person;
   assert.equal(after.location, 'Cebu');
-  assert.equal(after.department, 'MIS');
   assert.equal(after.sections.length, 2);
 });
 
@@ -120,7 +119,7 @@ test('people can hide their email, phone and location from others, but not from 
 test('page content is validated and bounded', async (t) => {
   if (skip(t)) return;
   const bad = [
-    { about: 'x'.repeat(1501) }, { department: 5 }, { phone: 'x'.repeat(41) },
+    { about: 'x'.repeat(1501) }, { phone: 'x'.repeat(41) },
     { sections: 'no' }, { sections: Array.from({ length: 9 }, () => ({ title: 't', body: '' })) }, { sections: [{ title: '', body: 'x' }] },
     { sections: [{ title: 't', body: 'x'.repeat(1501) }] },
     { links: [{ label: 'x', url: 'javascript:alert(1)' }] }, { links: [{ label: 'x', url: 'ftp://x.test' }] }, { links: [{ label: '', url: 'https://x.test' }] },

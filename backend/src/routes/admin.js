@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { query } = require('../db');
 const { passwordProblem } = require('../authLimits');
+const { hrActor, canManageEmployees } = require('../hr');
 const authenticateToken = require('../middleware/auth');
 const {
   newInviteCode, hashInviteCode, invitationProblem, normalizeInviteCode,
@@ -96,7 +97,7 @@ router.get('/users', async (req, res) => {
   try {
     await requireSuperadmin(req);
     const result = await query(
-      `SELECT u.id, u.username, u.email, u.account_type, u.is_superadmin, u.status, u.created_at,
+      `SELECT u.id, u.username, u.email, u.account_type, u.is_superadmin, u.is_hr, u.status, u.created_at,
               (SELECT COUNT(*)::int FROM channel_members cm WHERE cm.user_id = u.id) AS channel_count,
               (SELECT COUNT(*)::int FROM channel_members cm WHERE cm.user_id = u.id AND cm.role = 'moderator') AS moderator_count
        FROM users u
@@ -110,6 +111,7 @@ router.get('/users', async (req, res) => {
         email: row.email,
         accountType: row.account_type,
         isSuperadmin: row.is_superadmin,
+        isHr: row.is_hr,
         status: row.status,
         channelCount: row.channel_count,
         moderatorChannelCount: row.moderator_count,
@@ -238,8 +240,10 @@ function temporaryPassword() {
 // The passwords are returned once; only hashes are stored.
 router.post('/users', async (req, res) => {
   try {
-    await requireSuperadmin(req);
+    const actor = await hrActor(req.user.userId);
+    if (!canManageEmployees(actor)) throw fail(403, 'Only the Superadmin or HR can create accounts');
     const { accounts, accountType = 'member', channelIds = [] } = req.body || {};
+    if (accountType === 'guest' && !actor.is_superadmin) throw fail(403, 'Only the Superadmin can create guest accounts');
     if (!ACCOUNT_TYPES.includes(accountType)) throw fail(400, 'Account type must be member or guest');
     if (!Array.isArray(accounts) || accounts.length === 0) throw fail(400, 'Give at least one account');
     if (accounts.length > MAX_NEW_ACCOUNTS) throw fail(400, `At most ${MAX_NEW_ACCOUNTS} accounts at a time`);

@@ -6,6 +6,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
+const { canManageEmployees } = require('../hr');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -25,7 +26,7 @@ const parseId = (value) => {
 };
 
 async function viewer(userId) {
-  const result = await query('SELECT id, account_type, is_superadmin FROM users WHERE id = $1', [userId]);
+  const result = await query('SELECT id, account_type, is_superadmin, is_hr FROM users WHERE id = $1', [userId]);
   return result.rows[0] || null;
 }
 
@@ -50,7 +51,6 @@ function cleanProfile(body) {
   if (body.lastName !== undefined) out.lastName = text(body.lastName, LIMITS.name, 'Last name');
   if (body.firstName !== undefined) out.firstName = text(body.firstName, LIMITS.name, 'First name');
   if (body.middleName !== undefined) out.middleName = text(body.middleName, LIMITS.name, 'Middle name');
-  if (body.department !== undefined) out.department = text(body.department, LIMITS.department, 'Department');
   if (body.location !== undefined) out.location = text(body.location, LIMITS.location, 'Location');
   if (body.jobTitle !== undefined) out.jobTitle = text(body.jobTitle, LIMITS.jobTitle, 'Job title');
   const extra = {};
@@ -202,7 +202,7 @@ router.get('/:id', async (req, res) => {
       secondaryManagers: secondaryManagers.map((row) => mapPerson(row, me.id)),
       secondaryReports: secondaryReports.map((row) => mapPerson(row, me.id)),
       reports: reports.map((report) => mapPerson(report, me.id)),
-      canSetManager: Boolean(me.is_superadmin),
+      canSetManager: canManageEmployees(me),
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -215,7 +215,7 @@ router.get('/:id', async (req, res) => {
 router.put('/:id/names', async (req, res) => {
   try {
     const me = await requireMember(req.user.userId);
-    if (!me.is_superadmin) throw fail(403, 'Only the Superadmin can change someone else\'s name');
+    if (!canManageEmployees(me)) throw fail(403, 'Only the Superadmin or HR can change someone else\'s name');
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     const { columns } = cleanProfile({ lastName: req.body && req.body.lastName, firstName: req.body && req.body.firstName, middleName: req.body && req.body.middleName });
@@ -238,7 +238,7 @@ router.put('/:id/names', async (req, res) => {
 router.put('/:id/manager', async (req, res) => {
   try {
     const me = await requireMember(req.user.userId);
-    if (!me.is_superadmin) throw fail(403, 'Only the Superadmin can change reporting lines');
+    if (!canManageEmployees(me)) throw fail(403, 'Only the Superadmin or HR can change reporting lines');
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     const managerId = req.body && req.body.managerId === null ? null : parseId(req.body && req.body.managerId);
@@ -273,7 +273,7 @@ const MAX_SECONDARY_MANAGERS = 5;
 router.put('/:id/secondary-managers', async (req, res) => {
   try {
     const me = await requireMember(req.user.userId);
-    if (!me.is_superadmin) throw fail(403, 'Only the Superadmin can change reporting lines');
+    if (!canManageEmployees(me)) throw fail(403, 'Only the Superadmin or HR can change reporting lines');
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     const given = req.body && req.body.managerIds;

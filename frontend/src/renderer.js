@@ -143,7 +143,7 @@ let state = {
     statusType: '',
   },
   files: [],
-  moderation: { isSuperadmin: false, moderatorChannelIds: [], channel: null, settings: null },
+  moderation: { isSuperadmin: false, isHr: false, moderatorChannelIds: [], channel: null, settings: null },
   notes: [],
   lists: [],
   listMembers: [],
@@ -2460,6 +2460,7 @@ async function loadModerationAccess() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not load moderation access');
     state.moderation.isSuperadmin = Boolean(data.isSuperadmin);
+    state.moderation.isHr = Boolean(data.isHr);
     state.moderation.moderatorChannelIds = data.moderatorChannelIds || [];
     state.moderation.accountType = data.accountType || 'member';
     applyAccountRestrictions();
