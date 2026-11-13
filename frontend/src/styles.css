@@ -894,6 +894,48 @@ body.iav-dev .demo-banner {
   font-size: 12px;
   white-space: nowrap;
 }
+.audit-entry {
+  display: grid;
+  justify-content: stretch;
+  gap: 8px;
+}
+.audit-entry-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.audit-entry-details summary {
+  width: fit-content;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  background: var(--muted-bg);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.audit-entry-details summary::-webkit-details-marker { display: none; }
+.audit-entry-details summary:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+.audit-entry-details pre {
+  max-height: 260px;
+  margin: 8px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: var(--bg);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+}
+@media (max-width: 720px) {
+  .audit-entry-summary { align-items: flex-start; flex-direction: column; gap: 4px; }
+}
 .moderation-row-actions {
   flex-wrap: wrap;
 }

@@ -2673,12 +2673,73 @@ async function loadModerationAudit() {
     if (!response.ok) throw new Error(data.error || 'Could not load workspace audit log');
     container.innerHTML = `
       <div class="moderation-card"><h2>Workspace audit log</h2><div class="moderation-list">${(data.entries || []).map((entry) => `
-        <div class="moderation-row"><span>${escapeHtml(entry.actorUsername || 'former user')} · ${escapeHtml(entry.action)}${entry.channelName ? ` · #${escapeHtml(entry.channelName)}` : ''}${entry.targetUsername ? ` · ${escapeHtml(entry.targetUsername)}` : ''} ${entry.details ? ` ${escapeHtml(JSON.stringify(entry.details))}` : ''}</span><time>${escapeHtml(new Date(entry.createdAt).toLocaleString())}</time></div>
+        ${renderAuditEntry(entry)}
       `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
   } catch (err) {
     console.error('Load workspace audit log error:', err);
     container.innerHTML = '<div class="moderation-card"><h2>Workspace audit log</h2><p>Could not load the audit log.</p></div>';
   }
+}
+
+const AUDIT_ACTION_LABELS = {
+  account_role_changed: 'changed the account role for',
+  back_to_prelaunch: 'returned the workspace to pre-launch mode',
+  channel_deleted: 'deleted a channel',
+  default_slowmode_changed: 'changed the default slow mode',
+  email_changed: 'changed the email address for',
+  invitation_created: 'created an invitation',
+  invitation_revoked: 'revoked an invitation',
+  member_removed: 'removed channel access for',
+  member_role_changed: 'changed the channel role for',
+  message_deleted: 'deleted a message',
+  message_reported: 'reported a message',
+  prelaunch_password_applied: 'applied the pre-launch password',
+  prelaunch_password_off: 'turned off the pre-launch password',
+  prelaunch_password_on: 'turned on the pre-launch password',
+  prelaunch_went_live: 'moved the workspace out of pre-launch',
+  registration_mode_changed: 'changed the registration mode',
+  role_created: 'created a workspace role',
+  role_deleted: 'deleted a workspace role',
+  role_moved: 'reordered a workspace role',
+  role_updated: 'updated a workspace role',
+  roles_assigned: 'changed workspace roles for',
+  settings_updated: 'updated moderation settings',
+  slowmode_changed: 'changed channel slow mode',
+  slowmode_set_for_all_channels: 'changed slow mode for all channels',
+  timeout_removed: 'removed the timeout for',
+  user_created: 'created a user account',
+  user_timed_out: 'temporarily restricted',
+  username_changed: 'changed the username for',
+  view_as_started: 'started viewing the workspace as',
+  went_live: 'made the workspace live',
+};
+
+function humanizeAuditAction(action) {
+  if (AUDIT_ACTION_LABELS[action]) return AUDIT_ACTION_LABELS[action];
+  return String(action || 'performed an action').replace(/_/g, ' ').toLowerCase();
+}
+
+function renderAuditEntry(entry) {
+  const actor = entry.actorUsername || 'A former user';
+  const target = entry.targetUsername ? ` ${entry.targetUsername}` : '';
+  const channel = entry.channelName ? ` in #${entry.channelName}` : '';
+  const occurredAt = new Date(entry.createdAt).toLocaleString();
+  const technicalDetails = {
+    eventId: entry.id,
+    action: entry.action,
+    channelId: entry.channelId,
+    details: entry.details || {},
+  };
+  return `<article class="moderation-row audit-entry">
+    <div class="audit-entry-summary">
+      <span><strong>${escapeHtml(actor)}</strong> ${escapeHtml(humanizeAuditAction(entry.action))}${escapeHtml(target)}${escapeHtml(channel)}.</span>
+      <time datetime="${escapeHtml(entry.createdAt)}">${escapeHtml(occurredAt)}</time>
+    </div>
+    <details class="audit-entry-details">
+      <summary>View details</summary>
+      <pre>${escapeHtml(JSON.stringify(technicalDetails, null, 2))}</pre>
+    </details>
+  </article>`;
 }
 
 async function loadModerationChannel(channelId) {
@@ -2731,7 +2792,7 @@ async function loadModerationChannel(channelId) {
       `).join('') || '<p>No open reports.</p>'}</div></div>
       ${canDeleteChannel(channelId) ? `<div class="moderation-card moderation-danger"><h2>Delete this channel</h2><p class="admin-help">Deletes #${escapeHtml(data.channel.name)} for everyone: its messages, files, canvas, lists and links. This cannot be undone. The audit log keeps a record that it happened.</p><button class="btn danger" type="button" data-action="delete-channel">Delete channel…</button></div>` : ''}
       <div class="moderation-card"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
-        <div class="moderation-row"><span>${escapeHtml(entry.actorUsername || 'former user')} · ${escapeHtml(entry.action)}${entry.targetUsername ? ` · ${escapeHtml(entry.targetUsername)}` : ''} ${entry.details ? ` ${escapeHtml(JSON.stringify(entry.details))}` : ''}</span><time>${escapeHtml(new Date(entry.createdAt).toLocaleString())}</time></div>
+        ${renderAuditEntry({ ...entry, channelName: data.channel.name })}
       `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
     const ownerAvatar = dataContainer.querySelector('[data-moderation-owner]');
     if (ownerAvatar && typeof paintAvatar === 'function') {
