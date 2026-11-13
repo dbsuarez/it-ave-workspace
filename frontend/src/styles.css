@@ -7397,6 +7397,42 @@ h4.cv-h { font-size: 15px; }
 .admin-page-heading { padding: 6px 0; border-bottom: 1px solid var(--border); }
 .admin-page-heading h2 { margin: 0; font-size: 20px; }
 .admin-page-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
+.admin-section-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--muted-bg);
+}
+.admin-section-nav button {
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.admin-section-nav button:hover { border-color: var(--border); background: var(--surface); color: var(--text); }
+#admin-create-accounts,
+#admin-workspace-members,
+#admin-user-groups,
+#admin-prelaunch-access,
+#admin-registration,
+#admin-invite-form,
+#admin-invitations,
+#admin-timeout-policy,
+#admin-slow-mode,
+#moderation-launch,
+#moderation-workspace-audit,
+#admin-role-definitions,
+#admin-role-assignments,
+#admin-access-check { scroll-margin-top: 58px; }
 #moderation-content:not([data-tab="channels"]) [data-mod-tab="channels"],
 #moderation-content:not([data-tab="people"]) [data-mod-tab="people"],
 #moderation-content:not([data-tab="signup"]) [data-mod-tab="signup"],

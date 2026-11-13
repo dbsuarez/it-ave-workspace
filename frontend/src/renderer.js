@@ -2812,19 +2812,42 @@ async function loadModerationView() {
       <h2 data-admin-page-title>${escapeHtml(activeTab?.[1] || 'Administration')}</h2>
       <p data-admin-page-description>${escapeHtml(activeTab?.[2] || '')}</p>
     </header>
+    ${state.moderation.isSuperadmin ? `
+      <nav class="admin-section-nav" data-mod-tab="people" aria-label="People and groups controls">
+        <button type="button" data-admin-scroll="admin-create-accounts">Create accounts</button>
+        <button type="button" data-admin-scroll="admin-workspace-members">Workspace members</button>
+        <button type="button" data-admin-scroll="admin-user-groups">Groups</button>
+      </nav>
+      <nav class="admin-section-nav" data-mod-tab="signup" aria-label="Sign-up and invitation controls">
+        <button type="button" data-admin-scroll="admin-prelaunch-access">Pre-launch access</button>
+        <button type="button" data-admin-scroll="admin-registration">Registration</button>
+        <button type="button" data-admin-scroll="admin-invite-form">Invite someone</button>
+        <button type="button" data-admin-scroll="admin-invitations">Invitations</button>
+      </nav>
+      <nav class="admin-section-nav" data-mod-tab="rules" aria-label="Rules and audit controls">
+        <button type="button" data-admin-scroll="admin-timeout-policy">Timeout policy</button>
+        <button type="button" data-admin-scroll="admin-slow-mode">Slow mode</button>
+        <button type="button" data-admin-scroll="moderation-launch">Launch mode</button>
+        <button type="button" data-admin-scroll="moderation-workspace-audit">Audit log</button>
+      </nav>` : ''}
+    ${canRoles ? `<nav class="admin-section-nav" data-mod-tab="roles" aria-label="Role controls">
+      <button type="button" data-admin-scroll="admin-role-definitions">Role definitions</button>
+      <button type="button" data-admin-scroll="admin-role-assignments">Assignments</button>
+      <button type="button" data-admin-scroll="admin-access-check">Access check</button>
+    </nav>` : ''}
     ${channels.length ? `<div class="moderation-toolbar" data-mod-tab="channels">
       <label for="moderation-channel-select">Channel</label>
       <input type="search" id="moderation-channel-select" list="moderation-channel-options" value="#${escapeHtml(channels.find((channel) => Number(channel.id) === selectedId)?.name || '')}" data-channel-id="${selectedId}" placeholder="Type to find a channel…" aria-label="Search and select channel" autocomplete="off">
       <datalist id="moderation-channel-options">${channels.map((channel) => `<option value="#${escapeHtml(channel.name)}" data-channel-id="${channel.id}"></option>`).join('')}</datalist>
     </div>` : ''}
     ${state.moderation.isSuperadmin ? `
-      <form class="moderation-card moderation-settings" data-moderation-form="settings" data-mod-tab="rules">
+      <form class="moderation-card moderation-settings" id="admin-timeout-policy" data-moderation-form="settings" data-mod-tab="rules">
         <h2>Workspace timeout policy</h2>
         <label>Default timeout (minutes)<input name="defaultTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.defaultTimeoutMinutes || 5}" required></label>
         <label>Maximum timeout (minutes)<input name="maxTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.maxTimeoutMinutes || 10080}" required></label>
         <button class="btn primary" type="submit">Save timeout policy</button>
       </form>` : ''}
-    ${state.moderation.isSuperadmin ? `<div class="moderation-card" data-mod-tab="rules">
+    ${state.moderation.isSuperadmin ? `<div class="moderation-card" id="admin-slow-mode" data-mod-tab="rules">
       <h2>Slow mode for all channels</h2>
       <p class="admin-help">Slow mode makes people wait between messages in a channel. New channels start with the default below; you can also set one value on every channel that already exists.</p>
       <div class="moderation-inline"><label>Default for new channels (seconds)<input id="slowmode-default" type="number" min="0" max="3600" value="5"></label><button class="btn primary" type="button" data-action="save-default-slowmode">Save default</button></div>
@@ -3138,6 +3161,11 @@ function canDeleteChannel(channelId) {
 }
 
 async function handleModerationClick(event) {
+  const sectionButton = event.target.closest('[data-admin-scroll]');
+  if (sectionButton) {
+    document.querySelector(`#moderation-content #${sectionButton.dataset.adminScroll}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
   const channelSettingsButton = event.target.closest('[data-channel-settings-tab]');
   if (channelSettingsButton) {
     state.moderation.channelSettingsTab = channelSettingsButton.dataset.channelSettingsTab;

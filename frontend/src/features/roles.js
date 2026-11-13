@@ -39,18 +39,18 @@ function renderRolesPanel() {
       </div></div>`;
   }).join('');
   host.innerHTML = `
-    <div class="moderation-card roles-card">
+    <div class="moderation-card roles-card" id="admin-role-definitions">
       <div class="roles-head"><div><h2>Roles</h2><p class="moderation-help">Highest rank first. Someone can hold several roles and gets everything they allow. People can only manage roles below their own.</p></div>
         <button type="button" class="btn primary" data-role-new>New role</button></div>
       <div class="role-list">${rows || emptyRecordMarkup('No roles yet', 'Create one with New role.')}</div>
     </div>
-    <div class="moderation-card roles-card">
+    <div class="moderation-card roles-card" id="admin-role-assignments">
       <h2>Who has which role</h2>
       <p class="moderation-help">Tick a box to give or take a role; it saves at once. Owner and HR are shown for reference: they are set on the person's record (Superadmin and HR switches).</p>
       <div class="role-table-tools"><input id="role-table-search" type="search" placeholder="Search people" aria-label="Search people"></div>
       <div class="role-table-wrap" id="role-table-host"><div class="loading-state">Loading…</div></div>
     </div>
-    <div class="moderation-card roles-card">
+    <div class="moderation-card roles-card" id="admin-access-check">
       <h2>Check access</h2>
       <p class="moderation-help">See what a person or a role can do and which channels they can see, with the reason for each answer. This only looks: it does not sign you in as them.</p>
       <div class="access-check-bar">
