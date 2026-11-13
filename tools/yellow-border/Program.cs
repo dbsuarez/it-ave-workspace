@@ -32,7 +32,7 @@ internal static class Program
 
 internal sealed class BorderContext : ApplicationContext
 {
-    private const int Thickness = 5;
+    private const int Thickness = 2;
     private static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "YellowBorder",
