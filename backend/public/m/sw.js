@@ -1,6 +1,6 @@
 // Service worker for the phone app. It only runs on a secure origin (https, or localhost), so it makes the app
 // installable and lets it open with no network; it never caches the API. Bump VERSION to push an update.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `iav-shell-${VERSION}`;
 const FILES = ['./', 'app.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
   'js/app.js', 'js/api.js', 'js/ui.js', 'js/format.js', 'js/socket.js',

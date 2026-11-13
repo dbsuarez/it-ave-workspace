@@ -155,6 +155,7 @@ let state = {
   canvasRequestId: 0,
   canvasDetailRequestId: 0,
   emojiPicker: { messageId: null, category: 'Smileys' },
+  commands: { channelId: null, items: [], activeIndex: 0, loading: false },
 };
 
 // DOM elements
@@ -181,6 +182,8 @@ const els = {
   dmTitle: document.getElementById('dm-title'),
   dmTopic: document.getElementById('dm-topic'),
   messageInput: document.getElementById('message-input'),
+  commandMenu: document.getElementById('command-menu'),
+  commandPrivateResponses: document.getElementById('command-private-responses'),
   dmMessageInput: document.getElementById('dm-message-input'),
   sendBtn: document.getElementById('send-btn'),
   sendDmBtn: document.getElementById('send-dm-btn'),
@@ -605,8 +608,12 @@ function setupEventListeners() {
 
   // Message inputs
   if (els.messageInput) els.messageInput.addEventListener('keydown', (e) => {
+    if (handleCommandMenuKeydown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && state.preferences.enterToSend) { e.preventDefault(); sendChannelMessage(); }
   });
+  if (els.messageInput) els.messageInput.addEventListener('input', updateCommandMenu);
+  if (els.commandMenu) els.commandMenu.addEventListener('click', handleCommandMenuClick);
+  if (els.commandPrivateResponses) els.commandPrivateResponses.addEventListener('click', handleCommandResponseClick);
   if (els.dmMessageInput) els.dmMessageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && state.preferences.enterToSend) { e.preventDefault(); sendDmMessage(); }
   });
@@ -616,6 +623,9 @@ function setupEventListeners() {
 // Authentication
 // ============================================================
 function showLogin() {
+  els.commandPrivateResponses?.replaceChildren();
+  hideCommandMenu();
+  state.commands = { channelId: null, items: [], activeIndex: 0, loading: false };
   if (els.app) els.app.style.display = 'none';
   if (els.loginCard) els.loginCard.style.display = 'block';
 }
@@ -1416,6 +1426,12 @@ async function openChannel(channelId) {
   const previousChannelId = state.currentChannelId;
   closeCanvasSheetForOtherConversation({ channelId });
 
+  if (Number(previousChannelId) !== Number(channelId)) {
+    els.commandPrivateResponses?.replaceChildren();
+    hideCommandMenu();
+    state.commands = { channelId: null, items: [], activeIndex: 0, loading: false };
+  }
+
   // Leave the previous channel room so we stop receiving its messages
   if (state.socket && previousChannelId && previousChannelId !== channelId) {
     state.socket.emit('leave_channel', previousChannelId);
@@ -2110,8 +2126,13 @@ function emptyRecordMarkup(title, description, className = '') {
 // Sending Messages
 // ============================================================
 async function sendChannelMessage() {
-  const text = els.messageInput.value.trim();
+  let text = els.messageInput.value.trim();
   if (!text) return;
+  if (text.startsWith('/') && !text.startsWith('//')) {
+    await executeSlashCommand(text);
+    return;
+  }
+  if (text.startsWith('//')) text = text.slice(1);
   if (!state.socketAuthenticated) {
     showToast('Chat is reconnecting. Please try again in a moment.', 'error');
     return;
@@ -2145,6 +2166,168 @@ async function sendChannelMessage() {
     });
   } catch (err) {
     console.error('Send message error:', err);
+  }
+}
+
+function hideCommandMenu() {
+  if (els.commandMenu) {
+    els.commandMenu.hidden = true;
+    els.commandMenu.replaceChildren();
+  }
+  state.commands.activeIndex = 0;
+}
+
+async function loadCommandsForChannel() {
+  const channelId = Number(state.currentChannelId);
+  if (!channelId || state.commands.loading) return;
+  if (Number(state.commands.channelId) === channelId) return;
+  state.commands.loading = true;
+  try {
+    const res = await api(`/api/commands?channelId=${channelId}`);
+    const data = await res.json().catch(() => ({}));
+    state.commands.channelId = channelId;
+    state.commands.items = res.ok ? (data.commands || []) : [];
+  } catch (_) {
+    state.commands.items = [];
+  } finally {
+    state.commands.loading = false;
+  }
+}
+
+async function updateCommandMenu() {
+  const text = els.messageInput?.value || '';
+  if (!text.startsWith('/') || text.startsWith('//') || /\s/.test(text)) {
+    hideCommandMenu();
+    return;
+  }
+  await loadCommandsForChannel();
+  if (!els.commandMenu || !text.startsWith('/')) return;
+  const prefix = text.slice(1).toLowerCase();
+  const matches = state.commands.items.filter((item) => item.name.startsWith(prefix)
+    || item.aliases?.some((alias) => alias.startsWith(prefix))
+    || item.description.toLowerCase().includes(prefix));
+  if (!matches.length) {
+    hideCommandMenu();
+    return;
+  }
+  state.commands.activeIndex = Math.min(state.commands.activeIndex, matches.length - 1);
+  els.commandMenu.innerHTML = matches.map((item, index) => `
+    <button type="button" class="command-option${index === state.commands.activeIndex ? ' active' : ''}"
+      role="option" aria-selected="${index === state.commands.activeIndex}" data-command-name="${escapeHtml(item.name)}">
+      <strong>/${escapeHtml(item.name)}</strong><span>${escapeHtml(item.description)}</span>
+    </button>`).join('');
+  els.commandMenu.hidden = false;
+}
+
+function selectCommand(name) {
+  if (!els.messageInput) return;
+  els.messageInput.value = `/${name} `;
+  hideCommandMenu();
+  els.messageInput.focus();
+}
+
+function handleCommandMenuClick(event) {
+  const option = event.target.closest('[data-command-name]');
+  if (option) selectCommand(option.dataset.commandName);
+}
+
+function handleCommandMenuKeydown(event) {
+  if (!els.commandMenu || els.commandMenu.hidden) return false;
+  const options = [...els.commandMenu.querySelectorAll('[data-command-name]')];
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    hideCommandMenu();
+    return true;
+  }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    state.commands.activeIndex = (state.commands.activeIndex + step + options.length) % options.length;
+    updateCommandMenu();
+    return true;
+  }
+  if (event.key === 'Enter' && options.length) {
+    event.preventDefault();
+    selectCommand(options[state.commands.activeIndex].dataset.commandName);
+    return true;
+  }
+  return false;
+}
+
+function commandValue(value) {
+  return value === null ? 'No limit' : String(value ?? '—');
+}
+
+function renderPrivateCommandResponse(response, commandText) {
+  if (!els.commandPrivateResponses) return;
+  const card = document.createElement('section');
+  card.className = 'command-private-card';
+  const data = response.data || {};
+  const balances = (data.leaveTypes || []).map((row) => `
+    <tr><th>${escapeHtml(row.name)}</th><td>${commandValue(row.entitled)}</td><td>${commandValue(row.used)}</td><td>${commandValue(row.pending)}</td><td>${commandValue(row.remaining)}</td></tr>`).join('');
+  const requests = (data.requests || []).map((row) => `
+    <li><strong>${escapeHtml(row.typeName)}</strong> · ${escapeHtml(row.startDate)}${row.endDate !== row.startDate ? ` – ${escapeHtml(row.endDate)}` : ''} · ${escapeHtml(String(row.days))} day${Number(row.days) === 1 ? '' : 's'} <span class="command-status">${escapeHtml(row.status)}</span></li>`).join('');
+  const commands = (data.commands || []).map((row) => `<li><strong>/${escapeHtml(row.name)}</strong> — ${escapeHtml(row.description)}</li>`).join('');
+  card.innerHTML = `
+    <header><div><span class="command-assistant">HR Assistant</span><span class="command-private-label">Only visible to you</span></div><button type="button" class="command-dismiss" aria-label="Dismiss private response">&times;</button></header>
+    <p class="command-echo">You: ${escapeHtml(commandText)}</p>
+    <h3>${escapeHtml(response.title || 'HR response')}</h3>
+    ${response.period ? `<p class="command-period">Period: ${escapeHtml(response.period)}</p>` : ''}
+    ${data.message ? `<p>${escapeHtml(data.message)}</p>` : ''}
+    ${balances ? `<div class="command-table-wrap"><table><thead><tr><th>Type</th><th>Credits</th><th>Used</th><th>Pending</th><th>Available</th></tr></thead><tbody>${balances}</tbody></table></div>` : ''}
+    ${requests ? `<ul class="command-records">${requests}</ul>` : (!balances && 'requests' in data ? '<p>No matching leave requests.</p>' : '')}
+    ${commands ? `<ul class="command-records">${commands}</ul>` : ''}
+    ${data.note ? `<p class="command-note">${escapeHtml(data.note)}</p>` : ''}
+    ${(response.actions || []).map((action) => {
+      if (action.type === 'open-route' && action.route === 'leave') return '<button type="button" class="btn" data-command-route="leave">Open Leave</button>';
+      if (action.type === 'cancel-leave' && Number.isSafeInteger(Number(action.requestId))) return `<button type="button" class="btn danger" data-command-cancel-leave="${Number(action.requestId)}">Cancel request</button>`;
+      return '';
+    }).join('')}`;
+  els.commandPrivateResponses.prepend(card);
+}
+
+async function executeSlashCommand(commandText) {
+  if (!state.currentChannelId) return;
+  hideCommandMenu();
+  els.sendBtn.disabled = true;
+  try {
+    const requestId = createClientMessageId().replace(/[^A-Za-z0-9_-]/g, '');
+    const res = await api('/api/commands/execute', {
+      method: 'POST',
+      body: JSON.stringify({ channelId: state.currentChannelId, command: commandText, requestId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not run that command');
+    els.messageInput.value = '';
+    renderPrivateCommandResponse(data, commandText);
+  } catch (error) {
+    showToast(error.message || 'Could not run that command.', 'error');
+  } finally {
+    els.sendBtn.disabled = false;
+    els.messageInput.focus();
+  }
+}
+
+function handleCommandResponseClick(event) {
+  if (event.target.closest('.command-dismiss')) {
+    event.target.closest('.command-private-card')?.remove();
+    return;
+  }
+  if (event.target.closest('[data-command-route="leave"]')) {
+    if (typeof peopleState !== 'undefined') {
+      peopleState.tab = 'leave';
+      peopleState.pageId = null;
+    }
+    setSection('people').then(() => typeof renderPeopleBody === 'function' && renderPeopleBody());
+    return;
+  }
+  const cancel = event.target.closest('[data-command-cancel-leave]');
+  if (cancel) {
+    if (!confirm('Cancel this leave request?')) return;
+    const card = cancel.closest('.command-private-card');
+    leaveApi(`/api/leave/requests/${Number(cancel.dataset.commandCancelLeave)}/cancel`, 'POST', {})
+      .then(() => { card?.remove(); showToast('Leave request cancelled.', 'success'); if (typeof loadLeave === 'function') loadLeave(); })
+      .catch((error) => showToast(error.message || 'Could not cancel the request.', 'error'));
   }
 }
 

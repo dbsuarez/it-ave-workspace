@@ -118,4 +118,18 @@ label.check { display: flex; align-items: center; gap: 8px; color: var(--text); 
 .attach-file { display: inline-block; margin-top: 4px; font-size: 14px; color: inherit; text-decoration: underline; }
 .composer { display: flex; gap: 8px; align-items: flex-end; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--surface); }
 .composer-input { max-height: 120px; }
+.command-menu { max-height: 35vh; overflow-y: auto; margin: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+.command-menu[hidden] { display: none; }
+.command-option { width: 100%; display: grid; gap: 3px; padding: 10px 12px; border: 0; background: transparent; color: var(--text); text-align: left; }
+.command-option span { color: var(--muted); font-size: 12px; }
+.command-option.active { background: var(--soft); }
+.command-private-responses:empty { display: none; }
+.command-private-responses { max-height: 42vh; overflow-y: auto; padding: 0 10px 8px; }
+.command-private-card { padding: 12px; border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 10px; background: var(--surface); }
+.command-private-head { display: flex; align-items: center; gap: 7px; }
+.command-private-label { color: var(--primary); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.command-dismiss { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 20px; }
+.command-private-card h3 { margin: 8px 0 4px; }
+.command-balance, .command-record { display: grid; gap: 2px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.command-balance span, .command-record span { color: var(--muted); font-size: 12px; }
 .send-btn { padding: 11px 13px; }

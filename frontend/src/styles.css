@@ -1767,6 +1767,58 @@ body.iav-dev .demo-banner {
   flex-shrink: 0;
 }
 
+.command-menu {
+  max-height: min(320px, 42vh);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(20, 12, 28, 0.2);
+}
+
+.command-menu[hidden] { display: none; }
+
+.command-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(140px, auto) 1fr;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-option span { color: var(--text-muted); }
+.command-option:hover, .command-option.active { background: var(--muted-bg); }
+
+.command-private-responses:empty { display: none; }
+.command-private-responses { max-height: 42vh; overflow-y: auto; }
+
+.command-private-card {
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--purple) 45%, var(--border));
+  border-left: 4px solid var(--purple);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.command-private-card header { display: flex; justify-content: space-between; gap: 12px; }
+.command-assistant { font-weight: 800; }
+.command-private-label { margin-left: 8px; color: var(--purple); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.command-dismiss { border: 0; background: transparent; color: var(--text-muted); font-size: 20px; cursor: pointer; }
+.command-echo, .command-period, .command-note { color: var(--text-muted); font-size: 12px; }
+.command-private-card h3 { margin: 8px 0 2px; }
+.command-table-wrap { overflow-x: auto; }
+.command-private-card table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.command-private-card th, .command-private-card td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+.command-private-card th:first-child { text-align: left; }
+.command-records { margin: 8px 0; padding-left: 20px; }
+.command-records li { margin: 6px 0; }
+.command-status { color: var(--text-muted); text-transform: capitalize; }
+
 .reply-composer-preview {
   display: flex;
   align-items: center;

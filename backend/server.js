@@ -34,6 +34,7 @@ const scheduledRoutes = require('./src/routes/scheduled');
 const channelLinkRoutes = require('./src/routes/channelLinks');
 const userGroupRoutes = require('./src/routes/userGroups');
 const webhookRoutes = require('./src/routes/webhooks');
+const commandRoutes = require('./src/routes/commands');
 const migrations = require('./src/migrations');
 const { parseTrustProxy } = require('./src/rateLimit');
 const chatSockets = require('./src/sockets/chat');
@@ -108,6 +109,7 @@ app.use('/api/scheduled', scheduledRoutes);
 app.use('/api/user-groups', userGroupRoutes);
 app.use('/api/webhooks', webhookRoutes.manage);
 app.use('/api/hooks', webhookRoutes.receive);
+app.use('/api/commands', commandRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

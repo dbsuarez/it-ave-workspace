@@ -18,6 +18,24 @@ module.exports = [
   'ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS available_to_all BOOLEAN NOT NULL DEFAULT FALSE',
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS command_scope VARCHAR(50)',
+  `INSERT INTO channels (name, topic, is_private, available_to_all, command_scope)
+   VALUES ('hr-inquiry', 'Ask HR questions or use private self-service commands. Ordinary messages remain visible to channel members.', FALSE, TRUE, 'hr-inquiry')
+   ON CONFLICT (name) DO UPDATE SET command_scope = 'hr-inquiry', available_to_all = TRUE`,
+  `INSERT INTO channel_members (channel_id, user_id)
+   SELECT c.id, u.id FROM channels c CROSS JOIN users u
+   WHERE c.command_scope = 'hr-inquiry' AND u.account_type = 'member' AND u.deactivated_at IS NULL
+   ON CONFLICT DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS command_audit_log (
+     id BIGSERIAL PRIMARY KEY,
+     actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     channel_id INTEGER REFERENCES channels(id) ON DELETE SET NULL,
+     command_name VARCHAR(80) NOT NULL,
+     request_id VARCHAR(100) NOT NULL,
+     outcome VARCHAR(20) NOT NULL CHECK (outcome IN ('success', 'error')),
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_command_audit_actor_created ON command_audit_log(actor_id, created_at DESC)',
   `
     DO $$ BEGIN
       ALTER TABLE channel_members ADD CONSTRAINT channel_members_role_check

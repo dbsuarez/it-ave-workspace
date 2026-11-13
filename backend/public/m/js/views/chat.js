@@ -66,13 +66,17 @@ async function renderConversation(root, kind, id, ctx) {
   const scroller = h('div', { class: 'messages' });
   const input = h('textarea', { class: 'input composer-input', rows: 1, placeholder: 'Message', 'aria-label': 'Message' });
   const sendButton = h('button', { class: 'btn primary send-btn', type: 'button', 'aria-label': 'Send' }, icon('send'));
-  put(page, scroller, h('div', { class: 'composer' }, input, sendButton));
+  const privateResponses = h('div', { class: 'command-private-responses', 'aria-live': 'polite' });
+  const commandMenu = h('div', { class: 'command-menu', hidden: true, role: 'listbox', 'aria-label': 'Available commands' });
+  put(page, scroller, privateResponses, commandMenu, h('div', { class: 'composer' }, input, sendButton));
   root.append(page);
 
   let messages = [];
   let title = '';
   let canSend = true;
   const pending = new Map(); // clientMessageId -> element
+  let commands = [];
+  let commandIndex = 0;
 
   try {
     if (kind === 'c') {
@@ -140,9 +144,69 @@ async function renderConversation(root, kind, id, ctx) {
     paint();
   }
 
-  function send() {
-    const content = input.value.trim();
+  function hideCommandMenu() { commandMenu.hidden = true; clear(commandMenu); commandIndex = 0; }
+
+  async function loadCommands() {
+    if (kind !== 'c' || commands.length) return;
+    commands = await call(`/api/commands?channelId=${id}`).then((data) => data.commands || []).catch(() => []);
+  }
+
+  async function updateCommandMenu() {
+    const value = input.value;
+    if (kind !== 'c' || !value.startsWith('/') || value.startsWith('//') || /\s/.test(value)) { hideCommandMenu(); return; }
+    await loadCommands();
+    const prefix = value.slice(1).toLowerCase();
+    const matches = commands.filter((item) => item.name.startsWith(prefix) || item.description.toLowerCase().includes(prefix));
+    if (!matches.length) { hideCommandMenu(); return; }
+    commandIndex = Math.min(commandIndex, matches.length - 1);
+    put(clear(commandMenu), matches.map((item, index) => h('button', {
+      class: `command-option${index === commandIndex ? ' active' : ''}`, type: 'button', role: 'option',
+      'aria-selected': String(index === commandIndex), onclick: () => { input.value = `/${item.name} `; hideCommandMenu(); input.focus(); },
+    }, h('strong', {}, `/${item.name}`), h('span', {}, item.description))));
+    commandMenu.hidden = false;
+  }
+
+  function renderCommandResponse(response, commandText) {
+    const data = response.data || {};
+    const card = h('section', { class: 'command-private-card' },
+      h('div', { class: 'command-private-head' }, h('strong', {}, 'HR Assistant'), h('span', { class: 'command-private-label' }, 'Only visible to you'),
+        h('button', { class: 'command-dismiss', type: 'button', 'aria-label': 'Dismiss', onclick: () => card.remove() }, '×')),
+      h('div', { class: 'muted small' }, `You: ${commandText}`), h('h3', {}, response.title || 'HR response'),
+      response.period ? h('div', { class: 'muted small' }, `Period: ${response.period}`) : null,
+      data.message ? h('p', {}, data.message) : null,
+      ...(data.leaveTypes || []).map((row) => h('div', { class: 'command-balance' }, h('strong', {}, row.name),
+        h('span', {}, row.remaining === null ? `${row.used} days used · no limit` : `${row.remaining} available · ${row.used} used · ${row.pending} pending`))),
+      ...(data.requests || []).map((row) => h('div', { class: 'command-record' }, h('strong', {}, row.typeName),
+        h('span', {}, `${row.startDate}${row.endDate !== row.startDate ? ` – ${row.endDate}` : ''} · ${row.days} day${Number(row.days) === 1 ? '' : 's'} · ${row.status}`))),
+      ...(data.commands || []).map((row) => h('div', { class: 'command-record' }, h('strong', {}, `/${row.name}`), h('span', {}, row.description))),
+      data.note ? h('p', { class: 'muted small' }, data.note) : null,
+      (response.actions || []).some((action) => action.type === 'open-route' && action.route === 'leave')
+        ? h('a', { class: 'btn', href: '#/leave' }, 'Open Leave') : null,
+      ...((response.actions || []).filter((action) => action.type === 'cancel-leave' && Number.isSafeInteger(Number(action.requestId))).map((action) =>
+        h('button', { class: 'btn bad', type: 'button', onclick: async () => {
+          if (!confirm('Cancel this leave request?')) return;
+          try { await call(`/api/leave/requests/${Number(action.requestId)}/cancel`, { method: 'POST', body: {} }); card.remove(); toast('Leave request cancelled.', 'success'); }
+          catch (err) { toast(err.message || 'Could not cancel the request.', 'error'); }
+        } }, 'Cancel request'))));
+    privateResponses.prepend(card);
+  }
+
+  async function executeCommand(commandText) {
+    sendButton.disabled = true;
+    hideCommandMenu();
+    try {
+      const response = await call('/api/commands/execute', { method: 'POST', body: { channelId: id, command: commandText, requestId: `m-${Date.now()}` } });
+      input.value = '';
+      renderCommandResponse(response, commandText);
+    } catch (err) { toast(err.message || 'Could not run that command.', 'error'); }
+    finally { sendButton.disabled = false; input.focus(); }
+  }
+
+  async function send() {
+    let content = input.value.trim();
     if (!content || !canSend) return;
+    if (kind === 'c' && content.startsWith('/') && !content.startsWith('//')) { await executeCommand(content); return; }
+    if (content.startsWith('//')) content = content.slice(1);
     const clientMessageId = `m-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     if (kind === 'c') emit('send_message', { channelId: id, content, clientMessageId });
     else if (kind === 'd') emit('send_direct_message', { receiverId: id, content, clientMessageId });
@@ -156,8 +220,16 @@ async function renderConversation(root, kind, id, ctx) {
     setTimeout(() => { if (pending.has(clientMessageId)) { bubble.querySelector('.msg-time').textContent = 'Not sent. Check your connection.'; bubble.classList.add('failed'); } }, 10000);
   }
   sendButton.addEventListener('click', send);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && window.matchMedia('(hover: hover)').matches) { e.preventDefault(); send(); } });
-  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 120)}px`; });
+  input.addEventListener('keydown', (e) => {
+    const options = [...commandMenu.querySelectorAll('.command-option')];
+    if (!commandMenu.hidden && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault(); commandIndex = (commandIndex + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length; updateCommandMenu(); return;
+    }
+    if (!commandMenu.hidden && e.key === 'Escape') { e.preventDefault(); hideCommandMenu(); return; }
+    if (!commandMenu.hidden && e.key === 'Enter' && options.length) { e.preventDefault(); options[commandIndex].click(); return; }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && window.matchMedia('(hover: hover)').matches) { e.preventDefault(); send(); }
+  });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 120)}px`; updateCommandMenu(); });
 
   const offs = [
     on('new_message', (m) => { if (kind === 'c' && Number(m.channelId) === id) { add({ id: m.id, senderId: m.userId, name: m.username, color: m.avatarColor, content: m.content, createdAt: m.createdAt, attachments: m.attachments || [], reply: m.replyToMessage, clientMessageId: m.clientMessageId }); call(`/api/channels/${id}/read`, { method: 'POST' }).catch(() => {}); } }),
