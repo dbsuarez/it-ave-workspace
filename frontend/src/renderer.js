@@ -1379,6 +1379,11 @@ async function activateSearchResult(result) {
 // ============================================================
 // Channels
 // ============================================================
+function lastChannelStoreKey() {
+  const userId = Number(state.user?.id);
+  return Number.isSafeInteger(userId) && userId > 0 ? `lastChannel:${userId}` : null;
+}
+
 async function loadChannels() {
   try {
     const res = await api('/api/channels/my');
@@ -1393,9 +1398,16 @@ async function loadChannels() {
     renderHuddleView();
     if (state.section === 'lists') populateListsChannelSelect();
 
-    // Open first channel if none selected
-    if (!state.currentChannelId && state.channels.length > 0) {
-      openChannel(state.channels[0].id);
+    // Restore this user's last accessible channel; otherwise open the first one.
+    if (!state.currentChannelId && state.view === 'channel' && state.channels.length > 0) {
+      let savedId = null;
+      const key = !state.viewAs && lastChannelStoreKey();
+      if (key) {
+        try { savedId = Number(await electronAPI.storeGet(key)); } catch (err) { console.error('Restore last channel error:', err); }
+      }
+      const saved = state.channels.find((channel) => Number(channel.id) === savedId);
+      if (!saved && savedId && key) electronAPI.storeDelete(key).catch(() => {});
+      openChannel((saved || state.channels[0]).id);
     }
   } catch (err) {
     console.error('Load channels error:', err);
@@ -1423,6 +1435,9 @@ function renderSidebar() {
 }
 
 async function openChannel(channelId) {
+  const channel = state.channels.find((item) => Number(item.id) === Number(channelId));
+  if (!channel) return;
+  channelId = Number(channel.id);
   const previousChannelId = state.currentChannelId;
   closeCanvasSheetForOtherConversation({ channelId });
 
@@ -1438,6 +1453,8 @@ async function openChannel(channelId) {
   }
 
   state.currentChannelId = channelId;
+  const lastKey = !state.viewAs && lastChannelStoreKey();
+  if (lastKey) electronAPI.storeSet(lastKey, channelId).catch((err) => console.error('Remember last channel error:', err));
   state.currentDMId = null;
   cancelReply();
   state.view = 'channel';
@@ -1446,7 +1463,7 @@ async function openChannel(channelId) {
   showPane('home');
   showView('channel');
 
-  const ch = state.channels.find(c => c.id === channelId);
+  const ch = channel;
   if (ch) {
     els.channelTitle.textContent = '#' + ch.name;
     els.channelTopic.textContent = ch.topic || '';

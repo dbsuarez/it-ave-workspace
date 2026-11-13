@@ -20,7 +20,8 @@ function isPlainObject(value) {
 }
 
 function isAllowedStoreKey(key) {
-  return key === 'authToken' || key === 'user' || key === 'viewAsReturn' || (typeof key === 'string' && /^preferences:\d{1,12}$/.test(key));
+  return key === 'authToken' || key === 'user' || key === 'viewAsReturn'
+    || (typeof key === 'string' && (/^preferences:\d{1,12}$/.test(key) || /^lastChannel:\d{1,12}$/.test(key)));
 }
 
 // null when the write is acceptable, otherwise a short reason.
@@ -29,6 +30,9 @@ function validateStoreWrite(key, value) {
   if (key === 'authToken') {
     return typeof value === 'string' && value.length > 0 && value.length <= MAX_TOKEN_LENGTH
       ? null : 'Invalid session token';
+  }
+  if (key.startsWith('lastChannel:')) {
+    return Number.isSafeInteger(value) && value > 0 ? null : 'Invalid channel';
   }
   const limit = key === 'user' ? MAX_USER_JSON : key === 'viewAsReturn' ? MAX_USER_JSON + MAX_TOKEN_LENGTH : MAX_PREFERENCES_JSON;
   if (!isPlainObject(value)) return 'Expected an object';

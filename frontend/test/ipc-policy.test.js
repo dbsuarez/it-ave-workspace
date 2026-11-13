@@ -5,11 +5,11 @@ const { pathToFileURL } = require('node:url');
 const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl, validateExportRequest, exportFileName } = require('../ipc-policy');
 
 test('only the keys the app uses may be stored', () => {
-  for (const key of ['authToken', 'user', 'preferences:7', 'preferences:123456']) {
+  for (const key of ['authToken', 'user', 'preferences:7', 'preferences:123456', 'lastChannel:7']) {
     assert.equal(isAllowedStoreKey(key), true, key);
   }
   for (const key of ['', 'serverUrl', 'preferences:', 'preferences:abc', 'preferences:1:2', '__proto__',
-    'constructor', 'authToken ', 'AUTHTOKEN', 'a.b', null, undefined, 5, {}, ['user']]) {
+    'constructor', 'authToken ', 'AUTHTOKEN', 'lastChannel:', 'lastChannel:abc', 'a.b', null, undefined, 5, {}, ['user']]) {
     assert.equal(isAllowedStoreKey(key), false, String(key));
   }
 });
@@ -28,6 +28,9 @@ test('writes are checked for shape and size', () => {
 
   assert.equal(validateStoreWrite('preferences:4', { theme: 'dark', enterToSend: true }), null);
   assert.ok(validateStoreWrite('preferences:4', { blob: 'x'.repeat(5000) }));
+  assert.equal(validateStoreWrite('lastChannel:4', 27), null);
+  assert.ok(validateStoreWrite('lastChannel:4', 0));
+  assert.ok(validateStoreWrite('lastChannel:4', '27'));
   assert.ok(validateStoreWrite('evil', 1));
 });
 
