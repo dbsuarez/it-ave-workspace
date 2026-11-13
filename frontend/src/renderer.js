@@ -1013,6 +1013,14 @@ function connectSocket() {
     }, 400);
   });
   state.socket.on('workspace_sections_updated', () => loadSidebarLayout());
+  state.socket.on('team_sections_updated', async () => {
+    await loadChannels();
+    if (state.currentChannelId && !state.channels.some((channel) => Number(channel.id) === Number(state.currentChannelId))) {
+      state.currentChannelId = null;
+      if (state.view === 'channel' && state.channels.length) await openChannel(state.channels[0].id);
+    }
+    await loadSidebarLayout();
+  });
   state.socket.on('channel_access_revoked', async ({ channelId }) => {
     state.channels = state.channels.filter((channel) => Number(channel.id) !== Number(channelId));
     delete state.messages[channelId];
@@ -3163,10 +3171,13 @@ async function loadModerationChannel(channelId) {
     state.moderation.channelMembers = members;
     const selectedChannel = state.channels.find((channel) => Number(channel.id) === Number(channelId));
     const ownerName = selectedChannel
-      ? ([selectedChannel.creatorFirstName, selectedChannel.creatorMiddleName, selectedChannel.creatorLastName].filter(Boolean).join(' ') || selectedChannel.creatorUsername || 'Unknown owner')
-      : 'Unknown owner';
+      ? ([selectedChannel.creatorFirstName, selectedChannel.creatorMiddleName, selectedChannel.creatorLastName].filter(Boolean).join(' ') || selectedChannel.creatorUsername || 'Built-in')
+      : 'Built-in';
+    const ownerAvatarHtml = selectedChannel?.createdBy
+      ? `<button type="button" class="avatar-mini" data-user-id="${selectedChannel.createdBy}" data-moderation-owner style="background:${escapeHtml(selectedChannel.creatorAvatarColor || '#64748b')}" title="${escapeHtml(ownerName)}" aria-label="Open ${escapeHtml(ownerName)}'s menu">${escapeHtml(ownerName.charAt(0).toUpperCase())}</button>`
+      : '<span class="avatar-mini moderation-built-in-avatar" aria-hidden="true">#</span>';
     dataContainer.innerHTML = `
-      ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card moderation-channel-owner" data-channel-config-section="overview"><h2>Channel ownership</h2><div class="moderation-owner-row"><button type="button" class="avatar-mini" data-user-id="${selectedChannel.createdBy}" data-moderation-owner style="background:${escapeHtml(selectedChannel.creatorAvatarColor || '#64748b')}" title="${escapeHtml(ownerName)}" aria-label="Open ${escapeHtml(ownerName)}'s menu">${escapeHtml(ownerName.charAt(0).toUpperCase())}</button><span><strong>${escapeHtml(ownerName)}</strong><small>Owner of #${escapeHtml(selectedChannel.name)}</small></span></div></div>` : ''}
+      ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card moderation-channel-owner" data-channel-config-section="overview"><h2>Channel ownership</h2><div class="moderation-owner-row">${ownerAvatarHtml}<span><strong>${escapeHtml(ownerName)}</strong><small>${selectedChannel.createdBy ? `Owner of #${escapeHtml(selectedChannel.name)}` : 'Created by the workspace'}</small></span></div></div>` : ''}
       <div class="moderation-card" data-channel-config-section="overview">
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
@@ -5288,7 +5299,7 @@ function renderMarkdown(markdown) {
 // ============================================================
 // Channel Creation Modal
 // ============================================================
-function openCreateChannelModal({ personal = false } = {}) {
+function openCreateChannelModal({ personal = false, team = false } = {}) {
   if (!state.moderation.canCreateChannels) {
     showToast('You do not have permission to create channels.', 'error');
     return;
@@ -5296,10 +5307,11 @@ function openCreateChannelModal({ personal = false } = {}) {
   const personalInput = document.getElementById('new-channel-personal');
   state.channelCreationFromOrganizer = document.getElementById('modal-sidebar')?.classList.contains('open') || false;
   personalInput.checked = personal;
-  document.getElementById('new-channel-available-row').hidden = personal || !state.moderation.canManageWorkspace;
+  document.getElementById('new-channel-personal-row').hidden = team;
+  document.getElementById('new-channel-available-row').hidden = personal || team || !state.moderation.canManageWorkspace;
   document.getElementById('new-channel-available-all').checked = false;
   personalInput.onchange = () => {
-    document.getElementById('new-channel-available-row').hidden = personalInput.checked || !state.moderation.canManageWorkspace;
+    document.getElementById('new-channel-available-row').hidden = team || personalInput.checked || !state.moderation.canManageWorkspace;
     if (personalInput.checked) document.getElementById('new-channel-available-all').checked = false;
   };
   openSettingsModal(document.getElementById('modal-create-channel'));
@@ -5309,6 +5321,7 @@ function openCreateChannelModal({ personal = false } = {}) {
 function closeModalCreateChannel({ restoreOrganizer = true } = {}) {
   document.getElementById('modal-create-channel').classList.remove('open');
   document.getElementById('modal-overlay').classList.remove('open');
+  document.getElementById('new-channel-personal-row').hidden = false;
   if (restoreOrganizer && state.channelCreationFromOrganizer && state.sidebarDraft) {
     renderSidebarModal();
     openSettingsModal(document.getElementById('modal-sidebar'));
@@ -5321,6 +5334,8 @@ async function saveCreateChannel() {
   const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const topic = document.getElementById('new-channel-topic').value.trim();
   const isPersonal = document.getElementById('new-channel-personal').checked;
+  const teamSectionId = state.channelCreationSectionTarget?.kind === 'team'
+    ? Number(state.channelCreationSectionTarget.id) : null;
   const availableToAll = Boolean(!isPersonal && state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
 
   if (!name) return;
@@ -5328,7 +5343,7 @@ async function saveCreateChannel() {
   try {
     const res = await api('/api/channels', {
       method: 'POST',
-      body: JSON.stringify({ name, topic, availableToAll, isPersonal }),
+      body: JSON.stringify({ name, topic, availableToAll, isPersonal, teamSectionId }),
     });
 
     const data = await res.json();
@@ -5338,7 +5353,15 @@ async function saveCreateChannel() {
     document.getElementById('new-channel-topic').value = '';
 
     await loadChannels();
-    if (!isPersonal && state.channelCreationSectionTarget && state.sidebarDraft) {
+    if (teamSectionId && state.channelCreationFromOrganizer && state.sidebarDraft) {
+      state.channelCreationSectionTarget = null;
+      await loadSidebarLayout();
+      state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
+      state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
+      state.teamSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().teamSections || [])) };
+      renderSidebarModal();
+      openSettingsModal(document.getElementById('modal-sidebar'));
+    } else if (!isPersonal && state.channelCreationSectionTarget && state.sidebarDraft) {
       const target = state.channelCreationSectionTarget.kind === 'workspace'
         ? state.workspaceSidebarDraft.sections.find((section) => section.id === state.channelCreationSectionTarget.id)
         : state.sidebarDraft.sections.find((section) => section.id === state.channelCreationSectionTarget.id);

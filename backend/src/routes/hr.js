@@ -6,6 +6,7 @@ const authenticateToken = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 const prelaunch = require('../prelaunch');
 const { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin, temporaryPassword, applyChecklist } = require('../hr');
+const { syncReportTeamChannels } = require('../teamSections');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -345,11 +346,16 @@ router.post('/employees/:id/deactivate', async (req, res) => {
        WHERE id = $2`,
       [lastDay, id]
     );
+    await syncReportTeamChannels(query, id, target.manager_id, null);
+    if (target.manager_id) await query('UPDATE team_sidebar_sections SET owner_id = $1 WHERE owner_id = $2', [target.manager_id, id]);
+    else await query('DELETE FROM team_sidebar_sections WHERE owner_id = $1', [id]);
     const moved = await query('UPDATE users SET manager_id = $1 WHERE manager_id = $2 RETURNING id', [target.manager_id, id]);
+    for (const report of moved.rows) await syncReportTeamChannels(query, report.id, id, target.manager_id);
     await query('DELETE FROM user_secondary_managers WHERE user_id = $1 OR manager_id = $1', [id]);
     await query('UPDATE departments SET head_id = NULL WHERE head_id = $1', [id]);
     await applyChecklist(id, 'offboarding');
     req.io?.in(`user_${id}`).disconnectSockets(true);
+    req.io?.emit('team_sections_updated');
     res.json({ employee: await employeeJson(id), reassignedReports: moved.rows.length });
   } catch (err) {
     sendError(res, err, 'Deactivate employee error');

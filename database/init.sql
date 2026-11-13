@@ -23,12 +23,20 @@ CREATE TABLE IF NOT EXISTS profile_likes (
   CHECK (profile_user_id <> user_id)
 );
 
+CREATE TABLE IF NOT EXISTS team_sidebar_sections (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(40) NOT NULL,
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS channels (
   id SERIAL PRIMARY KEY,
   name VARCHAR(50) UNIQUE NOT NULL,
   topic TEXT DEFAULT '',
   is_private BOOLEAN DEFAULT FALSE,
   is_personal BOOLEAN NOT NULL DEFAULT FALSE,
+  team_section_id INTEGER REFERENCES team_sidebar_sections(id) ON DELETE CASCADE,
   available_to_all BOOLEAN NOT NULL DEFAULT FALSE,
   command_scope VARCHAR(50),
   created_by INTEGER REFERENCES users(id),

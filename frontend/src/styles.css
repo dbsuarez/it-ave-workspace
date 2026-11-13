@@ -879,6 +879,7 @@ body.iav-dev .demo-banner {
   color: #fff;
   cursor: pointer;
 }
+.moderation-owner-row .moderation-built-in-avatar { cursor: default; background: var(--muted-bg); color: var(--text-muted); }
 .moderation-owner-row span { display: grid; gap: 2px; }
 .moderation-owner-row small { color: var(--text-muted); }
 .moderation-settings,

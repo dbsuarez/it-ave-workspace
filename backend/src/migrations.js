@@ -19,6 +19,15 @@ module.exports = [
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS available_to_all BOOLEAN NOT NULL DEFAULT FALSE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT FALSE',
+  `CREATE TABLE IF NOT EXISTS team_sidebar_sections (
+     id SERIAL PRIMARY KEY,
+     name VARCHAR(40) NOT NULL,
+     owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS team_section_id INTEGER REFERENCES team_sidebar_sections(id) ON DELETE CASCADE',
+  'CREATE INDEX IF NOT EXISTS idx_team_sections_owner ON team_sidebar_sections(owner_id)',
+  'CREATE INDEX IF NOT EXISTS idx_channels_team_section ON channels(team_section_id)',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS command_scope VARCHAR(50)',
   `INSERT INTO channels (name, topic, is_private, available_to_all, command_scope)
    VALUES ('hr-inquiry', 'Ask HR questions or use private self-service commands. Ordinary messages remain visible to channel members.', FALSE, TRUE, 'hr-inquiry')

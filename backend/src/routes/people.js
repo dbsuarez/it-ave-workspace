@@ -7,6 +7,7 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { canManageEmployees } = require('../hr');
+const { syncReportTeamChannels } = require('../teamSections');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -292,7 +293,7 @@ router.put('/:id/manager', async (req, res) => {
     if (id === null) throw fail(400, 'A valid person ID is required');
     const managerId = req.body && req.body.managerId === null ? null : parseId(req.body && req.body.managerId);
     if (req.body && req.body.managerId !== null && managerId === null) throw fail(400, 'managerId must be a person ID or null');
-    const person = (await query(`SELECT u.id FROM users u WHERE u.id = $1 AND ${MEMBERS_ONLY}`, [id])).rows[0];
+    const person = (await query(`SELECT u.id, u.manager_id FROM users u WHERE u.id = $1 AND ${MEMBERS_ONLY}`, [id])).rows[0];
     if (!person) throw fail(404, 'Person not found');
     if (managerId !== null) {
       if (managerId === id) throw fail(400, 'Nobody can report to themselves');
@@ -307,8 +308,10 @@ router.put('/:id/manager', async (req, res) => {
       }
     }
     await query('UPDATE users SET manager_id = $1 WHERE id = $2', [managerId, id]);
+    await syncReportTeamChannels(query, id, person.manager_id, managerId);
     // the main manager is not also an extra one
     if (managerId !== null) await query('DELETE FROM user_secondary_managers WHERE user_id = $1 AND manager_id = $2', [id, managerId]);
+    req.io?.emit('team_sections_updated');
     res.json({ id, managerId });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });

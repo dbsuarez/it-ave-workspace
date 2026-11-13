@@ -30,7 +30,8 @@ const API = () => (sql, params = []) => {
   }
   if (sql.includes('SELECT default_slowmode_seconds')) return { rows: [{ default_slowmode_seconds: 5 }] };
   if (sql.includes('INSERT INTO channels')) {
-    const channel = { id: 43, name: params[0], topic: params[1], is_private: params[2], available_to_all: params[3], created_by: params[4] };
+    const channel = { id: 43, name: params[0], topic: params[1], is_private: params[2], is_personal: params[3],
+      team_section_id: params[4], available_to_all: params[5], created_by: params[6] };
     channels.set(channel.id, channel);
     return { rows: [channel] };
   }

@@ -25,13 +25,48 @@ test.before(async () => {
   pool = require('../src/db').pool;
   ids.owner = (await admin.query("INSERT INTO users (username, email, password_hash, is_superadmin) VALUES ('section-owner', 'owner@x.test', 'x', TRUE) RETURNING id")).rows[0].id;
   ids.member = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('section-member', 'member@x.test', 'x') RETURNING id")).rows[0].id;
+  ids.leader = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('mis-leader', 'mis-leader@x.test', 'x') RETURNING id")).rows[0].id;
+  ids.report = (await admin.query("INSERT INTO users (username, email, password_hash, manager_id) VALUES ('mis-report', 'mis-report@x.test', 'x', $1) RETURNING id", [ids.leader])).rows[0].id;
   ids.channel = (await admin.query("INSERT INTO channels (name) VALUES ('zz-workspace-sections') RETURNING id")).rows[0].id;
   const app = express();
   app.use(express.json());
   app.use('/api/settings', require('../src/routes/settings'));
+  app.use('/api/channels', require('../src/routes/channels'));
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
+});
+
+test('team leaders create team-only sections and channels for their direct reports', async (t) => {
+  if (!scratch) return t.skip('no PostgreSQL reachable');
+  const created = await request(ids.leader, '/api/settings/sidebar/team', {
+    method: 'POST', body: JSON.stringify({ name: 'MIS Only' }),
+  });
+  assert.equal(created.status, 201);
+  const sectionId = created.json.section.id;
+
+  const channel = await request(ids.leader, '/api/channels', {
+    method: 'POST', body: JSON.stringify({ name: 'zz-mis-only', teamSectionId: sectionId }),
+  });
+  assert.equal(channel.status, 201);
+  assert.equal(Number(channel.json.channel.teamSectionId), Number(sectionId));
+
+  const leaderView = await request(ids.leader, '/api/settings/sidebar');
+  assert.equal(leaderView.json.layout.teamSections[0].editable, true);
+  assert.deepEqual(leaderView.json.layout.teamSections[0].channelIds, [channel.json.channel.id]);
+
+  const reportView = await request(ids.report, '/api/settings/sidebar');
+  assert.equal(reportView.json.layout.teamSections[0].editable, false);
+  const reportChannels = await request(ids.report, '/api/channels/my');
+  assert.ok(reportChannels.json.channels.some((item) => Number(item.id) === Number(channel.json.channel.id)));
+
+  const outsiderView = await request(ids.member, '/api/settings/sidebar');
+  assert.deepEqual(outsiderView.json.layout.teamSections, []);
+
+  const forbidden = await request(ids.report, '/api/channels', {
+    method: 'POST', body: JSON.stringify({ name: 'zz-mis-report-created', teamSectionId: sectionId }),
+  });
+  assert.equal(forbidden.status, 403);
 });
 
 test.after(async () => {

@@ -174,10 +174,11 @@ function normalizeWorkspaceSidebarLayout(input) {
   return { sections: normalized.sections.map(({ id, name, channelIds }) => ({ id, name, channelIds })) };
 }
 
-function withoutLockedChannels(layout, workspaceLayout, personalChannelIds = []) {
+function withoutLockedChannels(layout, workspaceLayout, personalChannelIds = [], teamChannelIds = []) {
   const locked = new Set([
     ...(workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number),
     ...personalChannelIds.map(Number),
+    ...teamChannelIds.map(Number),
   ]);
   return {
     sections: (layout.sections || []).map((section) => ({
@@ -190,10 +191,20 @@ function withoutLockedChannels(layout, workspaceLayout, personalChannelIds = [])
 
 router.get('/sidebar', async (req, res) => {
   try {
-    const [userResult, workspaceResult, personalResult, canManageWorkspaceSections] = await Promise.all([
+    const [userResult, workspaceResult, personalResult, teamResult, directReports, canManageWorkspaceSections] = await Promise.all([
       query('SELECT sidebar_layout FROM users WHERE id = $1', [req.user.userId]),
       query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1'),
       query('SELECT id FROM channels WHERE created_by = $1 AND is_personal = TRUE', [req.user.userId]),
+      query(`SELECT ts.id, ts.name, ts.owner_id, owner.username AS owner_username,
+                    COALESCE(array_agg(c.id ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL), '{}') AS channel_ids
+             FROM team_sidebar_sections ts
+             JOIN users owner ON owner.id = ts.owner_id
+             LEFT JOIN channels c ON c.team_section_id = ts.id
+             WHERE ts.owner_id = $1 OR EXISTS (
+               SELECT 1 FROM users me WHERE me.id = $1 AND me.manager_id = ts.owner_id
+             )
+             GROUP BY ts.id, owner.username ORDER BY LOWER(ts.name)`, [req.user.userId]),
+      query("SELECT COUNT(*)::integer AS count FROM users WHERE manager_id = $1 AND account_type = 'member' AND deactivated_at IS NULL", [req.user.userId]),
       can(query, req.user.userId, 'manage_workspace'),
     ]);
     const stored = userResult.rows[0]?.sidebar_layout;
@@ -201,13 +212,56 @@ router.get('/sidebar', async (req, res) => {
     const personal = withoutLockedChannels(
       stored && Array.isArray(stored.sections) ? { sections: stored.sections, workspaceCollapsed: stored.workspaceCollapsed || [] } : { sections: [], workspaceCollapsed: [] },
       workspaceLayout,
-      personalResult.rows.map((row) => row.id)
+      personalResult.rows.map((row) => row.id),
+      teamResult.rows.flatMap((row) => row.channel_ids || [])
     );
-    res.json({ layout: { ...personal, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections } });
+    const teamSections = teamResult.rows.map((row) => ({
+      id: `team-${row.id}`, teamSectionId: row.id, name: row.name, ownerId: row.owner_id,
+      ownerUsername: row.owner_username, editable: Number(row.owner_id) === Number(req.user.userId),
+      channelIds: (row.channel_ids || []).map(Number),
+    }));
+    res.json({ layout: { ...personal, workspaceSections: workspaceLayout.sections || [], teamSections,
+      canCreateTeamSections: Number(directReports.rows[0]?.count || 0) > 0, canManageWorkspaceSections } });
   } catch (err) {
     console.error('Get sidebar layout error:', err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+router.post('/sidebar/team', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    if (!name || name.length > 40) return res.status(400).json({ error: 'Team section names must be 1 to 40 characters' });
+    const reports = await query("SELECT 1 FROM users WHERE manager_id = $1 AND account_type = 'member' AND deactivated_at IS NULL LIMIT 1", [req.user.userId]);
+    if (!reports.rows.length) return res.status(403).json({ error: 'A team section requires at least one direct report' });
+    const count = await query('SELECT COUNT(*)::integer AS count FROM team_sidebar_sections WHERE owner_id = $1', [req.user.userId]);
+    if (Number(count.rows[0]?.count || 0) >= 10) return res.status(400).json({ error: 'You can have at most 10 team sections' });
+    const created = await query('INSERT INTO team_sidebar_sections (name, owner_id) VALUES ($1, $2) RETURNING id, name, owner_id', [name, req.user.userId]);
+    req.io?.emit('team_sections_updated');
+    res.status(201).json({ section: created.rows[0] });
+  } catch (err) {
+    console.error('Create team section error:', err); res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.patch('/sidebar/team/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id); const name = String(req.body?.name || '').trim();
+    if (!Number.isSafeInteger(id) || id < 1 || !name || name.length > 40) return res.status(400).json({ error: 'A valid team section and name are required' });
+    const updated = await query('UPDATE team_sidebar_sections SET name = $1 WHERE id = $2 AND owner_id = $3 RETURNING id, name', [name, id, req.user.userId]);
+    if (!updated.rows.length) return res.status(403).json({ error: 'Only the team leader can rename this section' });
+    req.io?.emit('team_sections_updated'); res.json({ section: updated.rows[0] });
+  } catch (err) { console.error('Rename team section error:', err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/sidebar/team/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'A valid team section is required' });
+    const removed = await query('DELETE FROM team_sidebar_sections WHERE id = $1 AND owner_id = $2 RETURNING id, name', [id, req.user.userId]);
+    if (!removed.rows.length) return res.status(403).json({ error: 'Only the team leader can delete this section' });
+    req.io?.emit('team_sections_updated'); res.json({ section: removed.rows[0] });
+  } catch (err) { console.error('Delete team section error:', err); res.status(500).json({ error: 'Server error' }); }
 });
 
 router.put('/sidebar', async (req, res) => {
@@ -216,11 +270,19 @@ router.put('/sidebar', async (req, res) => {
     const workspaceLayout = (await query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1')).rows[0]?.workspace_sidebar_layout || { sections: [] };
     const locked = new Set((workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number));
     const personal = new Set((await query('SELECT id FROM channels WHERE created_by = $1 AND is_personal = TRUE', [req.user.userId])).rows.map((row) => Number(row.id)));
+    const team = new Set((await query(
+      `SELECT c.id FROM channels c JOIN team_sidebar_sections ts ON ts.id = c.team_section_id
+       WHERE ts.owner_id = $1 OR EXISTS (SELECT 1 FROM users me WHERE me.id = $1 AND me.manager_id = ts.owner_id)`,
+      [req.user.userId]
+    )).rows.map((row) => Number(row.id)));
     if (layout.sections.some((section) => section.channelIds.some((id) => locked.has(Number(id))))) {
       return res.status(400).json({ error: 'Workspace section channels cannot be moved into personal sections' });
     }
     if (layout.sections.some((section) => section.channelIds.some((id) => personal.has(Number(id))))) {
       return res.status(400).json({ error: 'Personal channels stay in Personal Channels' });
+    }
+    if (layout.sections.some((section) => section.channelIds.some((id) => team.has(Number(id))))) {
+      return res.status(400).json({ error: 'Team channels stay in their Team Section' });
     }
     await query('UPDATE users SET sidebar_layout = $1 WHERE id = $2', [JSON.stringify(layout), req.user.userId]);
     res.json({ layout: { ...layout, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections: await can(query, req.user.userId, 'manage_workspace') } });
@@ -237,8 +299,8 @@ router.put('/sidebar/workspace', async (req, res) => {
     const layout = normalizeWorkspaceSidebarLayout(req.body?.layout);
     const ids = layout.sections.flatMap((section) => section.channelIds);
     if (ids.length) {
-      const personal = await query('SELECT 1 FROM channels WHERE id = ANY($1::int[]) AND is_personal = TRUE LIMIT 1', [ids]);
-      if (personal.rows.length) return res.status(400).json({ error: 'Personal channels cannot be placed in workspace sections' });
+      const personal = await query('SELECT 1 FROM channels WHERE id = ANY($1::int[]) AND (is_personal = TRUE OR team_section_id IS NOT NULL) LIMIT 1', [ids]);
+      if (personal.rows.length) return res.status(400).json({ error: 'Personal and team channels cannot be placed in workspace sections' });
     }
     await query(
       'UPDATE moderation_settings SET workspace_sidebar_layout = $1, updated_by = $2, updated_at = NOW() WHERE id = 1',

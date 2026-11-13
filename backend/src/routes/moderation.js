@@ -288,6 +288,10 @@ router.put('/channels/:channelId/members/:userId', async (req, res) => {
     if (!['member', 'moderator'].includes(role)) {
       return res.status(400).json({ error: 'Role must be member or moderator' });
     }
+    const teamChannel = await query('SELECT team_section_id FROM channels WHERE id = $1', [channelId]);
+    if (teamChannel.rows[0]?.team_section_id) {
+      return res.status(409).json({ error: 'Team channel membership follows the reporting line automatically' });
+    }
     const result = await query(
       `INSERT INTO channel_members (channel_id, user_id, role)
        SELECT c.id, u.id, $3 FROM channels c CROSS JOIN users u
@@ -310,7 +314,8 @@ router.delete('/channels/:channelId/members/:userId', async (req, res) => {
     const channelId = parseId(req.params.channelId);
     const userId = parseId(req.params.userId);
     if (!channelId || !userId) return res.status(400).json({ error: 'Valid channel and user IDs are required' });
-    const channel = (await query('SELECT available_to_all FROM channels WHERE id = $1', [channelId])).rows[0];
+    const channel = (await query('SELECT available_to_all, team_section_id FROM channels WHERE id = $1', [channelId])).rows[0];
+    if (channel?.team_section_id) return res.status(409).json({ error: 'Team channel membership follows the reporting line automatically' });
     if (channel?.available_to_all) return res.status(409).json({ error: 'This channel is available to all and its members cannot be removed' });
     const result = await query(
       'DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2 RETURNING user_id',
