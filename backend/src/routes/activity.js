@@ -12,6 +12,8 @@ const SOURCES = {
   mention: `
     SELECT 'mention' AS type, m.id AS message_id, m.channel_id, c.name AS channel_name,
            u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+           CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
+             THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
            m.content AS preview, NULL::text AS emoji, mm.created_at
     FROM message_mentions mm
     JOIN messages m ON m.id = mm.message_id
@@ -21,6 +23,8 @@ const SOURCES = {
   reply: `
     SELECT 'reply' AS type, m.id AS message_id, m.channel_id, c.name AS channel_name,
            u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+           CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
+             THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
            m.content AS preview, NULL::text AS emoji, m.created_at
     FROM messages m
     JOIN messages parent ON parent.id = m.reply_to
@@ -30,6 +34,8 @@ const SOURCES = {
   reaction: `
     SELECT 'reaction' AS type, m.id AS message_id, m.channel_id, c.name AS channel_name,
            u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+           CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
+             THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
            m.content AS preview, r.emoji::text AS emoji, r.created_at
     FROM reactions r
     JOIN messages m ON m.id = r.message_id
@@ -42,7 +48,9 @@ const SOURCES = {
 const CANVAS_ITEMS_SQL = `
   SELECT cm.id, cm.source, cm.snippet AS preview, cm.created_at, cm.canvas_id,
          c.kind AS canvas_kind, c.title AS canvas_title, c.channel_id, ch.name AS channel_name,
-         u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color
+         u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+         CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
+           THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version
   FROM canvas_mentions cm
   JOIN canvases c ON c.id = cm.canvas_id AND c.deleted_at IS NULL
   LEFT JOIN channels ch ON ch.id = c.channel_id
@@ -70,6 +78,7 @@ function mapCanvasItem(row, seenAt) {
     actorId: row.actor_id,
     actorUsername: row.actor_username,
     actorAvatarColor: row.actor_avatar_color,
+    actorPhotoVersion: row.actor_photo_version ? Number(row.actor_photo_version) : null,
     preview: String(row.preview || '').slice(0, 200),
     createdAt: row.created_at,
     unseen: !seenAt || new Date(row.created_at) > new Date(seenAt),
@@ -127,6 +136,7 @@ router.get('/', async (req, res) => {
         actorId: row.actor_id,
         actorUsername: row.actor_username,
         actorAvatarColor: row.actor_avatar_color,
+        actorPhotoVersion: row.actor_photo_version ? Number(row.actor_photo_version) : null,
         preview: String(row.preview || '').slice(0, 200),
         emoji: row.emoji,
         createdAt: row.created_at,

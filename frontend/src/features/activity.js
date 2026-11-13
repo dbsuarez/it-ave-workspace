@@ -259,6 +259,15 @@ function renderActivityFeed() {
       <span class="activity-item-time">${escapeHtml(shortTime(item.createdAt))}</span>
     </button>`).join('');
   if (typeof paintAvatarsIn === 'function') paintAvatarsIn(feed);
+  if (typeof paintAvatar === 'function') {
+    feed.querySelectorAll('[data-activity-index]').forEach((row) => {
+      const item = activity.items[Number(row.dataset.activityIndex)];
+      const avatar = row.querySelector('.avatar-mini');
+      if (avatar && item?.actorPhotoVersion) {
+        paintAvatar(avatar, { id: Number(item.actorId), photoVersion: Number(item.actorPhotoVersion) }, (item.actorUsername || '?').charAt(0).toUpperCase());
+      }
+    });
+  }
 }
 
 async function loadActivity({ markSeen = false } = {}) {

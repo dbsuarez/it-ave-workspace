@@ -95,6 +95,14 @@ function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
 
+  // Chromium handles Ctrl+Shift+I before the page's keydown listener. Stop it in the
+  // main process for non-Superadmins; Superadmins retain the advertised shortcut.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const devtoolsShortcut = input.type === 'keyDown' && input.control && input.shift
+      && String(input.key || '').toLowerCase() === 'i';
+    if (devtoolsShortcut && !store.get('user')?.isSuperadmin) event.preventDefault();
+  });
+
   confineNavigation(mainWindow);
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
@@ -482,6 +490,7 @@ handleTrusted('app:command', (event, command) => {
       contents.reloadIgnoringCache();
       return true;
     case 'devtools':
+      if (!store.get('user')?.isSuperadmin) return false;
       contents.toggleDevTools();
       return true;
     case 'zoom-in':
