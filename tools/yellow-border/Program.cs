@@ -10,22 +10,22 @@ namespace YellowBorder;
 internal static class Program
 {
     private const string MutexName = "Local\\IT-Avenue-YellowBorder";
-    private const string ToggleEventName = "Local\\IT-Avenue-YellowBorder-Toggle";
+    private const string ShowEventName = "Local\\IT-Avenue-YellowBorder-Show";
 
     [STAThread]
     private static void Main()
     {
         using var mutex = new Mutex(true, MutexName, out var firstInstance);
-        using var toggleEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ToggleEventName);
+        using var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
 
         if (!firstInstance)
         {
-            toggleEvent.Set();
+            showEvent.Set();
             return;
         }
 
         ApplicationConfiguration.Initialize();
-        using var context = new BorderContext(toggleEvent);
+        using var context = new BorderContext(showEvent);
         Application.Run(context);
     }
 }
@@ -44,7 +44,7 @@ internal sealed class BorderContext : ApplicationContext
     private bool visible = true;
     private Color borderColor = LoadColor();
 
-    public BorderContext(EventWaitHandle toggleEvent)
+    public BorderContext(EventWaitHandle showEvent)
     {
         toggleItem = new ToolStripMenuItem("Hide border", null, (_, _) => Toggle());
         var menu = new ContextMenuStrip();
@@ -67,8 +67,8 @@ internal sealed class BorderContext : ApplicationContext
         // RegisterWait runs on a worker, so retain the UI context explicitly.
         var uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         toggleWait = ThreadPool.RegisterWaitForSingleObject(
-            toggleEvent,
-            (_, _) => uiContext.Post(_ => Toggle(), null),
+            showEvent,
+            (_, _) => uiContext.Post(_ => ShowBorder(), null),
             null,
             Timeout.Infinite,
             false);
@@ -163,6 +163,13 @@ internal sealed class BorderContext : ApplicationContext
         visible = !visible;
         foreach (var border in borders) border.Visible = visible;
         toggleItem.Text = visible ? "Hide border" : "Show border";
+    }
+
+    private void ShowBorder()
+    {
+        visible = true;
+        foreach (var border in borders) border.Visible = true;
+        toggleItem.Text = "Hide border";
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
