@@ -837,6 +837,10 @@ body.iav-dev .demo-banner {
   overflow: auto;
 }
 
+#view-moderation .moderation-content {
+  padding-top: 0;
+}
+
 .moderation-content > .empty-record-state {
   min-height: 100%;
 }
@@ -7383,13 +7387,13 @@ h4.cv-h { font-size: 15px; }
   position: sticky;
   top: 0;
   z-index: 12;
-  margin: -18px -24px 0;
+  margin: 0 -24px;
   padding: 10px 24px 0;
   background: var(--muted-bg);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
-.admin-page-heading { padding: 2px 0 6px; border-bottom: 1px solid var(--border); }
+.admin-page-heading { padding: 6px 0; border-bottom: 1px solid var(--border); }
 .admin-page-heading h2 { margin: 0; font-size: 20px; }
 .admin-page-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
 #moderation-content:not([data-tab="channels"]) [data-mod-tab="channels"],
