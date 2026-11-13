@@ -44,6 +44,8 @@ async function loadWorkspaceAdmin() {
     section.className = 'admin-workspace';
     host.appendChild(section);
   }
+  section.hidden = false;
+  document.querySelectorAll('[data-admin-tab-content="people"] > [data-admin-control-panel], [data-admin-tab-content="signup"] > [data-admin-control-panel]').forEach((panel) => panel.remove());
   section.innerHTML = '<div class="loading-state">Loading workspace administration…</div>';
   const admin = adminState();
   try {
@@ -273,6 +275,26 @@ function renderWorkspaceAdmin() {
     </div>
     ${userGroupsAdminHtml()}`;
   renderUserGroupsAdmin();
+  const panelKeys = {
+    'admin-create-accounts': 'accounts',
+    'admin-workspace-members': 'members',
+    'admin-user-groups': 'groups',
+    'admin-prelaunch-access': 'prelaunch',
+    'admin-registration': 'registration',
+    'admin-invite-form': 'invite',
+    'admin-invitations': 'invitations',
+  };
+  section.querySelectorAll(':scope > [data-mod-tab]').forEach((panel) => {
+    const tab = panel.dataset.modTab;
+    const target = document.querySelector(`[data-admin-tab-content="${tab}"]`);
+    if (!target || !panelKeys[panel.id]) return;
+    panel.dataset.adminControlPanel = panelKeys[panel.id];
+    panel.removeAttribute('data-mod-tab');
+    target.appendChild(panel);
+  });
+  syncAdminConfigurator('people');
+  syncAdminConfigurator('signup');
+  section.hidden = true;
 }
 
 async function handleAdminClick(event) {

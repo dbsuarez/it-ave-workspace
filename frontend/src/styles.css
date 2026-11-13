@@ -7397,42 +7397,42 @@ h4.cv-h { font-size: 15px; }
 .admin-page-heading { padding: 6px 0; border-bottom: 1px solid var(--border); }
 .admin-page-heading h2 { margin: 0; font-size: 20px; }
 .admin-page-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
-.admin-section-nav {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px;
+.admin-control-configurator {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  min-height: 520px;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 14px;
+  background: var(--surface);
+}
+.admin-control-nav {
+  display: flex;
+  min-height: 520px;
+  padding: 16px 10px;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid var(--border);
   background: var(--muted-bg);
 }
-.admin-section-nav button {
-  padding: 6px 10px;
-  border: 1px solid transparent;
+.admin-control-nav-item {
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
   cursor: pointer;
 }
-.admin-section-nav button:hover { border-color: var(--border); background: var(--surface); color: var(--text); }
-#admin-create-accounts,
-#admin-workspace-members,
-#admin-user-groups,
-#admin-prelaunch-access,
-#admin-registration,
-#admin-invite-form,
-#admin-invitations,
-#admin-timeout-policy,
-#admin-slow-mode,
-#moderation-launch,
-#moderation-workspace-audit,
-#admin-role-definitions,
-#admin-role-assignments,
-#admin-access-check { scroll-margin-top: 58px; }
+.admin-control-nav-item:hover { color: var(--text); background: var(--surface); }
+.admin-control-nav-item.active { color: var(--text); background: var(--surface); box-shadow: var(--shadow-soft); }
+.admin-control-content { min-width: 0; padding: 24px; }
+.admin-control-content > [data-admin-control-panel][hidden],
+.admin-control-content [data-admin-control-panel][hidden] { display: none; }
 #moderation-content:not([data-tab="channels"]) [data-mod-tab="channels"],
 #moderation-content:not([data-tab="people"]) [data-mod-tab="people"],
 #moderation-content:not([data-tab="signup"]) [data-mod-tab="signup"],
@@ -7441,6 +7441,10 @@ h4.cv-h { font-size: 15px; }
 
 @media (max-width: 900px) {
   .mod-tabs { margin-inline: -24px; overflow-x: auto; }
+  .admin-control-configurator { grid-template-columns: 1fr; min-height: 0; }
+  .admin-control-nav { min-height: 0; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .admin-control-nav-item { width: auto; flex: 0 0 auto; white-space: nowrap; }
+  .admin-control-content { padding: 16px; }
 }
 
 .nav-personal-label { margin-top: 14px; }

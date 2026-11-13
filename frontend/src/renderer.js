@@ -2774,6 +2774,27 @@ function applyChannelCreationAccess() {
   if (paneAction) paneAction.style.display = state.section === 'home' && allowed ? 'flex' : 'none';
 }
 
+function adminConfiguratorHtml(tab, label, sections, content = '') {
+  if (!state.moderation.adminSections) state.moderation.adminSections = {};
+  const selected = sections.some(([key]) => key === state.moderation.adminSections[tab])
+    ? state.moderation.adminSections[tab] : sections[0][0];
+  state.moderation.adminSections[tab] = selected;
+  return `<div class="admin-control-configurator" data-mod-tab="${tab}" data-admin-configurator="${tab}">
+    <nav class="admin-control-nav" aria-label="${escapeHtml(label)} controls">
+      ${sections.map(([key, title]) => `<button type="button" class="admin-control-nav-item${selected === key ? ' active' : ''}" data-admin-section-tab="${key}">${escapeHtml(title)}</button>`).join('')}
+    </nav>
+    <div class="admin-control-content" data-admin-tab-content="${tab}">${content}</div>
+  </div>`;
+}
+
+function syncAdminConfigurator(tab) {
+  const configurator = document.querySelector(`[data-admin-configurator="${tab}"]`);
+  if (!configurator) return;
+  const selected = state.moderation.adminSections?.[tab];
+  configurator.querySelectorAll('[data-admin-section-tab]').forEach((button) => button.classList.toggle('active', button.dataset.adminSectionTab === selected));
+  configurator.querySelectorAll('[data-admin-control-panel]').forEach((panel) => { panel.hidden = panel.dataset.adminControlPanel !== selected; });
+}
+
 async function loadModerationView() {
   const container = document.getElementById('moderation-content');
   if (!container) return;
@@ -2812,50 +2833,31 @@ async function loadModerationView() {
       <h2 data-admin-page-title>${escapeHtml(activeTab?.[1] || 'Administration')}</h2>
       <p data-admin-page-description>${escapeHtml(activeTab?.[2] || '')}</p>
     </header>
-    ${state.moderation.isSuperadmin ? `
-      <nav class="admin-section-nav" data-mod-tab="people" aria-label="People and groups controls">
-        <button type="button" data-admin-scroll="admin-create-accounts">Create accounts</button>
-        <button type="button" data-admin-scroll="admin-workspace-members">Workspace members</button>
-        <button type="button" data-admin-scroll="admin-user-groups">Groups</button>
-      </nav>
-      <nav class="admin-section-nav" data-mod-tab="signup" aria-label="Sign-up and invitation controls">
-        <button type="button" data-admin-scroll="admin-prelaunch-access">Pre-launch access</button>
-        <button type="button" data-admin-scroll="admin-registration">Registration</button>
-        <button type="button" data-admin-scroll="admin-invite-form">Invite someone</button>
-        <button type="button" data-admin-scroll="admin-invitations">Invitations</button>
-      </nav>
-      <nav class="admin-section-nav" data-mod-tab="rules" aria-label="Rules and audit controls">
-        <button type="button" data-admin-scroll="admin-timeout-policy">Timeout policy</button>
-        <button type="button" data-admin-scroll="admin-slow-mode">Slow mode</button>
-        <button type="button" data-admin-scroll="moderation-launch">Launch mode</button>
-        <button type="button" data-admin-scroll="moderation-workspace-audit">Audit log</button>
-      </nav>` : ''}
-    ${canRoles ? `<nav class="admin-section-nav" data-mod-tab="roles" aria-label="Role controls">
-      <button type="button" data-admin-scroll="admin-role-definitions">Role definitions</button>
-      <button type="button" data-admin-scroll="admin-role-assignments">Assignments</button>
-      <button type="button" data-admin-scroll="admin-access-check">Access check</button>
-    </nav>` : ''}
+    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('people', 'People and groups', [['accounts', 'Create accounts'], ['members', 'Workspace members'], ['groups', 'Groups']]) : ''}
+    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('signup', 'Sign-up and invitations', [['prelaunch', 'Pre-launch access'], ['registration', 'Registration'], ['invite', 'Invite someone'], ['invitations', 'Invitations']]) : ''}
     ${channels.length ? `<div class="moderation-toolbar" data-mod-tab="channels">
       <label for="moderation-channel-select">Channel</label>
       <input type="search" id="moderation-channel-select" list="moderation-channel-options" value="#${escapeHtml(channels.find((channel) => Number(channel.id) === selectedId)?.name || '')}" data-channel-id="${selectedId}" placeholder="Type to find a channel…" aria-label="Search and select channel" autocomplete="off">
       <datalist id="moderation-channel-options">${channels.map((channel) => `<option value="#${escapeHtml(channel.name)}" data-channel-id="${channel.id}"></option>`).join('')}</datalist>
     </div>` : ''}
-    ${state.moderation.isSuperadmin ? `
-      <form class="moderation-card moderation-settings" id="admin-timeout-policy" data-moderation-form="settings" data-mod-tab="rules">
+    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('rules', 'Rules and audit log', [['timeouts', 'Timeout policy'], ['slowmode', 'Slow mode'], ['launch', 'Launch mode'], ['audit', 'Audit log']], `
+      <form class="moderation-card moderation-settings" id="admin-timeout-policy" data-moderation-form="settings" data-admin-control-panel="timeouts">
         <h2>Workspace timeout policy</h2>
         <label>Default timeout (minutes)<input name="defaultTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.defaultTimeoutMinutes || 5}" required></label>
         <label>Maximum timeout (minutes)<input name="maxTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.maxTimeoutMinutes || 10080}" required></label>
         <button class="btn primary" type="submit">Save timeout policy</button>
-      </form>` : ''}
-    ${state.moderation.isSuperadmin ? `<div class="moderation-card" id="admin-slow-mode" data-mod-tab="rules">
+      </form>
+      <div class="moderation-card" id="admin-slow-mode" data-admin-control-panel="slowmode">
       <h2>Slow mode for all channels</h2>
       <p class="admin-help">Slow mode makes people wait between messages in a channel. New channels start with the default below; you can also set one value on every channel that already exists.</p>
       <div class="moderation-inline"><label>Default for new channels (seconds)<input id="slowmode-default" type="number" min="0" max="3600" value="5"></label><button class="btn primary" type="button" data-action="save-default-slowmode">Save default</button></div>
       <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
-    </div>` : ''}
+    </div>
+    <div id="moderation-launch" data-admin-control-panel="launch"></div>
+    <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>`) : ''}
     ${channels.length ? '<div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>' : ''}
-    ${state.moderation.isSuperadmin ? '<div id="moderation-launch" data-mod-tab="rules"></div><div id="moderation-workspace-audit" data-mod-tab="rules"></div>' : ''}
-    ${canRoles ? '<div id="moderation-roles" data-mod-tab="roles"></div>' : ''}`;
+    ${canRoles ? adminConfiguratorHtml('roles', 'Roles', [['definitions', 'Role definitions'], ['assignments', 'Assignments'], ['access', 'Access check']], '<div id="moderation-roles"></div>') : ''}`;
+  ['people', 'signup', 'roles', 'rules'].forEach(syncAdminConfigurator);
   if (canRoles && state.moderation.tab === 'roles') loadRolesPanel();
   if (state.moderation.isSuperadmin && typeof loadLaunchCard === 'function') loadLaunchCard();
   if (state.moderation.isSuperadmin) {
@@ -3161,9 +3163,12 @@ function canDeleteChannel(channelId) {
 }
 
 async function handleModerationClick(event) {
-  const sectionButton = event.target.closest('[data-admin-scroll]');
+  const sectionButton = event.target.closest('[data-admin-section-tab]');
   if (sectionButton) {
-    document.querySelector(`#moderation-content #${sectionButton.dataset.adminScroll}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const configurator = sectionButton.closest('[data-admin-configurator]');
+    if (!state.moderation.adminSections) state.moderation.adminSections = {};
+    state.moderation.adminSections[configurator.dataset.adminConfigurator] = sectionButton.dataset.adminSectionTab;
+    syncAdminConfigurator(configurator.dataset.adminConfigurator);
     return;
   }
   const channelSettingsButton = event.target.closest('[data-channel-settings-tab]');
@@ -3201,6 +3206,8 @@ async function handleModerationClick(event) {
     if (action === 'open-channel-people') {
       state.moderation.peopleChannelId = channelId;
       state.moderation.tab = 'people';
+      if (!state.moderation.adminSections) state.moderation.adminSections = {};
+      state.moderation.adminSections.people = 'members';
       await loadWorkspaceAdmin();
       const host = document.getElementById('moderation-content');
       if (host) host.dataset.tab = 'people';
