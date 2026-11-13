@@ -51,6 +51,7 @@ router.get('/access', async (req, res) => {
     res.json({
       canManageRoles: await can(query, req.user.userId, 'manage_roles'),
       canManageChannels: await can(query, req.user.userId, 'manage_channels'),
+      canManagePersonalChannels: await can(query, req.user.userId, 'manage_personal_channels'),
       canManageWorkspace: await can(query, req.user.userId, 'manage_workspace'),
       canCreateChannels: await can(query, req.user.userId, 'create_channels'),
       isSuperadmin: Boolean(result.rows[0]?.is_superadmin),
@@ -63,10 +64,10 @@ router.get('/access', async (req, res) => {
   }
 });
 
-// Owners may audit that personal channels exist, but never receive membership or content access.
+// This permission exposes ownership metadata and management actions, never membership or content access.
 router.get('/personal-channels', async (req, res) => {
   try {
-    await requireWorkspacePermission(req.user.userId, 'manage_channels');
+    await requireWorkspacePermission(req.user.userId, 'manage_personal_channels');
     const result = await query(
       `SELECT c.id, c.name, c.created_at, u.id AS owner_id, u.username,
               u.first_name, u.middle_name, u.last_name
@@ -605,8 +606,9 @@ router.delete('/channels/:channelId', async (req, res) => {
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
     const allowed = Number(channel.created_by) === Number(req.user.userId)
-      || (!channel.is_personal && (Boolean(actor && actor.is_superadmin)
-        || await can(query, req.user.userId, 'manage_channels')));
+      || (channel.is_personal
+        ? await can(query, req.user.userId, 'manage_personal_channels')
+        : (Boolean(actor && actor.is_superadmin) || await can(query, req.user.userId, 'manage_channels')));
     if (!allowed) return res.status(403).json({ error: 'Only the Superadmin or the person who created the channel can delete it' });
 
     const members = (await query('SELECT user_id FROM channel_members WHERE channel_id = $1', [channelId])).rows.map((r) => r.user_id);

@@ -143,7 +143,7 @@ let state = {
     statusType: '',
   },
   files: [],
-  moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, canManageWorkspace: false, canCreateChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels', channelSettingsTab: 'overview' },
+  moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, canManagePersonalChannels: false, canManageWorkspace: false, canCreateChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels', channelSettingsTab: 'overview' },
   notes: [],
   lists: [],
   listMembers: [],
@@ -2772,6 +2772,7 @@ async function loadModerationAccess() {
     state.moderation.isHr = Boolean(data.isHr);
     state.moderation.canManageRoles = Boolean(data.canManageRoles);
     state.moderation.canManageChannels = Boolean(data.canManageChannels);
+    state.moderation.canManagePersonalChannels = Boolean(data.canManagePersonalChannels);
     state.moderation.canManageWorkspace = Boolean(data.canManageWorkspace);
     state.moderation.canCreateChannels = Boolean(data.canCreateChannels);
     if (typeof refreshLeaveSummary === 'function' && state.moderation.accountType !== 'guest') refreshLeaveSummary();
@@ -2781,7 +2782,7 @@ async function loadModerationAccess() {
     applyAccountRestrictions();
     applyChannelCreationAccess();
     const nav = document.getElementById('nav-moderation');
-    if (nav) nav.hidden = !state.moderation.canManageChannels && !state.moderation.canManageRoles && !state.moderation.moderatorChannelIds.length;
+    if (nav) nav.hidden = !state.moderation.canManageChannels && !state.moderation.canManagePersonalChannels && !state.moderation.canManageRoles && !state.moderation.moderatorChannelIds.length;
     updateEditTopicVisibility(state.currentChannelId);
     updateChannelSettingsVisibility(state.currentChannelId);
     renderSidebar();
@@ -2827,7 +2828,7 @@ async function loadModerationView() {
     ? state.channels
     : state.channels.filter((channel) => state.moderation.moderatorChannelIds
       .some((id) => Number(id) === Number(channel.id)));
-  if (!channels.length && !state.moderation.canManageRoles && !state.moderation.canManageChannels) {
+  if (!channels.length && !state.moderation.canManageRoles && !state.moderation.canManageChannels && !state.moderation.canManagePersonalChannels) {
     container.innerHTML = emptyRecordMarkup(
       'No channels to moderate',
       'You do not have moderation access to a channel yet.',
@@ -2847,7 +2848,7 @@ async function loadModerationView() {
   };
   const tabKeys = state.moderation.isSuperadmin
     ? ['channels', 'people', 'signup', 'roles', 'rules']
-    : [...(channels.length ? ['channels'] : []), ...(canRoles ? ['roles'] : [])];
+    : [...(channels.length || state.moderation.canManagePersonalChannels ? ['channels'] : []), ...(canRoles ? ['roles'] : [])];
   const tabs = tabKeys.map((key) => [key, ...tabDefinitions[key]]);
   if (!tabs.some(([key]) => key === state.moderation.tab)) state.moderation.tab = tabs.length ? tabs[0][0] : 'channels';
   container.dataset.tab = state.moderation.tab;
@@ -2881,7 +2882,7 @@ async function loadModerationView() {
     <div id="moderation-launch" data-admin-control-panel="launch"></div>
     <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>`) : ''}
     ${channels.length ? '<div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>' : ''}
-    ${state.moderation.canManageChannels ? '<div id="moderation-personal-channel-inventory" data-mod-tab="channels"></div>' : ''}
+    ${state.moderation.canManagePersonalChannels ? '<div id="moderation-personal-channel-inventory" data-mod-tab="channels"></div>' : ''}
     ${canRoles ? adminConfiguratorHtml('roles', 'Roles', [['definitions', 'Role definitions'], ['assignments', 'Assignments'], ['access', 'Access check']], '<div id="moderation-roles"></div>') : ''}`;
   ['people', 'signup', 'roles', 'rules'].forEach(syncAdminConfigurator);
   if (canRoles && state.moderation.tab === 'roles') loadRolesPanel();
@@ -2912,7 +2913,7 @@ async function loadModerationView() {
     }
   }
   if (selectedId) await loadModerationChannel(selectedId);
-  if (state.moderation.canManageChannels) await loadPersonalChannelInventory();
+  if (state.moderation.canManagePersonalChannels) await loadPersonalChannelInventory();
   if (state.moderation.isSuperadmin) await loadModerationAudit();
   if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
 }
@@ -2926,10 +2927,10 @@ async function loadPersonalChannelInventory() {
     if (!response.ok) throw new Error(data.error || 'Could not load personal channel inventory');
     const channels = data.channels || [];
     host.innerHTML = `<section class="moderation-card personal-channel-inventory">
-      <div><h2>Personal channel inventory</h2><p class="admin-help">${channels.length} personal channel${channels.length === 1 ? '' : 's'} exist. This is metadata only; administrators cannot open their content.</p></div>
+      <div><h2>Personal channel management</h2><p class="admin-help">${channels.length} personal channel${channels.length === 1 ? '' : 's'} exist. You may rename or delete them, but their content remains private.</p></div>
       <div class="moderation-list">${channels.map((channel) => `<div class="moderation-list-row">
         <span><strong>#${escapeHtml(channel.name)}</strong><small>${escapeHtml(channel.ownerName || channel.ownerUsername || 'Built-in')}</small></span>
-        <time>${escapeHtml(new Date(channel.createdAt).toLocaleDateString())}</time>
+        <div class="moderation-row-actions"><time>${escapeHtml(new Date(channel.createdAt).toLocaleDateString())}</time><button class="btn" type="button" data-action="rename-personal-channel" data-personal-channel-id="${channel.id}" data-personal-channel-name="${escapeHtml(channel.name)}">Rename</button><button class="btn danger-text" type="button" data-action="delete-personal-channel" data-personal-channel-id="${channel.id}" data-personal-channel-name="${escapeHtml(channel.name)}">Delete</button></div>
       </div>`).join('') || '<p>No personal channels have been created.</p>'}</div>
     </section>`;
   } catch (err) {
@@ -3298,6 +3299,27 @@ async function handleModerationClick(event) {
     }
     if (action === 'view-audit-details') {
       showAuditDetails(decodeURIComponent(button.dataset.auditDetails || ''));
+      return;
+    }
+    if (action === 'rename-personal-channel') {
+      const personalId = Number(button.dataset.personalChannelId);
+      const currentName = button.dataset.personalChannelName || '';
+      const name = await askText('Enter a new channel name (lowercase letters, numbers and hyphens):', { placeholder: currentName, maxLength: 80 });
+      if (name === null) return;
+      await checkedApi(`/api/channels/${personalId}/name`, 'PATCH', { name: name.trim().toLowerCase() });
+      showToast(`#${currentName} was renamed.`, 'success');
+      await loadPersonalChannelInventory();
+      return;
+    }
+    if (action === 'delete-personal-channel') {
+      const personalId = Number(button.dataset.personalChannelId);
+      const name = button.dataset.personalChannelName || '';
+      const typed = await askText(`This permanently deletes #${name}. Its private content will not be shown. Type the channel name to confirm.`, { placeholder: name, maxLength: 80 });
+      if (typed === null) return;
+      if (typed.trim() !== name) { showToast('The name did not match, so nothing was deleted.', 'error'); return; }
+      await checkedApi(`/api/moderation/channels/${personalId}`, 'DELETE');
+      showToast(`#${name} was deleted.`, 'success');
+      await loadPersonalChannelInventory();
       return;
     }
     if (action === 'refresh-channel') return loadModerationChannel(channelId);

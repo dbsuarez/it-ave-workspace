@@ -1,6 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resolvePermission, can, PERMISSION_KEYS, EVERYONE_DEFAULTS } = require('../src/permissions');
+
+test('personal channel management is a distinct grantable permission', () => {
+  assert.ok(PERMISSION_KEYS.includes('manage_personal_channels'));
+  assert.ok(!EVERYONE_DEFAULTS.includes('manage_personal_channels'));
+});
 const { createScratchDatabase } = require('./helpers/scratchDb');
 
 const everyone = { key: 'everyone', permissions: EVERYONE_DEFAULTS };

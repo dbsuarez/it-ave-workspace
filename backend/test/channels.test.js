@@ -18,6 +18,7 @@ const members = new Map();  // channelId -> Set of userIds, moderateIds
 const moderators = new Set(); // "channelId:userId"
 const superadmins = new Set([99]); // user 99 is superadmin
 const guesters = new Set([50]);
+const rolePermissions = new Map();
 
 const queryCalls = [];
 const emitted = [];
@@ -75,7 +76,12 @@ const API = () => (sql, params = []) => {
     if (String(params[2] ?? 'member') === 'moderator') moderators.add(key);
     return { rows: [{ role: params[2] ?? 'member' }] };
   }
-  if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: ['create_channels'] }] };
+  if (sql.includes('FROM roles r')) return { rows: [
+    { id: 3, builtin_key: 'everyone', permissions: ['create_channels'] },
+    ...(rolePermissions.get(Number(params[0]))?.length
+      ? [{ id: 9, builtin_key: null, permissions: rolePermissions.get(Number(params[0])) }]
+      : []),
+  ] };
   throw new Error(`Unexpected channels query: ${sql}`);
 };
 
@@ -186,6 +192,28 @@ test('channel moderator cannot rename a channel without manage_channels', async 
     method: 'PATCH', headers: { ...authHeader(4), 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'moderator-rename' }),
   });
+  assert.equal(response.status, 403);
+});
+
+test('manage_personal_channels can rename another person personal channel without making it a general channel grant', async () => {
+  channels.set(44, { id: 44, name: 'private-notes', topic: '', is_private: true, is_personal: true, created_by: 3 });
+  rolePermissions.set(7, ['manage_personal_channels']);
+  const response = await fetch(`${baseUrl}/api/channels/44/name`, {
+    method: 'PATCH', headers: { ...authHeader(7), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'renamed-private-notes' }),
+  });
+  rolePermissions.delete(7);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).channel.name, 'renamed-private-notes');
+});
+
+test('manage_channels alone cannot rename another person personal channel', async () => {
+  rolePermissions.set(7, ['manage_channels']);
+  const response = await fetch(`${baseUrl}/api/channels/44/name`, {
+    method: 'PATCH', headers: { ...authHeader(7), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'should-not-change' }),
+  });
+  rolePermissions.delete(7);
   assert.equal(response.status, 403);
 });
 

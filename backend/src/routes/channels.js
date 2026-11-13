@@ -194,7 +194,10 @@ router.patch('/:channelId/name', authenticateToken, async (req, res) => {
        WHERE c.id = $1 AND (c.created_by = u.id OR (c.is_personal = FALSE AND u.is_superadmin = TRUE))`, [channelId, req.user.userId]
     );
     const personal = await query('SELECT is_personal FROM channels WHERE id = $1', [channelId]);
-    if (!permission.rows.length && (personal.rows[0]?.is_personal || !(await can(query, req.user.userId, 'manage_channels')))) {
+    const canManage = personal.rows[0]?.is_personal
+      ? await can(query, req.user.userId, 'manage_personal_channels')
+      : await can(query, req.user.userId, 'manage_channels');
+    if (!permission.rows.length && !canManage) {
       return res.status(403).json({ error: 'You cannot rename this channel' });
     }
     const result = await query('UPDATE channels SET name = $1 WHERE id = $2 RETURNING id, name', [name, channelId]);

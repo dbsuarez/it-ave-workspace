@@ -157,6 +157,7 @@ test('access response exposes moderator channel IDs without granting superadmin 
   assert.deepEqual(await response.json(), {
     canManageRoles: false,
     canManageChannels: false,
+    canManagePersonalChannels: false,
     canManageWorkspace: false,
     canCreateChannels: false,
     isSuperadmin: false,
