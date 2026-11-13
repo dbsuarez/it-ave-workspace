@@ -1875,7 +1875,9 @@ function channelIntroEl() {
 function handleChannelIntroClick(event) {
   const button = event.target.closest('[data-channel-intro-action]');
   if (!button) return;
-  openChannelSettings(state.currentChannelId, button.dataset.channelIntroAction === 'access' ? 'permissions' : 'overview');
+  const channel = state.channels.find((item) => Number(item.id) === Number(state.currentChannelId));
+  const accessTab = channel?.teamSectionId ? 'overview' : 'permissions';
+  openChannelSettings(state.currentChannelId, button.dataset.channelIntroAction === 'access' ? accessTab : 'overview');
 }
 
 function renderMessages(containerId, messages) {
@@ -3038,6 +3040,8 @@ const AUDIT_ACTION_LABELS = {
   invitation_revoked: 'revoked an invitation',
   member_removed: 'removed channel access for',
   member_role_changed: 'changed the channel role for',
+  team_channel_member_invited: 'invited an employee to the team channel',
+  team_channel_invite_removed: 'removed an invited employee from the team channel',
   message_deleted: 'deleted a message',
   message_reported: 'reported a message',
   prelaunch_password_applied: 'applied the pre-launch password',
@@ -3220,8 +3224,21 @@ async function loadModerationChannel(channelId) {
     const ownerAvatarHtml = selectedChannel?.createdBy
       ? `<button type="button" class="avatar-mini" data-user-id="${selectedChannel.createdBy}" data-moderation-owner style="background:${escapeHtml(selectedChannel.creatorAvatarColor || '#64748b')}" title="${escapeHtml(ownerName)}" aria-label="Open ${escapeHtml(ownerName)}'s menu">${escapeHtml(ownerName.charAt(0).toUpperCase())}</button>`
       : '<span class="avatar-mini moderation-built-in-avatar" aria-hidden="true">#</span>';
+    const teamMembers = members.filter((member) => member.membershipSource === 'team');
+    const invitedMembers = members.filter((member) => member.membershipSource === 'invited');
+    const eligibleEmployees = data.eligibleEmployees || [];
+    const teamAccessCard = data.channel.teamSectionId ? `<div class="moderation-card" data-channel-config-section="overview">
+      <h2>Team channel access</h2>
+      <p class="admin-help">Direct reports are included automatically. Invite other employees to this channel only; they will not join the whole team section.</p>
+      ${eligibleEmployees.length ? `<div class="moderation-inline"><label>Invite an employee<select id="team-channel-invite-user">${eligibleEmployees.map((person) => `<option value="${person.id}">${escapeHtml(person.name)} (${escapeHtml(person.username)})</option>`).join('')}</select></label><button class="btn primary" type="button" data-action="invite-team-member">Invite</button></div>` : '<p class="form-note">Every eligible employee already has access.</p>'}
+      <div class="moderation-list team-channel-member-list">
+        ${teamMembers.map((member) => `<div class="moderation-row"><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.username)}</small></span><span class="sidebar-section-badge">Team member</span></div>`).join('')}
+        ${invitedMembers.map((member) => `<div class="moderation-row"><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.username)}</small></span><div class="moderation-row-actions"><span class="sidebar-section-badge">Invited</span><button class="btn danger-outline" type="button" data-action="remove-member" data-member-id="${member.id}">Remove</button></div></div>`).join('')}
+      </div>
+    </div>` : '';
     dataContainer.innerHTML = `
       ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card moderation-channel-owner" data-channel-config-section="overview"><h2>Channel ownership</h2><div class="moderation-owner-row">${ownerAvatarHtml}<span><strong>${escapeHtml(ownerName)}</strong><small>${selectedChannel.createdBy ? `Owner of #${escapeHtml(selectedChannel.name)}` : 'Created by the workspace'}</small></span></div></div>` : ''}
+      ${teamAccessCard}
       <div class="moderation-card" data-channel-config-section="overview">
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
@@ -3366,6 +3383,14 @@ async function handleModerationClick(event) {
       return;
     }
     if (action === 'refresh-channel') return loadModerationChannel(channelId);
+    if (action === 'invite-team-member') {
+      const userId = Number(document.getElementById('team-channel-invite-user')?.value);
+      if (!userId) return;
+      await checkedApi(`/api/moderation/channels/${channelId}/members/${userId}`, 'PUT', { role: 'member' });
+      showToast('Employee invited to this team channel.', 'success');
+      await loadModerationChannel(channelId);
+      return;
+    }
     if (action === 'save-role') {
       const role = document.querySelector(`[data-member-role="${userId}"]`).value;
       await checkedApi(`/api/moderation/channels/${channelId}/members/${userId}`, 'PUT', { role });

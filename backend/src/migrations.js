@@ -15,6 +15,7 @@ module.exports = [
      CHECK (profile_user_id <> user_id)
    )`,
   "ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'member'",
+  "ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS membership_source VARCHAR(20) NOT NULL DEFAULT 'manual'",
   'ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS available_to_all BOOLEAN NOT NULL DEFAULT FALSE',
@@ -28,6 +29,10 @@ module.exports = [
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS team_section_id INTEGER REFERENCES team_sidebar_sections(id) ON DELETE CASCADE',
   'CREATE INDEX IF NOT EXISTS idx_team_sections_owner ON team_sidebar_sections(owner_id)',
   'CREATE INDEX IF NOT EXISTS idx_channels_team_section ON channels(team_section_id)',
+  `UPDATE channel_members cm SET membership_source = 'team'
+   FROM channels c, team_sidebar_sections ts, users u
+   WHERE cm.channel_id = c.id AND c.team_section_id = ts.id AND cm.user_id = u.id
+     AND u.manager_id = ts.owner_id AND cm.membership_source = 'manual'`,
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS command_scope VARCHAR(50)',
   `INSERT INTO channels (name, topic, is_private, available_to_all, command_scope)
    VALUES ('hr-inquiry', 'Ask HR questions or use private self-service commands. Ordinary messages remain visible to channel members.', FALSE, TRUE, 'hr-inquiry')

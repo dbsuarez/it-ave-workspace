@@ -328,8 +328,8 @@ router.post('/', authenticateToken, async (req, res) => {
     );
     if (teamSection) {
       await query(
-        `INSERT INTO channel_members (channel_id, user_id, role)
-         SELECT $1, id, 'member' FROM users
+        `INSERT INTO channel_members (channel_id, user_id, role, membership_source)
+         SELECT $1, id, 'member', 'team' FROM users
          WHERE manager_id = $2 AND account_type = 'member' AND deactivated_at IS NULL
          ON CONFLICT (channel_id, user_id) DO NOTHING`,
         [channel.id, req.user.userId]

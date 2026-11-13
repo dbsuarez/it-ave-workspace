@@ -32,6 +32,7 @@ test.before(async () => {
   app.use(express.json());
   app.use('/api/settings', require('../src/routes/settings'));
   app.use('/api/channels', require('../src/routes/channels'));
+  app.use('/api/moderation', require('../src/routes/moderation'));
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -62,6 +63,24 @@ test('team leaders create team-only sections and channels for their direct repor
   assert.equal(reportView.json.layout.teamSections[0].editable, false);
   const reportChannels = await request(ids.report, '/api/channels/my');
   assert.ok(reportChannels.json.channels.some((item) => Number(item.id) === Number(channel.json.channel.id)));
+
+  const invited = await request(ids.leader, `/api/moderation/channels/${channel.json.channel.id}/members/${ids.member}`, {
+    method: 'PUT', body: JSON.stringify({ role: 'member' }),
+  });
+  assert.equal(invited.status, 200);
+  const invitedMembership = await admin.query(
+    'SELECT membership_source FROM channel_members WHERE channel_id = $1 AND user_id = $2',
+    [channel.json.channel.id, ids.member]
+  );
+  assert.equal(invitedMembership.rows[0].membership_source, 'invited');
+  const invitedChannels = await request(ids.member, '/api/channels/my');
+  assert.ok(invitedChannels.json.channels.some((item) => Number(item.id) === Number(channel.json.channel.id)));
+
+  const protectedReport = await request(ids.leader, `/api/moderation/channels/${channel.json.channel.id}/members/${ids.report}`, { method: 'DELETE' });
+  assert.equal(protectedReport.status, 409);
+  const removedInvite = await request(ids.leader, `/api/moderation/channels/${channel.json.channel.id}/members/${ids.member}`, { method: 'DELETE' });
+  assert.equal(removedInvite.status, 200);
+  assert.equal((await admin.query('SELECT 1 FROM channel_members WHERE channel_id = $1 AND user_id = $2', [channel.json.channel.id, ids.member])).rows.length, 0);
 
   const outsiderView = await request(ids.member, '/api/settings/sidebar');
   assert.deepEqual(outsiderView.json.layout.teamSections, []);
