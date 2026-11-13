@@ -19,6 +19,7 @@ const moderators = new Set(); // "channelId:userId"
 const superadmins = new Set([99]); // user 99 is superadmin
 const guesters = new Set([50]);
 const rolePermissions = new Map();
+let everyonePermissions = ['create_channels'];
 
 const queryCalls = [];
 const emitted = [];
@@ -30,6 +31,7 @@ const API = () => (sql, params = []) => {
     return { rows: [{ is_superadmin: superadmins.has(Number(params[0])) }] };
   }
   if (sql.includes('SELECT default_slowmode_seconds')) return { rows: [{ default_slowmode_seconds: 5 }] };
+  if (sql.includes('SELECT COUNT(*)::integer AS count FROM channels')) return { rows: [{ count: 0 }] };
   if (sql.includes('INSERT INTO channels')) {
     const channel = { id: 43, name: params[0], topic: params[1], is_private: params[2], is_personal: params[3],
       team_section_id: params[4], available_to_all: params[5], created_by: params[6] };
@@ -77,7 +79,7 @@ const API = () => (sql, params = []) => {
     return { rows: [{ role: params[2] ?? 'member' }] };
   }
   if (sql.includes('FROM roles r')) return { rows: [
-    { id: 3, builtin_key: 'everyone', permissions: ['create_channels'] },
+    { id: 3, builtin_key: 'everyone', permissions: everyonePermissions },
     ...(rolePermissions.get(Number(params[0]))?.length
       ? [{ id: 9, builtin_key: null, permissions: rolePermissions.get(Number(params[0])) }]
       : []),
@@ -236,4 +238,35 @@ test('create_channels allows normal channels, while manage_workspace is required
   assert.equal((await response.json()).channel.availableToAll, true);
   assert.ok(queryCalls.some(({ sql }) => sql.includes("WHERE account_type = 'member'") && sql.includes('INSERT INTO channel_members')),
     'current employees are added to an available-to-all channel');
+});
+
+test('manage_personal_channels permits personal creation without permitting shared channel creation', async () => {
+  everyonePermissions = [];
+  rolePermissions.set(7, ['manage_personal_channels']);
+  const personal = await fetch(`${baseUrl}/api/channels`, {
+    method: 'POST',
+    headers: { ...authHeader(7), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'my-private-notes', isPersonal: true }),
+  });
+  const shared = await fetch(`${baseUrl}/api/channels`, {
+    method: 'POST',
+    headers: { ...authHeader(7), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'not-allowed-shared' }),
+  });
+  rolePermissions.delete(7);
+  everyonePermissions = ['create_channels'];
+  assert.equal(personal.status, 201);
+  assert.equal((await personal.json()).channel.isPersonal, true);
+  assert.equal(shared.status, 403);
+});
+
+test('personal channel creation is rejected when manage_personal_channels is absent', async () => {
+  everyonePermissions = [];
+  const response = await fetch(`${baseUrl}/api/channels`, {
+    method: 'POST',
+    headers: { ...authHeader(7), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'unauthorized-private-notes', isPersonal: true }),
+  });
+  everyonePermissions = ['create_channels'];
+  assert.equal(response.status, 403);
 });

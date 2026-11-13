@@ -17,7 +17,7 @@ const PERMISSIONS = [
   ['mention_everyone', 'Use @channel, @here and @everyone (reserved: not available yet)'],
   ['create_channels', 'Create channels'],
   ['manage_channels', 'Edit and delete any channel'],
-  ['manage_personal_channels', 'Rename and delete personal channels without reading their contents'],
+  ['manage_personal_channels', 'Create, rename and delete personal channels without reading their contents'],
   ['manage_messages', 'Delete or pin other people\'s messages'],
   ['timeout_members', 'Time people out in a channel'],
   ['manage_roles', 'Create roles and give them to people'],

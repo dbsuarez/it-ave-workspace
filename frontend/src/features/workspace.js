@@ -380,6 +380,7 @@ function renderSidebarModal() {
   const personalChannels = state.channels.filter((channel) => isPersonalChannel(channel, state.user?.id));
   document.getElementById('personal-channel-count').textContent = `${personalChannels.length} / 5`;
   const addPersonal = document.getElementById('btn-add-personal-channel');
+  addPersonal.hidden = !state.moderation.canManagePersonalChannels;
   addPersonal.disabled = personalChannels.length >= 5;
   addPersonal.title = personalChannels.length >= 5 ? 'Personal channel limit reached' : 'Create a personal channel';
   document.getElementById('sidebar-personal-channels').innerHTML = personalChannels.length

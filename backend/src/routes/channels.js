@@ -249,8 +249,13 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, topic, isPrivate, availableToAll, isPersonal, teamSectionId } = req.body;
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
-    if (!(await can(query, req.user.userId, 'create_channels'))) {
-      return res.status(403).json({ error: 'Create channels permission is required' });
+    const creationPermission = isPersonal ? 'manage_personal_channels' : 'create_channels';
+    if (!(await can(query, req.user.userId, creationPermission))) {
+      return res.status(403).json({
+        error: isPersonal
+          ? 'Manage personal channels permission is required'
+          : 'Create channels permission is required for shared channels',
+      });
     }
 
     if (availableToAll && !(await can(query, req.user.userId, 'manage_workspace'))) {
