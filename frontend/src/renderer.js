@@ -340,7 +340,7 @@ function setupEventListeners() {
       window.electronAPI?.appCommand?.(e.shiftKey ? 'force-reload' : 'reload');
       return;
     }
-    if (mod && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
+    if (mod && e.shiftKey && (e.key === 'i' || e.key === 'I') && state.user?.isSuperadmin) {
       e.preventDefault();
       window.electronAPI?.appCommand?.('devtools');
       return;
@@ -2600,8 +2600,8 @@ async function loadModerationView() {
     ${tabs.length > 1 ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" role="tab">${label}</button>`).join('')}</div>` : ''}
     ${channels.length ? `<div class="moderation-toolbar" data-mod-tab="channels">
       <label for="moderation-channel-select">Channel</label>
-      <input type="search" id="moderation-channel-filter" placeholder="Search channels…" aria-label="Filter channels">
-      <select id="moderation-channel-select">${channels.map((channel) => `<option value="${channel.id}"${Number(channel.id) === selectedId ? ' selected' : ''}>#${escapeHtml(channel.name)}</option>`).join('')}</select>
+      <input type="search" id="moderation-channel-select" list="moderation-channel-options" value="#${escapeHtml(channels.find((channel) => Number(channel.id) === selectedId)?.name || '')}" data-channel-id="${selectedId}" placeholder="Type to find a channel…" aria-label="Search and select channel" autocomplete="off">
+      <datalist id="moderation-channel-options">${channels.map((channel) => `<option value="#${escapeHtml(channel.name)}" data-channel-id="${channel.id}"></option>`).join('')}</datalist>
     </div>` : ''}
     ${state.moderation.isSuperadmin ? `
       <form class="moderation-card moderation-settings" data-moderation-form="settings" data-mod-tab="rules">
@@ -2742,7 +2742,7 @@ async function handleModerationClick(event) {
   }
   const button = event.target.closest('[data-action]');
   if (!button) return;
-  const channelId = Number(document.getElementById('moderation-channel-select')?.value);
+  const channelId = moderationChannelId();
   const userId = Number(button.dataset.memberId ?? button.dataset.userId);
   const action = button.dataset.action;
   try {
@@ -2821,7 +2821,7 @@ async function handleModerationSubmit(event) {
       await checkedApi('/api/moderation/settings', 'PUT', settings);
       state.moderation.settings = settings;
     } else if (form.dataset.moderationForm === 'add-member') {
-      const channelId = Number(document.getElementById('moderation-channel-select').value);
+      const channelId = moderationChannelId();
       await checkedApi(`/api/moderation/channels/${channelId}/members/${Number(values.userId)}`, 'PUT', { role: values.role });
       await loadModerationChannel(channelId);
     }
@@ -2834,23 +2834,27 @@ async function handleModerationSubmit(event) {
 
 async function handleModerationChange(event) {
   if (event.target.id !== 'moderation-channel-select') return;
-  await loadModerationChannel(Number(event.target.value));
+  const channelId = moderationChannelId(event.target);
+  if (channelId) await loadModerationChannel(channelId);
 }
 
 function handleModerationFilter(event) {
-  if (event.target.id === 'moderation-channel-filter') {
-    const query = event.target.value.trim().toLowerCase();
-    const select = document.getElementById('moderation-channel-select');
-    if (!select) return;
-    Array.from(select.options).forEach((option) => { option.hidden = Boolean(query) && !option.textContent.toLowerCase().includes(query); });
-    const first = Array.from(select.options).find((option) => !option.hidden);
-    if (first && select.selectedOptions[0]?.hidden) { select.value = first.value; loadModerationChannel(Number(first.value)); }
+  if (event.target.id === 'moderation-channel-select') {
+    moderationChannelId(event.target);
   } else if (event.target.id === 'moderation-member-filter') {
     const query = event.target.value.trim().toLowerCase();
     document.querySelectorAll('#moderation-member-list .moderation-member-row').forEach((row) => {
       row.hidden = Boolean(query) && !row.textContent.toLowerCase().includes(query);
     });
   }
+}
+
+function moderationChannelId(input = document.getElementById('moderation-channel-select')) {
+  if (!input) return null;
+  const name = input.value.trim().replace(/^#/, '').toLowerCase();
+  const channel = (state.channels || []).find((item) => item.name.toLowerCase() === name);
+  input.dataset.channelId = channel ? String(channel.id) : '';
+  return channel ? Number(channel.id) : null;
 }
 
 async function handleModerationMessageClick(event) {
@@ -3652,6 +3656,7 @@ function handleAccountAction(action) {
 }
 
 function handleAppCommand(cmd) {
+  if (cmd === 'devtools' && !state.user?.isSuperadmin) return;
   switch (cmd) {
     case 'new-message':
       setSection('home');
