@@ -4304,14 +4304,22 @@ body.account-guest [data-create="channel"] {
 .sidebar-channel-name:focus { border-color: var(--primary); background: var(--surface); outline: none; }
 .sidebar-channel-name-readonly { cursor: default; }
 .sidebar-channel-owner { flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; }
+.sidebar-section-add,
+.sidebar-section-delete {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  line-height: 1;
+}
+
 .sidebar-channel-delete,
 .sidebar-section-delete {
-  width: 26px;
-  height: 26px;
   border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent);
   color: var(--danger);
   background: transparent;
 }
+.sidebar-channel-delete { flex: 0 0 26px; width: 26px; height: 26px; }
 .sidebar-channel-delete:hover,
 .sidebar-section-delete:hover { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .sidebar-other-personal { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }

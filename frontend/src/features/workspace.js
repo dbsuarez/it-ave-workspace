@@ -293,7 +293,7 @@ function renderSidebarModal() {
           ${canManageWorkspace
     ? `<input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-workspace-section-name aria-label="Workspace section name">`
     : `<span class="sidebar-section-name-readonly">${escapeHtml(section.name)}</span>`}
-          ${canManageWorkspace ? '<button class="icon-btn" type="button" data-add-channel-to-section title="Add a channel to this section" aria-label="Add channel">+</button><button class="btn danger-text" type="button" data-workspace-section-delete>Delete</button>' : '<span class="sidebar-section-badge">Workspace</span>'}
+          ${canManageWorkspace ? '<button class="icon-btn sidebar-section-add" type="button" data-add-channel-to-section title="Add a channel to this section" aria-label="Add channel">+</button><button class="btn danger-text" type="button" data-workspace-section-delete>Delete</button>' : '<span class="sidebar-section-badge">Workspace</span>'}
         </div>
         <div class="sidebar-section-dropzone" data-drop-scope="workspace" data-drop-section-id="${escapeHtml(section.id)}">
           ${sectionChannels(section, canManageWorkspace) || '<p class="sidebar-drop-hint">Drop channels here</p>'}
@@ -307,7 +307,7 @@ function renderSidebarModal() {
         <div class="sidebar-section-card-head">
           <span class="sidebar-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">⋮⋮</span>
           <input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-section-name aria-label="Section name">
-          <button class="icon-btn" type="button" data-add-channel-to-section title="Add a channel to this section" aria-label="Add channel">+</button><button class="icon-btn sidebar-section-delete" type="button" data-section-delete title="Delete section" aria-label="Delete section">&times;</button>
+          <button class="icon-btn sidebar-section-add" type="button" data-add-channel-to-section title="Add a channel to this section" aria-label="Add channel">+</button><button class="icon-btn sidebar-section-delete" type="button" data-section-delete title="Delete section" aria-label="Delete section">&times;</button>
         </div>
         <div class="sidebar-section-dropzone" data-drop-scope="personal" data-drop-section-id="${escapeHtml(section.id)}">
           ${sectionChannels(section, true) || '<p class="sidebar-drop-hint">Drop channels here</p>'}
