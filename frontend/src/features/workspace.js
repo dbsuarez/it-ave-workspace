@@ -352,7 +352,12 @@ function renderSidebarModal() {
   addPersonal.disabled = personalChannels.length >= 5;
   addPersonal.title = personalChannels.length >= 5 ? 'Personal channel limit reached' : 'Create a personal channel';
   document.getElementById('sidebar-personal-channels').innerHTML = personalChannels.length
-    ? personalChannels.map((channel) => `<div class="sidebar-section-channel locked"><span>#${escapeHtml(channel.name)}</span><span class="sidebar-section-badge">Private</span></div>`).join('')
+    ? personalChannels.map((channel) => `<div class="sidebar-channel-card personal-channel-card" data-sidebar-channel-id="${channel.id}">
+        <span class="personal-channel-lock" title="Only you can open this channel" aria-label="Private channel">&#128274;</span>
+        <input class="sidebar-channel-name" data-channel-name="${channel.id}" value="${escapeHtml(state.sidebarChannelNameDraft[channel.id] || channel.name)}" aria-label="Personal channel name">
+        <span class="sidebar-section-badge">Private</span>
+        <button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete personal channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>
+      </div>`).join('')
     : '<p class="form-note">No personal channels yet.</p>';
 
   let filter = state.sidebarOrganizerFilter || 'all';
@@ -607,7 +612,10 @@ async function saveSidebarModal(event) {
 async function deleteChannelFromOrganizer(channelId) {
   const channel = state.channels.find((item) => Number(item.id) === Number(channelId));
   if (!channel) return;
-  if (!(await confirmAction({ title: `Delete #${channel.name}?`, message: 'Its messages, files, canvas, lists, and links will be deleted for everyone.', confirmLabel: 'Delete channel', danger: true }))) return;
+  const message = channel.isPersonal
+    ? 'Its messages, files, canvas, lists, and links will be permanently deleted.'
+    : 'Its messages, files, canvas, lists, and links will be deleted for everyone.';
+  if (!(await confirmAction({ title: `Delete #${channel.name}?`, message, confirmLabel: 'Delete channel', danger: true }))) return;
   try {
     const response = await api(`/api/moderation/channels/${channelId}`, { method: 'DELETE' });
     const data = await response.json();

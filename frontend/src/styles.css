@@ -4545,6 +4545,8 @@ body.account-guest [data-create="channel"] {
 .sidebar-channel-card:hover { box-shadow: 0 3px 9px rgba(0, 0, 0, 0.12); }
 .sidebar-channel-card.locked { background: var(--muted-bg); }
 .sidebar-channel-card.locked .sidebar-drag-handle { cursor: not-allowed; opacity: 0.4; }
+.personal-channel-card { background: var(--surface); }
+.personal-channel-lock { flex: 0 0 auto; color: var(--text-muted); font-size: 12px; }
 .sidebar-section-channel {
   display: flex;
   align-items: center;
