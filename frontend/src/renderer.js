@@ -5514,7 +5514,7 @@ function renderMarkdown(markdown) {
 // ============================================================
 // Channel Creation Modal
 // ============================================================
-function openCreateChannelModal({ personal = false, team = false } = {}) {
+async function openCreateChannelModal({ personal = false, team = false } = {}) {
   const allowed = team
     || (personal ? state.moderation.canManagePersonalChannels : state.moderation.canCreateChannels);
   if (!allowed) {
@@ -5529,9 +5529,31 @@ function openCreateChannelModal({ personal = false, team = false } = {}) {
   document.getElementById('new-channel-personal-row').hidden = team || !state.moderation.canManagePersonalChannels;
   document.getElementById('new-channel-available-row').hidden = personal || team || !state.moderation.canManageWorkspace;
   document.getElementById('new-channel-available-all').checked = false;
+  const departmentRow = document.getElementById('new-channel-department-row');
+  const departmentSelect = document.getElementById('new-channel-department');
+  const canChooseDepartment = !personal && !team && state.moderation.canCreateChannels;
+  departmentRow.hidden = !canChooseDepartment;
+  departmentSelect.innerHTML = '<option value="">No department restriction</option>';
+  if (canChooseDepartment) {
+    try {
+      const response = await api('/api/hr/departments');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load departments');
+      departmentSelect.innerHTML += (data.departments || []).map((department) =>
+        `<option value="${Number(department.id)}">${escapeHtml(department.name)}</option>`
+      ).join('');
+    } catch (err) {
+      console.error('Load channel departments error:', err);
+      departmentRow.hidden = true;
+    }
+  }
   personalInput.onchange = () => {
     document.getElementById('new-channel-available-row').hidden = team || personalInput.checked || !state.moderation.canManageWorkspace;
+    departmentRow.hidden = personalInput.checked || team || !canChooseDepartment;
     if (personalInput.checked) document.getElementById('new-channel-available-all').checked = false;
+  };
+  departmentSelect.onchange = () => {
+    if (departmentSelect.value) document.getElementById('new-channel-available-all').checked = false;
   };
   openSettingsModal(document.getElementById('modal-create-channel'));
   document.getElementById('new-channel-name')?.focus();
@@ -5553,16 +5575,17 @@ async function saveCreateChannel() {
   const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const topic = document.getElementById('new-channel-topic').value.trim();
   const isPersonal = document.getElementById('new-channel-personal').checked;
+  const departmentId = Number(document.getElementById('new-channel-department')?.value) || null;
   const teamSectionId = state.channelCreationSectionTarget?.kind === 'team'
     ? Number(state.channelCreationSectionTarget.id) : null;
-  const availableToAll = Boolean(!isPersonal && state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
+  const availableToAll = Boolean(!isPersonal && !departmentId && state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
 
   if (!name) return;
 
   try {
     const res = await api('/api/channels', {
       method: 'POST',
-      body: JSON.stringify({ name, topic, availableToAll, isPersonal, teamSectionId }),
+      body: JSON.stringify({ name, topic, availableToAll, isPersonal, teamSectionId, departmentId }),
     });
 
     const data = await res.json();

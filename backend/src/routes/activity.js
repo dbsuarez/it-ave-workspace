@@ -62,7 +62,12 @@ const CANVAS_ITEMS_SQL = `
         OR EXISTS (SELECT 1 FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1)
         OR EXISTS (SELECT 1 FROM canvas_channel_grants g JOIN channel_members m ON m.channel_id = g.channel_id
                    WHERE g.canvas_id = c.id AND m.user_id = $1)))
-      OR (c.kind = 'channel' AND EXISTS (SELECT 1 FROM channel_members WHERE channel_id = c.channel_id AND user_id = $1))
+      OR (c.kind = 'channel' AND (
+        EXISTS (SELECT 1 FROM channel_members WHERE channel_id = c.channel_id AND user_id = $1)
+        OR EXISTS (SELECT 1 FROM users me JOIN channel_overrides co ON co.channel_id = c.channel_id
+                   AND co.subject_type = 'department' AND co.subject_id = me.department_id
+                   WHERE me.id = $1 AND 'view_channel' = ANY(co.allow))
+      ))
       OR (c.kind = 'dm' AND $1 IN (c.dm_user_low, c.dm_user_high))
     )`;
 
@@ -95,6 +100,10 @@ function feedSql(types) {
         (visible.is_personal = TRUE AND visible.created_by = me.id)
         OR (visible.is_personal = FALSE AND (me.is_superadmin = TRUE OR EXISTS (
           SELECT 1 FROM channel_members cm WHERE cm.channel_id = e.channel_id AND cm.user_id = me.id
+        ) OR EXISTS (
+          SELECT 1 FROM channel_overrides co WHERE co.channel_id = e.channel_id
+            AND co.subject_type = 'department' AND co.subject_id = me.department_id
+            AND 'view_channel' = ANY(co.allow)
         )))
       )
     )`;

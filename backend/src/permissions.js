@@ -49,6 +49,9 @@ function resolvePermission({ isOwner, grants, overrides, channelModerator }, per
     const roles = overrides.roles || [];
     for (const entry of roles) for (const key of entry.deny || []) set.delete(key);
     for (const entry of roles) for (const key of entry.allow || []) set.add(key);
+    const departments = overrides.departments || [];
+    for (const entry of departments) for (const key of entry.deny || []) set.delete(key);
+    for (const entry of departments) for (const key of entry.allow || []) set.add(key);
     apply(overrides.user);
   }
   if (channelModerator && (permission === 'manage_messages' || permission === 'timeout_members')) {
@@ -62,7 +65,7 @@ function resolvePermission({ isOwner, grants, overrides, channelModerator }, per
 // Everything the database knows about one person's access, in two small queries.
 async function loadAccess(query, userId, channelId) {
   const account = await query(
-    'SELECT is_superadmin, is_hr, account_type FROM users WHERE id = $1 AND deactivated_at IS NULL', [userId]
+    'SELECT is_superadmin, is_hr, account_type, department_id FROM users WHERE id = $1 AND deactivated_at IS NULL', [userId]
   );
   const row = account.rows[0];
   if (!row) return null;
@@ -81,6 +84,7 @@ async function loadAccess(query, userId, channelId) {
     isOwner,
     accountType: row.account_type,
     roleIds: roles.map((r) => Number(r.id)),
+    departmentId: row.department_id ? Number(row.department_id) : null,
     grants: roles.map((r) => ({ key: r.builtin_key || null, name: r.name || '', permissions: r.permissions || [] })),
     overrides: null,
     channelModerator: false,
@@ -88,15 +92,17 @@ async function loadAccess(query, userId, channelId) {
   if (channelId) {
     const everyone = roles.find((r) => r.builtin_key === 'everyone');
     const overrides = await query(
-      `SELECT co.subject_type, co.subject_id, co.allow, co.deny, r.name AS role_name FROM channel_overrides co
+      `SELECT co.subject_type, co.subject_id, co.allow, co.deny, r.name AS role_name, d.name AS department_name FROM channel_overrides co
        LEFT JOIN roles r ON co.subject_type = 'role' AND r.id = co.subject_id
-       WHERE co.channel_id = $1 AND ((co.subject_type = 'user' AND co.subject_id = $2) OR (co.subject_type = 'role' AND co.subject_id = ANY($3::int[])))`,
-      [channelId, userId, access.roleIds]
+       LEFT JOIN departments d ON co.subject_type = 'department' AND d.id = co.subject_id
+       WHERE co.channel_id = $1 AND ((co.subject_type = 'user' AND co.subject_id = $2) OR (co.subject_type = 'role' AND co.subject_id = ANY($3::int[])) OR (co.subject_type = 'department' AND co.subject_id = $4))`,
+      [channelId, userId, access.roleIds, access.departmentId]
     );
-    access.overrides = { everyone: null, roles: [], user: null };
+    access.overrides = { everyone: null, roles: [], departments: [], user: null };
     for (const o of overrides.rows) {
-      const entry = { allow: o.allow || [], deny: o.deny || [], name: o.role_name || '' };
+      const entry = { allow: o.allow || [], deny: o.deny || [], name: o.role_name || o.department_name || '' };
       if (o.subject_type === 'user') access.overrides.user = entry;
+      else if (o.subject_type === 'department') access.overrides.departments.push(entry);
       else if (everyone && Number(o.subject_id) === Number(everyone.id)) access.overrides.everyone = entry;
       else access.overrides.roles.push(entry);
     }
@@ -128,6 +134,11 @@ function explainPermission({ isOwner, grants, overrides, channelModerator }, per
     const allowing = roles.filter((entry) => (entry.allow || []).includes(permission));
     if (denying.length) { allowed = false; reason = `Denied in this channel for ${names(denying)}`; }
     if (allowing.length) { allowed = true; reason = `Allowed in this channel for ${names(allowing)}`; }
+    const departments = overrides.departments || [];
+    const departmentDeny = departments.filter((entry) => (entry.deny || []).includes(permission));
+    const departmentAllow = departments.filter((entry) => (entry.allow || []).includes(permission));
+    if (departmentDeny.length) { allowed = false; reason = `Denied in this channel for ${names(departmentDeny)}`; }
+    if (departmentAllow.length) { allowed = true; reason = `Allowed in this channel for ${names(departmentAllow)}`; }
     step(overrides.user, 'this person');
   }
   if (channelModerator && (permission === 'manage_messages' || permission === 'timeout_members')) {

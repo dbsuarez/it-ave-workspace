@@ -53,6 +53,15 @@ router.get('/:channelId/permissions', async (req, res) => {
        FROM channel_overrides co JOIN users u ON u.id = co.subject_id
        WHERE co.channel_id = $1 AND co.subject_type = 'user' ORDER BY LOWER(u.username)`, [channelId]
     )).rows;
+    const departments = (await query(
+      `SELECT d.id, d.name, COALESCE(co.allow, '{}') AS allow, COALESCE(co.deny, '{}') AS deny,
+              COUNT(u.id)::integer AS member_count
+       FROM departments d
+       LEFT JOIN channel_overrides co ON co.channel_id = $1 AND co.subject_type = 'department' AND co.subject_id = d.id
+       LEFT JOIN users u ON u.department_id = d.id AND u.account_type = 'member' AND u.deactivated_at IS NULL
+       GROUP BY d.id, co.allow, co.deny
+       ORDER BY LOWER(d.name)`, [channelId]
+    )).rows;
     res.json({
       permissions: CHANNEL_PERMISSIONS,
       roles: roles.map((r) => ({ id: r.id, name: r.name, color: r.color, builtin: r.builtin_key || null, grants: r.permissions, allow: r.allow, deny: r.deny })),
@@ -60,11 +69,12 @@ router.get('/:channelId/permissions', async (req, res) => {
         id: p.id, username: p.username, allow: p.allow, deny: p.deny,
         name: [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ') || p.username,
       })),
+      departments: departments.map((department) => ({ id: department.id, name: department.name, allow: department.allow, deny: department.deny, memberCount: department.member_count })),
     });
   } catch (err) { sendError(res, err, 'Get channel permissions error'); }
 });
 
-// { subjectType: 'role' | 'user', subjectId, allow: [...], deny: [...] } - both empty removes the override.
+// { subjectType: 'role' | 'user' | 'department', subjectId, allow: [...], deny: [...] } - both empty removes the override.
 router.put('/:channelId/permissions', async (req, res) => {
   try {
     const channelId = parseId(req.params.channelId);
@@ -73,13 +83,15 @@ router.put('/:channelId/permissions', async (req, res) => {
     const { subjectType, subjectId } = req.body || {};
     const allow = req.body && req.body.allow;
     const deny = req.body && req.body.deny;
-    if (!['role', 'user'].includes(subjectType) || !Number.isInteger(subjectId)) throw fail(400, 'Choose a role or a person');
+    if (!['role', 'user', 'department'].includes(subjectType) || !Number.isInteger(subjectId)) throw fail(400, 'Choose a role, department or person');
     if (![allow, deny].every((list) => Array.isArray(list) && list.every((key) => CHANNEL_KEYS.includes(key)))) throw fail(400, 'Unknown permission');
     if (allow.some((key) => deny.includes(key))) throw fail(400, 'A permission cannot be both allowed and denied');
     if (subjectType === 'role') {
       const role = (await query('SELECT builtin_key FROM roles WHERE id = $1', [subjectId])).rows[0];
       if (!role) throw fail(404, 'Role not found');
       if (role.builtin_key === 'owner') throw fail(400, 'Owners always have every permission');
+    } else if (subjectType === 'department') {
+      if (!(await query('SELECT 1 FROM departments WHERE id = $1', [subjectId])).rows.length) throw fail(404, 'Department not found');
     } else if (!(await query("SELECT 1 FROM users WHERE id = $1 AND account_type = 'member'", [subjectId])).rows.length) {
       throw fail(404, 'Person not found');
     }

@@ -27,6 +27,10 @@ router.get('/', authenticateToken, async (req, res) => {
       )) OR EXISTS (
         SELECT 1 FROM channel_members mine
         WHERE mine.channel_id = c.id AND mine.user_id = $1
+      ) OR EXISTS (
+        SELECT 1 FROM users u
+        JOIN channel_overrides co ON co.channel_id = c.id AND co.subject_type = 'department' AND co.subject_id = u.department_id
+        WHERE u.id = $1 AND 'view_channel' = ANY(co.allow)
       ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)))
       GROUP BY c.id, creator.id
       ORDER BY c.name
@@ -82,6 +86,10 @@ router.get('/my', authenticateToken, async (req, res) => {
            )
        AND m.user_id != $1
       WHERE (c.is_personal = TRUE AND c.created_by = $1) OR (c.is_personal = FALSE AND (cm.user_id = $1 OR c.available_to_all = TRUE OR EXISTS (
+        SELECT 1 FROM users u
+        JOIN channel_overrides co ON co.channel_id = c.id AND co.subject_type = 'department' AND co.subject_id = u.department_id
+        WHERE u.id = $1 AND 'view_channel' = ANY(co.allow)
+      ) OR EXISTS (
         SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE
       )))
       GROUP BY c.id, creator.id
@@ -255,7 +263,7 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
 // Create a new channel
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, topic, isPrivate, availableToAll, isPersonal, teamSectionId } = req.body;
+    const { name, topic, isPrivate, availableToAll, isPersonal, teamSectionId, departmentId } = req.body;
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
     const isTeamChannel = teamSectionId !== undefined && teamSectionId !== null;
     const creationPermission = isPersonal ? 'manage_personal_channels' : 'create_channels';
@@ -275,6 +283,22 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     if (isPersonal && availableToAll) {
       return res.status(400).json({ error: 'A personal channel cannot be available to all' });
+    }
+    let department = null;
+    if (departmentId !== undefined && departmentId !== null && departmentId !== '') {
+      const id = Number(departmentId);
+      if (!Number.isSafeInteger(id) || id < 1 || isPersonal || availableToAll || teamSectionId !== undefined && teamSectionId !== null) {
+        return res.status(400).json({ error: 'A department channel must be a private shared channel' });
+      }
+      department = (await query('SELECT id, name FROM departments WHERE id = $1', [id])).rows[0];
+      if (!department) return res.status(404).json({ error: 'Department not found' });
+      const manager = await can(query, req.user.userId, 'manage_channels');
+      if (!manager) {
+        const creator = (await query('SELECT department_id FROM users WHERE id = $1', [req.user.userId])).rows[0];
+        if (!creator || Number(creator.department_id) !== Number(department.id)) {
+          return res.status(403).json({ error: 'You can create a department channel only for your own department' });
+        }
+      }
     }
     let teamSection = null;
     if (teamSectionId !== undefined && teamSectionId !== null) {
@@ -313,7 +337,7 @@ router.post('/', authenticateToken, async (req, res) => {
       `INSERT INTO channels (name, topic, is_private, is_personal, team_section_id, available_to_all, created_by, slowmode_seconds)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, name, topic, is_private, is_personal, team_section_id, available_to_all, created_at`,
-      [name, topic || '', Boolean(isPersonal || teamSection || isPrivate), Boolean(isPersonal), teamSection?.id || null, Boolean(availableToAll), req.user.userId, slowmode]
+      [name, topic || '', Boolean(isPersonal || teamSection || department || isPrivate), Boolean(isPersonal), teamSection?.id || null, Boolean(availableToAll), req.user.userId, slowmode]
     );
 
     const channel = result.rows[0];
@@ -334,6 +358,17 @@ router.post('/', authenticateToken, async (req, res) => {
        ON CONFLICT (channel_id, user_id) DO UPDATE SET role = 'moderator'`,
       [channel.id, req.user.userId]
     );
+    if (department) {
+      const departmentPermissions = ['view_channel', 'send_messages', 'attach_files', 'add_reactions'];
+      await query(
+        `INSERT INTO channel_overrides (channel_id, subject_type, subject_id, allow, deny)
+         VALUES ($1, 'role', (SELECT id FROM roles WHERE builtin_key = 'everyone'), '{}', $2),
+                ($1, 'department', $3, $2, '{}'),
+                ($1, 'user', $4, $2, '{}')
+         ON CONFLICT (channel_id, subject_type, subject_id) DO UPDATE SET allow = EXCLUDED.allow, deny = EXCLUDED.deny`,
+        [channel.id, departmentPermissions, department.id, req.user.userId]
+      );
+    }
     if (teamSection) {
       await query(
         `INSERT INTO channel_members (channel_id, user_id, role, membership_source)

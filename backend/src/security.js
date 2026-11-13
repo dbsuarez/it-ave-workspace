@@ -92,6 +92,12 @@ async function ensureChannelMembership(query, userId, channelId) {
        AND ((c.is_personal = TRUE AND c.created_by = u.id) OR (c.is_personal = FALSE AND (u.is_superadmin = TRUE OR EXISTS (
          SELECT 1 FROM channel_members cm
          WHERE cm.channel_id = $1 AND cm.user_id = u.id
+       ) OR EXISTS (
+         SELECT 1 FROM channel_overrides co
+         WHERE co.channel_id = $1
+           AND co.subject_type = 'department'
+           AND co.subject_id = u.department_id
+           AND 'view_channel' = ANY(co.allow)
        ))))`,
     [channelId, userId]
   );

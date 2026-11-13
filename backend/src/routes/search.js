@@ -27,9 +27,12 @@ router.get('/', authenticateToken, async (req, res) => {
          FROM messages m
          JOIN channels c ON c.id = m.channel_id
          JOIN users u ON u.id = m.user_id
-         WHERE m.channel_id IN (
-           SELECT channel_id FROM channel_members WHERE user_id = $1
-         )
+         WHERE (m.channel_id IN (SELECT channel_id FROM channel_members WHERE user_id = $1)
+           OR EXISTS (
+             SELECT 1 FROM users me
+             JOIN channel_overrides co ON co.channel_id = m.channel_id AND co.subject_type = 'department' AND co.subject_id = me.department_id
+             WHERE me.id = $1 AND 'view_channel' = ANY(co.allow)
+           ))
            AND m.content ILIKE $2 ESCAPE '\\'
          ORDER BY m.created_at DESC, m.id DESC
          LIMIT 5`,
@@ -71,9 +74,12 @@ router.get('/', authenticateToken, async (req, res) => {
            ON other_user.id = CASE WHEN dm.sender_id = $1 THEN dm.receiver_id ELSE dm.sender_id END
          WHERE f.original_name ILIKE $2 ESCAPE '\\'
            AND (
-             (f.message_id IS NOT NULL AND m.channel_id IN (
-               SELECT channel_id FROM channel_members WHERE user_id = $1
-             ))
+             (f.message_id IS NOT NULL AND (m.channel_id IN (SELECT channel_id FROM channel_members WHERE user_id = $1)
+               OR EXISTS (
+                 SELECT 1 FROM users me
+                 JOIN channel_overrides co ON co.channel_id = m.channel_id AND co.subject_type = 'department' AND co.subject_id = me.department_id
+                 WHERE me.id = $1 AND 'view_channel' = ANY(co.allow)
+               )))
              OR (f.dm_message_id IS NOT NULL AND (dm.sender_id = $1 OR dm.receiver_id = $1))
              OR (f.message_id IS NULL AND f.dm_message_id IS NULL AND f.uploaded_by = $1)
            )

@@ -641,6 +641,13 @@
           <label>Topic (optional)</label>
           <input type="text" id="new-channel-topic" placeholder="What is this channel about?">
         </div>
+        <div class="form-group" id="new-channel-department-row" hidden>
+          <label for="new-channel-department">Department access</label>
+          <select id="new-channel-department">
+            <option value="">No department restriction</option>
+          </select>
+          <div class="form-note">Only current members of this department can see and use the channel. Access follows their HR department automatically.</div>
+        </div>
         <label class="admin-inline-check" id="new-channel-available-row" hidden>
           <input type="checkbox" id="new-channel-available-all">
           <span><strong>Visible to all</strong><small>Keep this channel in every current and future employee's sidebar.</small></span>

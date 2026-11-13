@@ -107,6 +107,24 @@ test('a private room for a role: Everyone cannot see the channel, Editors can', 
   assert.equal(await canView(ids.bob), true);
 });
 
+test('a department override follows the employee department without copied channel memberships', async (t) => {
+  if (skip(t)) return;
+  const departmentId = (await query("INSERT INTO departments (name) VALUES ('Engineering test') RETURNING id")).rows[0].id;
+  await query('UPDATE users SET department_id = $1 WHERE id = $2', [departmentId, ids.bob]);
+  await query('DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2', [ids.channel, ids.bob]);
+  const set = (body) => call(ids.maker, 'PUT', `/${ids.channel}/permissions`, body);
+  assert.equal((await set({ subjectType: 'role', subjectId: ids.everyone, allow: [], deny: ['view_channel', 'send_messages'] })).status, 200);
+  assert.equal((await set({ subjectType: 'department', subjectId: departmentId, allow: ['view_channel', 'send_messages'], deny: [] })).status, 200);
+  assert.equal(await canView(ids.bob), true, 'membership is granted from the current department');
+  assert.equal(await canPost(ids.bob), true, 'department allow overrides Everyone deny');
+  const listed = (await call(ids.maker, 'GET', `/${ids.channel}/permissions`)).json;
+  assert.ok(listed.departments.some((department) => department.id === departmentId && department.memberCount === 1));
+  await set({ subjectType: 'role', subjectId: ids.everyone, allow: [], deny: [] });
+  await set({ subjectType: 'department', subjectId: departmentId, allow: [], deny: [] });
+  await query('UPDATE users SET department_id = NULL WHERE id = $1', [ids.bob]);
+  await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ids.channel, ids.bob]);
+});
+
 test('editing the Everyone role itself changes what members can do everywhere', async (t) => {
   if (skip(t)) return;
   await query("UPDATE roles SET permissions = array_remove(permissions, 'send_messages') WHERE builtin_key = 'everyone'");

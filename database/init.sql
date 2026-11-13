@@ -806,7 +806,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
    );
 CREATE TABLE IF NOT EXISTS channel_overrides (
      channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-     subject_type VARCHAR(4) NOT NULL CHECK (subject_type IN ('role', 'user')),
+     subject_type VARCHAR(12) NOT NULL CHECK (subject_type IN ('role', 'user', 'department')),
      subject_id INTEGER NOT NULL,
      allow TEXT[] NOT NULL DEFAULT '{}',
      deny TEXT[] NOT NULL DEFAULT '{}',
