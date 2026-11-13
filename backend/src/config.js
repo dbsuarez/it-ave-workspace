@@ -68,6 +68,8 @@ module.exports = {
   DATABASE_URL: process.env.DATABASE_URL,
   JWT_SECRET: process.env.JWT_SECRET || (NODE_ENV === 'production' ? null : 'dev-secret-change-me'),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+  // Temporary local convenience only. Production always requires passwords even if this variable is set.
+  ALLOW_PASSWORDLESS_SIGNIN: NODE_ENV !== 'production' && String(process.env.ALLOW_PASSWORDLESS_SIGNIN || 'false').toLowerCase() === 'true',
   SUPERADMIN_USERNAME: process.env.SUPERADMIN_USERNAME || '',
   TRUST_PROXY: process.env.TRUST_PROXY || '',
   // One access-log line per request (no bodies, no query strings). Set LOG_REQUESTS=false to silence.

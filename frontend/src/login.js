@@ -21,6 +21,7 @@
   const inviteInput = document.getElementById('invite-code');
   const inviteLabel = document.getElementById('invite-label');
   let inviteRequired = false;
+  let passwordlessSignin = false;
 
   const MODES = {
     login: {
@@ -65,6 +66,9 @@
     switchButton.textContent = current.switchTo;
     errorEl.style.display = 'none';
     inviteRow.hidden = mode !== 'register';
+    document.getElementById('password-row').hidden = mode === 'login' && passwordlessSignin;
+    document.getElementById('passwordless-warning').hidden = mode !== 'login' || !passwordlessSignin;
+    document.getElementById('password').required = mode === 'register' || !passwordlessSignin;
     inviteInput.required = mode === 'register' && inviteRequired;
     document.getElementById('password').minLength = mode === 'register' ? 8 : 0;
     inviteLabel.textContent = inviteRequired ? 'Invitation code' : 'Invitation code (optional)';
@@ -202,6 +206,14 @@
     .then((res) => res.json())
     .then((data) => {
       inviteRequired = data.mode === 'invite';
+      applyMode();
+    })
+    .catch(() => {});
+
+  fetch(`${API_BASE}/api/auth/login-options`)
+    .then((res) => res.json())
+    .then((data) => {
+      passwordlessSignin = data.passwordless === true;
       applyMode();
     })
     .catch(() => {});

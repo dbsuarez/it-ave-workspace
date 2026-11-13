@@ -20,6 +20,10 @@ const {
 // to answer as a wrong password and cannot be told apart by timing.
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
+router.get('/login-options', (req, res) => {
+  res.json({ passwordless: config.ALLOW_PASSWORDLESS_SIGNIN });
+});
+
 // Register a new user
 router.post('/register', async (req, res) => {
   try {
@@ -147,7 +151,8 @@ router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
+    if (!username || typeof username !== 'string' || typeof password !== 'string'
+        || (!config.ALLOW_PASSWORDLESS_SIGNIN && !password)) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
@@ -169,7 +174,7 @@ router.post('/login', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      await bcrypt.compare(password || '', DUMMY_PASSWORD_HASH);
       noteLoginFailure();
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -177,7 +182,7 @@ router.post('/login', async (req, res) => {
     const user = result.rows[0];
 
     // Verify password
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const validPassword = config.ALLOW_PASSWORDLESS_SIGNIN || await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
       noteLoginFailure();
       return res.status(401).json({ error: 'Invalid credentials' });
