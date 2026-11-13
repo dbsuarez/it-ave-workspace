@@ -905,36 +905,44 @@ body.iav-dev .demo-banner {
   justify-content: space-between;
   gap: 16px;
 }
-.audit-entry-details summary {
-  width: fit-content;
+.audit-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.audit-details-button {
   padding: 5px 9px;
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--text-muted);
   background: var(--muted-bg);
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  list-style: none;
 }
-.audit-entry-details summary::-webkit-details-marker { display: none; }
-.audit-entry-details summary:hover {
+.audit-details-button:hover {
   color: var(--text);
   border-color: var(--text-muted);
 }
-.audit-entry-details pre {
-  max-height: 260px;
-  margin: 8px 0 0;
-  padding: 12px;
+.audit-details-modal { width: min(560px, 92vw); }
+.audit-details-modal .modal-body { min-height: 0; }
+.audit-details-modal pre {
+  max-height: 52vh;
+  margin: 0;
+  padding: 14px;
   overflow: auto;
   border-radius: 8px;
   color: var(--text-muted);
   background: var(--bg);
   font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 720px) {
-  .audit-entry-summary { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .audit-entry-summary { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .audit-entry-meta { width: 100%; justify-content: space-between; }
 }
 .moderation-row-actions {
   flex-wrap: wrap;

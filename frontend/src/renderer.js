@@ -2726,20 +2726,80 @@ function renderAuditEntry(entry) {
   const occurredAt = new Date(entry.createdAt).toLocaleString();
   const technicalDetails = {
     eventId: entry.id,
+    occurredAt: entry.createdAt,
+    actor,
     action: entry.action,
     channelId: entry.channelId,
+    channelName: entry.channelName || null,
+    target: entry.targetUsername || null,
     details: entry.details || {},
   };
+  const detailsText = JSON.stringify(technicalDetails, null, 2);
   return `<article class="moderation-row audit-entry">
     <div class="audit-entry-summary">
       <span><strong>${escapeHtml(actor)}</strong> ${escapeHtml(humanizeAuditAction(entry.action))}${escapeHtml(target)}${escapeHtml(channel)}.</span>
-      <time datetime="${escapeHtml(entry.createdAt)}">${escapeHtml(occurredAt)}</time>
+      <div class="audit-entry-meta">
+        <button class="audit-details-button" type="button" data-action="view-audit-details" data-audit-details="${escapeHtml(encodeURIComponent(detailsText))}">View details</button>
+        <time datetime="${escapeHtml(entry.createdAt)}">${escapeHtml(occurredAt)}</time>
+      </div>
     </div>
-    <details class="audit-entry-details">
-      <summary>View details</summary>
-      <pre>${escapeHtml(JSON.stringify(technicalDetails, null, 2))}</pre>
-    </details>
   </article>`;
+}
+
+function showAuditDetails(detailsText) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  const modal = document.createElement('div');
+  modal.className = 'modal audit-details-modal open';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'audit-details-title');
+  modal.innerHTML = `
+    <div class="modal-header">
+      <h3 id="audit-details-title">Audit details</h3>
+    </div>
+    <div class="modal-body"><pre>${escapeHtml(detailsText)}</pre></div>
+    <div class="modal-footer">
+      <button class="btn" type="button" data-audit-close>Close</button>
+      <button class="btn primary" type="button" data-audit-copy>Copy details</button>
+    </div>`;
+  const close = () => {
+    document.removeEventListener('keydown', onKeydown, true);
+    overlay.remove();
+    modal.remove();
+  };
+  const onKeydown = (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  };
+  modal.querySelector('[data-audit-close]').addEventListener('click', close);
+  modal.querySelector('[data-audit-copy]').addEventListener('click', async () => {
+    try {
+      try {
+        await navigator.clipboard.writeText(detailsText);
+      } catch (_) {
+        const copyField = document.createElement('textarea');
+        copyField.value = detailsText;
+        copyField.setAttribute('readonly', '');
+        copyField.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(copyField);
+        copyField.select();
+        const copied = document.execCommand('copy');
+        copyField.remove();
+        if (!copied) throw new Error('Clipboard copy was rejected');
+      }
+      showToast('Audit details copied.', 'success');
+    } catch (err) {
+      console.error('Copy audit details error:', err);
+      showToast('Could not copy the audit details.', 'error');
+    }
+  });
+  overlay.addEventListener('click', close);
+  document.addEventListener('keydown', onKeydown, true);
+  document.body.append(overlay, modal);
+  modal.querySelector('[data-audit-close]')?.focus();
 }
 
 async function loadModerationChannel(channelId) {
@@ -2829,6 +2889,10 @@ async function handleModerationClick(event) {
   const userId = Number(button.dataset.memberId ?? button.dataset.userId);
   const action = button.dataset.action;
   try {
+    if (action === 'view-audit-details') {
+      showAuditDetails(decodeURIComponent(button.dataset.auditDetails || ''));
+      return;
+    }
     if (action === 'refresh-channel') return loadModerationChannel(channelId);
     if (action === 'save-role') {
       const role = document.querySelector(`[data-member-role="${userId}"]`).value;
