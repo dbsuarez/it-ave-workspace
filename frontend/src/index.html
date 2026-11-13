@@ -588,15 +588,15 @@
             <div class="canvas-sheet-title-wrap">
               <span class="canvas-sheet-kind" id="canvas-sheet-kind">Channel</span>
               <input class="canvas-sheet-title" id="canvas-sheet-title" type="text" maxlength="160" aria-label="Canvas title" placeholder="Untitled canvas">
+              <button class="icon-btn" id="btn-close-canvas" type="button" title="Close canvas" aria-label="Close canvas">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
             <div class="canvas-sheet-actions">
               <span class="canvas-sheet-status" id="canvas-sheet-status" aria-live="polite">Saved</span>
               <button class="btn canvas-mode-btn" id="btn-canvas-sheet-mode" type="button" title="Edit the Markdown source">Markdown</button>
               <button class="btn canvas-mode-btn" id="btn-canvas-sheet-comments" type="button" title="Comments">Comments</button>
               <button class="btn canvas-mode-btn" id="btn-canvas-sheet-history" type="button" title="Earlier versions">History</button>
-              <button class="icon-btn" id="btn-close-canvas" type="button" title="Close canvas" aria-label="Close canvas">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
             </div>
           </header>
           <textarea class="canvas-sheet-editor" id="canvas-sheet-editor" aria-label="Canvas content" placeholder="Write something…"></textarea>

@@ -5756,6 +5756,12 @@ document.addEventListener('click', (event) => {
     closeCanvas2();
     return;
   }
+  const openCanvasSheet = document.getElementById('canvas-sheet');
+  if (openCanvasSheet?.getAttribute('aria-hidden') === 'false'
+      && !event.target.closest('#canvas-sheet')
+      && !event.target.closest('.modal, .modal-overlay')) {
+    closeCanvas2();
+  }
   const newStandalone = event.target.closest('#btn-canvas2-new, #btn-canvas2-new-empty');
   if (newStandalone) {
     event.preventDefault();
