@@ -290,7 +290,7 @@ function renderSidebarModal() {
   };
   const channelCard = (channel, movable = true, showOwner = false) => `
     <div class="sidebar-channel-card${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
-      ${showOwner ? '' : `<span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channels are managed centrally'}" aria-label="${movable ? 'Drag channel' : 'Locked workspace channel'}">⋮⋮</span>`}
+      ${showOwner ? '' : `<span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channels are managed centrally'}" aria-label="${movable ? 'Drag channel' : 'Locked workspace channel'}">&#8942;&#8942;</span>`}
       ${showOwner ? `<button type="button" class="avatar-mini sidebar-channel-owner" data-avatar-user="${channel.createdBy}" data-user-id="${channel.createdBy}" data-organizer-owner="${channel.id}" title="${escapeHtml(creatorName(channel))}" aria-label="Open ${escapeHtml(creatorName(channel))}'s menu" style="background:${escapeHtml(channel.creatorAvatarColor || '#64748b')}">${escapeHtml(creatorName(channel).charAt(0).toUpperCase())}</button>` : ''}
       ${canRenameChannel(channel, showOwner)
     ? `<input class="sidebar-channel-name" data-channel-name="${channel.id}" value="${escapeHtml(state.sidebarChannelNameDraft[channel.id] || channel.name)}" aria-label="Channel name">`
@@ -300,7 +300,7 @@ function renderSidebarModal() {
       ${canDeleteOrganizerChannel(channel, showOwner) ? `<button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>` : ''}
     </div>`;
   const sectionChannelCard = (channel, movable) => `<div class="sidebar-section-channel${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
-    <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">â‹®â‹®</span>
+    <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">&#8942;&#8942;</span>
     <span>#${escapeHtml(channel.name)}</span>
   </div>`;
   const sectionChannels = (section, movable) => section.channelIds
@@ -314,7 +314,7 @@ function renderSidebarModal() {
     ? workspaceDraft.sections.map((section, index) => `
       <div class="sidebar-section-card workspace" data-workspace-section-index="${index}">
         <div class="sidebar-section-card-head">
-          <span class="sidebar-drag-handle" ${canManageWorkspace ? 'draggable="true"' : ''} title="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}" aria-label="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}">⋮⋮</span>
+          <span class="sidebar-drag-handle" ${canManageWorkspace ? 'draggable="true"' : ''} title="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}" aria-label="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}">&#8942;&#8942;</span>
           ${canManageWorkspace
     ? `<input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-workspace-section-name aria-label="Workspace section name">`
     : `<span class="sidebar-section-name-readonly">${escapeHtml(section.name)}</span>`}
@@ -330,7 +330,7 @@ function renderSidebarModal() {
     ? draft.sections.map((section, index) => `
       <div class="sidebar-section-card personal" data-section-index="${index}">
         <div class="sidebar-section-card-head">
-          <span class="sidebar-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">⋮⋮</span>
+          <span class="sidebar-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">&#8942;&#8942;</span>
           <input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-section-name aria-label="Section name">
           ${state.moderation.canCreateChannels ? '<button class="icon-btn sidebar-section-add" type="button" data-add-channel-to-section title="Create a channel in this section" aria-label="Create channel">+</button>' : ''}<button class="icon-btn sidebar-section-delete" type="button" data-section-delete title="Delete section" aria-label="Delete section">&times;</button>
         </div>

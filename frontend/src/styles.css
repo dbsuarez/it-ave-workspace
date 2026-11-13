@@ -1872,7 +1872,7 @@ body.iav-dev .demo-banner {
 .input-row {
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
 }
 
