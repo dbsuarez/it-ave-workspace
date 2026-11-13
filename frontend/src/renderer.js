@@ -5285,13 +5285,19 @@ function openCreateChannelModal({ personal = false } = {}) {
     document.getElementById('new-channel-available-row').hidden = personalInput.checked || !state.moderation.canManageWorkspace;
     if (personalInput.checked) document.getElementById('new-channel-available-all').checked = false;
   };
-  document.getElementById('modal-create-channel').classList.add('open');
-  document.getElementById('modal-overlay').classList.add('open');
+  openSettingsModal(document.getElementById('modal-create-channel'));
+  document.getElementById('new-channel-name')?.focus();
 }
 
-function closeModalCreateChannel() {
+function closeModalCreateChannel({ restoreOrganizer = true } = {}) {
   document.getElementById('modal-create-channel').classList.remove('open');
   document.getElementById('modal-overlay').classList.remove('open');
+  if (restoreOrganizer && state.channelCreationFromOrganizer && state.sidebarDraft) {
+    renderSidebarModal();
+    openSettingsModal(document.getElementById('modal-sidebar'));
+    state.channelCreationFromOrganizer = false;
+    state.channelCreationSectionTarget = null;
+  }
 }
 
 async function saveCreateChannel() {
@@ -5310,7 +5316,7 @@ async function saveCreateChannel() {
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to create channel');
-    closeModalCreateChannel();
+    closeModalCreateChannel({ restoreOrganizer: false });
     document.getElementById('new-channel-name').value = '';
     document.getElementById('new-channel-topic').value = '';
 
@@ -5324,9 +5330,11 @@ async function saveCreateChannel() {
       state.sidebarAvailabilityDraft[data.channel.id] = Boolean(data.channel.availableToAll);
       state.sidebarChannelNameDraft[data.channel.id] = data.channel.name;
       renderSidebarModal();
+      openSettingsModal(document.getElementById('modal-sidebar'));
     } else if (state.channelCreationFromOrganizer && state.sidebarDraft) {
       state.channelCreationSectionTarget = null;
       renderSidebarModal();
+      openSettingsModal(document.getElementById('modal-sidebar'));
     } else {
       openChannel(data.channel.id);
     }
