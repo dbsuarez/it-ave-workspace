@@ -1127,6 +1127,21 @@ body.iav-dev .demo-banner {
   gap: 8px;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  #view-channel #btn-channel-settings:not([hidden]) {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 140ms ease, transform 140ms ease;
+  }
+  #view-channel .channel-header:hover #btn-channel-settings:not([hidden]),
+  #view-channel #btn-channel-settings:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+}
+
 .channel-pins-toggle {
   position: relative;
 }
