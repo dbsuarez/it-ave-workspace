@@ -4,14 +4,22 @@ const DEFAULT_CHANNELS = [
   ['general', 'Company-wide discussion.'],
 ];
 
-const DEFAULT_SECTION = Object.freeze({ id: 'builtin-start-here', name: 'START HERE' });
+const DEFAULT_SECTION = Object.freeze({ id: 'builtin-official', name: 'OFFICIAL' });
+const RETIRED_SECTION_IDS = new Set(['builtin-start-here', DEFAULT_SECTION.id]);
 
 function withDefaultSection(layout, channelIds) {
   const locked = new Set(channelIds.map(Number));
-  const sections = (layout?.sections || [])
-    .filter((section) => section.id !== DEFAULT_SECTION.id)
+  const stored = layout?.sections || [];
+  const claimed = stored.filter((section) => RETIRED_SECTION_IDS.has(section.id)
+    || String(section.name || '').trim().toLowerCase() === 'official');
+  const officialChannelIds = [...new Set([
+    ...claimed.flatMap((section) => section.channelIds || []).map(Number),
+    ...channelIds.map(Number),
+  ])];
+  const sections = stored
+    .filter((section) => !claimed.includes(section))
     .map((section) => ({ ...section, channelIds: (section.channelIds || []).filter((id) => !locked.has(Number(id))) }));
-  return { sections: [{ ...DEFAULT_SECTION, builtIn: true, channelIds: channelIds.map(Number) }, ...sections] };
+  return { sections: [{ ...DEFAULT_SECTION, builtIn: true, channelIds: officialChannelIds }, ...sections] };
 }
 
 async function ensureDefaultChannels(target) {

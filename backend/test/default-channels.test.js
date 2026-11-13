@@ -26,6 +26,11 @@ test('restore repairs built-in channels and their active member access', async (
   )).rows[0];
   await db.query("DELETE FROM channels WHERE name IN ('general', 'welcome')");
   await db.query("UPDATE channels SET created_by = $1 WHERE name = 'announcements'", [owner.id]);
+  const existing = (await db.query("SELECT id FROM channels WHERE name = 'random'")).rows[0];
+  await db.query(
+    'UPDATE moderation_settings SET workspace_sidebar_layout = $1 WHERE id = 1',
+    [JSON.stringify({ sections: [{ id: 'existing-official', name: 'OFFICIAL', channelIds: [existing.id] }, { id: 'other', name: 'Other', channelIds: [] }] })]
+  );
 
   const { DEFAULT_CHANNELS, ensureDefaultChannels } = require('../src/defaultChannels');
   await ensureDefaultChannels(db);
@@ -43,7 +48,9 @@ test('restore repairs built-in channels and their active member access', async (
   )).rows[0].count, DEFAULT_CHANNELS.length);
   const layout = (await db.query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1')).rows[0].workspace_sidebar_layout;
   assert.deepEqual(layout.sections[0], {
-    id: 'builtin-start-here', name: 'START HERE', builtIn: true,
-    channelIds: DEFAULT_CHANNELS.map(([name]) => Number(channels.find((channel) => channel.name === name).id)),
+    id: 'builtin-official', name: 'OFFICIAL', builtIn: true,
+    channelIds: [Number(existing.id), ...DEFAULT_CHANNELS.map(([name]) => Number(channels.find((channel) => channel.name === name).id))],
   });
+  assert.equal(layout.sections.filter((section) => section.name === 'OFFICIAL').length, 1);
+  assert.equal(layout.sections[1].name, 'Other');
 });

@@ -132,6 +132,7 @@ io.on('connection', (socket) => {
 const PORT = config.PORT;
 Promise.resolve()
   .then(() => migrations.reduce((chain, sql) => chain.then(() => db.query(sql)), Promise.resolve()))
+  .then(() => require('./src/defaultChannels').ensureDefaultChannels(db))
   .then(() => {
     server.listen(PORT, () => {
       console.log(`IT Avenue Workspace backend running on port ${PORT}`);
