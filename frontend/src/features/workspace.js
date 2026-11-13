@@ -254,7 +254,8 @@ function openSidebarModal() {
   state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
   state.sidebarAvailabilityDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, Boolean(channel.availableToAll)]));
   state.sidebarChannelNameDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, channel.name]));
-  state.sidebarOrganizerTab = state.sidebarOrganizerTab || 'mine';
+  state.sidebarOrganizerFilter = state.sidebarOrganizerFilter || 'all';
+  state.sidebarOrganizerQuery = '';
   renderSidebarModal();
   openSettingsModal(document.getElementById('modal-sidebar'));
 }
@@ -264,6 +265,8 @@ function renderSidebarModal() {
   const workspaceDraft = state.workspaceSidebarDraft || { sections: [] };
   const canManageWorkspace = Boolean(draft.canManageWorkspaceSections);
   const channelById = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
+  const workspaceChannelIds = new Set(workspaceDraft.sections.flatMap((section) => section.channelIds.map(Number)));
+  const canSeeOtherPersonal = Boolean(state.user?.isSuperadmin || state.moderation?.canManageChannels);
   const canRenameChannel = (channel, readOnly) => !readOnly && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
@@ -272,6 +275,19 @@ function renderSidebarModal() {
     || Number(channel.createdBy) === Number(state.user?.id));
   const creatorName = (channel) => [channel.creatorFirstName, channel.creatorMiddleName, channel.creatorLastName]
     .filter(Boolean).join(' ') || channel.creatorUsername || 'Unknown owner';
+  const sectionTarget = (channelId) => {
+    const workspace = workspaceDraft.sections.find((section) => section.channelIds.some((id) => Number(id) === Number(channelId)));
+    if (workspace) return `workspace:${workspace.id}`;
+    const personal = draft.sections.find((section) => section.channelIds.some((id) => Number(id) === Number(channelId)));
+    return personal ? `personal:${personal.id}` : '';
+  };
+  const moveOptions = (channel) => {
+    const selected = sectionTarget(channel.id);
+    const workspaceOptions = workspaceDraft.sections.filter((section) => canManageWorkspace || selected === `workspace:${section.id}`)
+      .map((section) => `<option value="workspace:${escapeHtml(section.id)}"${selected === `workspace:${section.id}` ? ' selected' : ''}>${escapeHtml(section.name)}</option>`).join('');
+    const personalOptions = draft.sections.map((section) => `<option value="personal:${escapeHtml(section.id)}"${selected === `personal:${section.id}` ? ' selected' : ''}>${escapeHtml(section.name)}</option>`).join('');
+    return `<option value=""${selected ? '' : ' selected'}>Unassigned</option>${workspaceOptions ? `<optgroup label="Workspace sections">${workspaceOptions}</optgroup>` : ''}${personalOptions ? `<optgroup label="My sections">${personalOptions}</optgroup>` : ''}`;
+  };
   const channelCard = (channel, movable = true, showOwner = false) => `
     <div class="sidebar-channel-card${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
       ${showOwner ? '' : `<span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channels are managed centrally'}" aria-label="${movable ? 'Drag channel' : 'Locked workspace channel'}">⋮⋮</span>`}
@@ -280,17 +296,20 @@ function renderSidebarModal() {
     ? `<input class="sidebar-channel-name" data-channel-name="${channel.id}" value="${escapeHtml(state.sidebarChannelNameDraft[channel.id] || channel.name)}" aria-label="Channel name">`
     : `<span class="sidebar-channel-name sidebar-channel-name-readonly">${escapeHtml(channel.name)}</span>`}
       ${canManageWorkspace && !showOwner ? `<label class="sidebar-available-all"><input type="checkbox" data-channel-available-all="${channel.id}"${state.sidebarAvailabilityDraft[channel.id] ? ' checked' : ''}> Visible to all</label>` : ''}
+      <select class="sidebar-channel-move" data-channel-move="${channel.id}" aria-label="Move #${escapeHtml(channel.name)} to section"${movable ? '' : ' disabled'}>${moveOptions(channel)}</select>
       ${canDeleteOrganizerChannel(channel, showOwner) ? `<button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>` : ''}
     </div>`;
+  const sectionChannelCard = (channel, movable) => `<div class="sidebar-section-channel${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
+    <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">â‹®â‹®</span>
+    <span>#${escapeHtml(channel.name)}</span>
+  </div>`;
   const sectionChannels = (section, movable) => section.channelIds
-    .map((id) => channelById.get(Number(id))).filter(Boolean).map((channel) => channelCard(channel, movable)).join('');
+    .map((id) => channelById.get(Number(id))).filter(Boolean).map((channel) => sectionChannelCard(channel, movable)).join('');
 
   const workspaceEditor = document.getElementById('workspace-sidebar-editor');
   workspaceEditor.classList.toggle('read-only', !canManageWorkspace);
   document.getElementById('btn-add-workspace-sidebar-section').hidden = !canManageWorkspace;
   document.getElementById('workspace-sidebar-readonly-note').hidden = canManageWorkspace;
-  document.querySelector('[data-sidebar-tab="workspace"]').hidden = !canManageWorkspace;
-  document.querySelector('.sidebar-organizer-tabs').hidden = !canManageWorkspace;
   document.getElementById('workspace-sidebar-sections').innerHTML = workspaceDraft.sections.length
     ? workspaceDraft.sections.map((section, index) => `
       <div class="sidebar-section-card workspace" data-workspace-section-index="${index}">
@@ -321,28 +340,27 @@ function renderSidebarModal() {
       </div>`).join('')
     : '<p class="form-note">No personal sections yet.</p>';
 
-  const placed = new Set([...workspaceDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
-  const unassigned = state.channels.filter((channel) => !placed.has(Number(channel.id)));
+  let filter = state.sidebarOrganizerFilter || 'all';
+  if (filter === 'others' && !canSeeOtherPersonal) filter = 'all';
+  state.sidebarOrganizerFilter = filter;
+  const query = String(state.sidebarOrganizerQuery || '').trim().toLowerCase();
+  const poolChannels = state.channels.filter((channel) => {
+    const otherPersonal = Number(channel.memberCount || 0) <= 1 && Number(channel.createdBy) !== Number(state.user?.id);
+    const matchesFilter = filter === 'all'
+      || (filter === 'workspace' && (workspaceChannelIds.has(Number(channel.id)) || Boolean(channel.availableToAll)))
+      || (filter === 'mine' && Number(channel.createdBy) === Number(state.user?.id))
+      || (filter === 'others' && otherPersonal);
+    return matchesFilter && (!query || [channel.name, creatorName(channel)].some((value) => String(value).toLowerCase().includes(query)));
+  });
+  const filterControl = document.getElementById('sidebar-channel-filter');
+  filterControl.value = filter;
+  filterControl.querySelector('option[value="others"]').hidden = !canSeeOtherPersonal;
+  document.getElementById('sidebar-channel-search').value = state.sidebarOrganizerQuery || '';
   document.getElementById('sidebar-channels').innerHTML = `
     <div class="sidebar-unassigned-dropzone" data-drop-unassigned>
-      ${unassigned.map((channel) => channelCard(channel, true)).join('') || '<p class="sidebar-drop-hint">All channels are organized</p>'}
+      ${poolChannels.map((channel) => channelCard(channel, canManageWorkspace || !workspaceChannelIds.has(Number(channel.id)), filter === 'others' && Number(channel.createdBy) !== Number(state.user?.id))).join('') || '<p class="sidebar-drop-hint">No channels match this search.</p>'}
     </div>`;
   if (typeof paintAvatarsIn === 'function') paintAvatarsIn(document.getElementById('modal-sidebar'));
-  setSidebarOrganizerTab(state.sidebarOrganizerTab);
-}
-
-function setSidebarOrganizerTab(tab) {
-  const allowed = state.sidebarDraft?.canManageWorkspaceSections ? ['mine', 'workspace'] : ['mine'];
-  const selected = allowed.includes(tab) ? tab : 'mine';
-  state.sidebarOrganizerTab = selected;
-  document.querySelectorAll('#modal-sidebar [data-sidebar-tab]').forEach((button) => {
-    const active = button.dataset.sidebarTab === selected;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-selected', String(active));
-  });
-  document.querySelectorAll('#modal-sidebar [data-sidebar-panel]').forEach((panel) => {
-    panel.hidden = panel.dataset.sidebarPanel !== selected;
-  });
 }
 
 // Copies what is typed in the dialog back into the draft before re-rendering.
@@ -439,8 +457,6 @@ function clearSidebarDragState() {
 
 function handleSidebarModalClick(event) {
   const draft = state.sidebarDraft;
-  const tab = event.target.closest('[data-sidebar-tab]');
-  if (tab) { setSidebarOrganizerTab(tab.dataset.sidebarTab); return; }
   const addToSection = event.target.closest('[data-add-channel-to-section]');
   if (addToSection) {
     syncSidebarDraft();
@@ -493,6 +509,35 @@ function handleSidebarModalClick(event) {
     draft.sections.splice(index, 1);
     renderSidebarModal();
   }
+}
+
+function handleSidebarModalChange(event) {
+  if (event.target.id === 'sidebar-channel-filter') {
+    syncSidebarDraft();
+    state.sidebarOrganizerFilter = event.target.value;
+    renderSidebarModal();
+    return;
+  }
+  const move = event.target.closest('[data-channel-move]');
+  if (!move) return;
+  syncSidebarDraft();
+  const [scope, sectionId] = String(move.value || '').split(':');
+  if (scope === 'workspace' && !state.sidebarDraft.canManageWorkspaceSections) return;
+  const target = scope === 'workspace'
+    ? state.workspaceSidebarDraft.sections.find((section) => section.id === sectionId)
+    : scope === 'personal'
+      ? state.sidebarDraft.sections.find((section) => section.id === sectionId) : null;
+  assignSidebarDraftChannel(Number(move.dataset.channelMove), target);
+  renderSidebarModal();
+}
+
+function handleSidebarModalInput(event) {
+  if (event.target.id !== 'sidebar-channel-search') return;
+  state.sidebarOrganizerQuery = event.target.value;
+  renderSidebarModal();
+  const search = document.getElementById('sidebar-channel-search');
+  search?.focus();
+  search?.setSelectionRange(search.value.length, search.value.length);
 }
 
 async function saveSidebarModal(event) {
@@ -773,6 +818,8 @@ function setupWorkspaceFeatures() {
     openSidebarModal();
   });
   document.getElementById('modal-sidebar')?.addEventListener('click', handleSidebarModalClick);
+  document.getElementById('modal-sidebar')?.addEventListener('change', handleSidebarModalChange);
+  document.getElementById('modal-sidebar')?.addEventListener('input', handleSidebarModalInput);
   document.getElementById('modal-sidebar')?.addEventListener('dragstart', handleSidebarDragStart);
   document.getElementById('modal-sidebar')?.addEventListener('dragover', handleSidebarDragOver);
   document.getElementById('modal-sidebar')?.addEventListener('drop', handleSidebarDrop);

@@ -776,25 +776,32 @@
       </div>
       <form id="sidebar-form">
         <div class="modal-body sidebar-modal-body">
-          <div class="sidebar-organizer-tabs" role="tablist" aria-label="Channel organizer views">
-            <button type="button" class="sidebar-organizer-tab active" role="tab" data-sidebar-tab="mine" aria-selected="true">My sidebar</button>
-            <button type="button" class="sidebar-organizer-tab" role="tab" data-sidebar-tab="workspace" aria-selected="false">Workspace layout</button>
+          <div class="sidebar-organizer-layout">
+            <section class="sidebar-organizer-destinations" aria-label="Sidebar sections">
+              <div id="workspace-sidebar-editor">
+                <div class="sidebar-section-title-row"><h4 class="modal-section-title">Workspace sections</h4><button class="btn" type="button" id="btn-add-workspace-sidebar-section">+ Add</button></div>
+                <p class="form-note" id="workspace-sidebar-readonly-note" hidden>Workspace sections are read-only for your role.</p>
+                <div id="workspace-sidebar-sections"></div>
+              </div>
+              <div class="sidebar-section-title-row"><h4 class="modal-section-title">My sections</h4><button class="btn" type="button" id="btn-add-sidebar-section">+ Add</button></div>
+              <div id="sidebar-sections"></div>
+            </section>
+            <section class="sidebar-channel-pool" aria-label="Channel pool">
+              <div class="sidebar-channel-pool-heading">
+                <div><h4 class="modal-section-title">All channels</h4><p class="form-note">Drag a channel into any section on the left.</p></div>
+              </div>
+              <div class="sidebar-channel-pool-tools">
+                <input id="sidebar-channel-search" type="search" placeholder="Search channels" aria-label="Search channels">
+                <select id="sidebar-channel-filter" aria-label="Filter channels">
+                  <option value="all">All channels</option>
+                  <option value="workspace">Workspace channels</option>
+                  <option value="mine">My channels</option>
+                  <option value="others">Personal (Others)</option>
+                </select>
+              </div>
+              <div id="sidebar-channels"></div>
+            </section>
           </div>
-          <section class="sidebar-organizer-panel" data-sidebar-panel="workspace" hidden>
-            <div id="workspace-sidebar-editor">
-              <div class="sidebar-section-title-row"><h4 class="modal-section-title">Workspace sections</h4><button class="btn" type="button" id="btn-add-workspace-sidebar-section">+ Add workspace section</button></div>
-              <p class="form-note" id="workspace-sidebar-readonly-note" hidden>You can view workspace sections, but only people with Manage workspace permission can add, rename, reorder, or delete them.</p>
-              <p class="form-note">Drag section headers to reorder. Drag channels directly into a workspace section to place them there for everyone.</p>
-              <div id="workspace-sidebar-sections"></div>
-            </div>
-          </section>
-          <section class="sidebar-organizer-panel" data-sidebar-panel="mine">
-            <div class="sidebar-section-title-row"><h4 class="modal-section-title">My sections</h4><button class="btn" type="button" id="btn-add-sidebar-section">+ Add section</button></div>
-            <div id="sidebar-sections"></div>
-            <h4 class="modal-section-title">Unassigned channels</h4>
-            <div id="sidebar-channels"></div>
-            <p class="form-note">Drag unassigned channels into one of your sections. These choices affect only your sidebar.</p>
-          </section>
         </div>
         <div class="modal-footer">
           <button class="btn" type="button" id="btn-cancel-sidebar">Cancel</button>
