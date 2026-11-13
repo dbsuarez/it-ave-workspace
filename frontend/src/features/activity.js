@@ -15,13 +15,17 @@ function knownUsernames() {
 
 // Message HTML: safe rich text with @mentions highlighted (see format.js).
 function formatMessageText(content) {
-  return formatRichText(content, { usernames: knownUsernames(), me: state.user?.username || '' });
+  return formatRichText(content, {
+    usernames: knownUsernames(),
+    me: state.user?.username || '',
+    channels: (state.channels || []).map((channel) => ({ id: channel.id, name: channel.name })),
+  });
 }
 
 // ============================================================
 // Mentions: composer autocomplete
 // ============================================================
-const mentionPicker = { open: false, items: [], index: 0, tokenStart: -1, requestId: 0 };
+const mentionPicker = { open: false, items: [], index: 0, tokenStart: -1, requestId: 0, kind: 'person' };
 
 async function loadChannelMembers(channelId) {
   if (!channelId) return [];
@@ -46,7 +50,7 @@ function mentionPopup() {
     popup.id = 'mention-popup';
     popup.className = 'mention-popup';
     popup.setAttribute('role', 'listbox');
-    popup.setAttribute('aria-label', 'Mention a channel member');
+    popup.setAttribute('aria-label', 'Choose a person or channel');
     popup.hidden = true;
     popup.addEventListener('mousedown', (event) => {
       const option = event.target.closest('[data-mention-index]');
@@ -76,12 +80,18 @@ function mentionLabel(member) {
 
 function renderMentionPicker() {
   const popup = mentionPopup();
-  popup.innerHTML = mentionPicker.items.map((member, index) => `
+  popup.innerHTML = mentionPicker.items.map((item, index) => mentionPicker.kind === 'channel' ? `
     <div class="mention-option${index === mentionPicker.index ? ' active' : ''}" role="option"
       aria-selected="${index === mentionPicker.index}" data-mention-index="${index}">
-      <span class="avatar-mini" style="background:${escapeHtml(member.avatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(member.id ?? member.userId ?? ''))}">${escapeHtml(mentionLabel(member).charAt(0).toUpperCase())}</span>
-      <span class="mention-option-name">${escapeHtml(mentionLabel(member))}</span>
-      ${member.role === 'moderator' || member.isGroup ? `<span class="mention-option-role">${escapeHtml(member.role)}</span>` : ''}
+      <span class="mention-channel-icon">#</span>
+      <span class="mention-option-name">${escapeHtml(item.name)}</span>
+      <span class="mention-option-role">Channel</span>
+    </div>` : `
+    <div class="mention-option${index === mentionPicker.index ? ' active' : ''}" role="option"
+      aria-selected="${index === mentionPicker.index}" data-mention-index="${index}">
+      <span class="avatar-mini" style="background:${escapeHtml(item.avatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(item.id ?? item.userId ?? ''))}">${escapeHtml(mentionLabel(item).charAt(0).toUpperCase())}</span>
+      <span class="mention-option-name">${escapeHtml(mentionLabel(item))}</span>
+      ${item.role === 'moderator' || item.isGroup ? `<span class="mention-option-role">${escapeHtml(item.role)}</span>` : ''}
     </div>`).join('');
   popup.hidden = false;
 }
@@ -90,16 +100,32 @@ async function updateMentionPicker() {
   const input = els.messageInput;
   const caret = input.selectionStart;
   const before = input.value.slice(0, caret);
-  const match = /(^|\s)@([^\s@]{0,30})$/.exec(before);
+  const channelMatch = /(^|\s)#([a-z0-9-]{0,80})$/i.exec(before);
+  const mentionMatch = /(^|\s)@([^\s@]{0,30})$/.exec(before);
+  const match = channelMatch || mentionMatch;
   if (!match || !state.currentChannelId) {
     closeMentionPicker();
     return;
   }
   const requestId = ++mentionPicker.requestId;
+  const term = match[2].toLowerCase();
+  mentionPicker.tokenStart = caret - match[2].length - 1;
+  mentionPicker.index = 0;
+  if (channelMatch) {
+    mentionPicker.kind = 'channel';
+    const channels = (state.channels || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const starts = channels.filter((channel) => channel.name.toLowerCase().startsWith(term));
+    const contains = channels.filter((channel) => !starts.includes(channel) && channel.name.toLowerCase().includes(term));
+    mentionPicker.items = [...starts, ...contains].slice(0, 8);
+    if (!mentionPicker.items.length) { closeMentionPicker(); return; }
+    mentionPicker.open = true;
+    renderMentionPicker();
+    return;
+  }
+  mentionPicker.kind = 'person';
   const members = await loadChannelMembers(state.currentChannelId);
   if (requestId !== mentionPicker.requestId) return;
 
-  const term = match[2].toLowerCase();
   const others = members
     .filter((member) => Number(member.id) !== Number(state.user.id))
     .concat(groupMentionCandidates());
@@ -112,17 +138,15 @@ async function updateMentionPicker() {
     return;
   }
   mentionPicker.open = true;
-  mentionPicker.index = 0;
-  mentionPicker.tokenStart = caret - match[2].length - 1;
   renderMentionPicker();
 }
 
 function applyMentionSelection() {
-  const member = mentionPicker.items[mentionPicker.index];
-  if (!member) return;
+  const item = mentionPicker.items[mentionPicker.index];
+  if (!item) return;
   const input = els.messageInput;
   const caret = input.selectionStart;
-  const inserted = `@${member.username} `;
+  const inserted = mentionPicker.kind === 'channel' ? `#${item.name} ` : `@${item.username} `;
   input.value = input.value.slice(0, mentionPicker.tokenStart) + inserted + input.value.slice(caret);
   const position = mentionPicker.tokenStart + inserted.length;
   input.setSelectionRange(position, position);

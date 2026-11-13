@@ -43,6 +43,32 @@ function findMentionRanges(text, usernames) {
   return ranges.sort((a, b) => a.start - b.start);
 }
 
+// Exact #channel-name ranges for channels the viewer can access. Longer names win.
+function findChannelRanges(text, channels) {
+  if (typeof text !== 'string' || !text.includes('#')) return [];
+  const lower = text.toLowerCase();
+  const ranges = [];
+  const known = [...new Map((channels || []).filter((channel) => channel && channel.name)
+    .map((channel) => [String(channel.name).toLowerCase(), channel])).values()]
+    .sort((a, b) => String(b.name).length - String(a.name).length);
+  for (const channel of known) {
+    const needle = `#${String(channel.name).toLowerCase()}`;
+    let from = 0;
+    while (from < lower.length) {
+      const start = lower.indexOf(needle, from);
+      if (start === -1) break;
+      const end = start + needle.length;
+      const boundary = (char) => char === undefined || !/[A-Za-z0-9_-]/.test(char);
+      const overlaps = ranges.some((range) => start < range.end && end > range.start);
+      if (boundary(lower[start - 1]) && boundary(lower[end]) && !overlaps) {
+        ranges.push({ start, end, channelId: channel.id, channelName: channel.name });
+      }
+      from = end;
+    }
+  }
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
 // Emphasis and links on text that is already escaped.
 function formatEscapedInline(escaped) {
   return escaped
@@ -63,14 +89,22 @@ function formatInlineText(text, context) {
     if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
       return `<code class="message-code">${escapeRichText(part.slice(1, -1))}</code>`;
     }
-    const ranges = findMentionRanges(part, context.usernames);
+    const ranges = [
+      ...findMentionRanges(part, context.usernames).map((range) => ({ ...range, type: 'mention' })),
+      ...findChannelRanges(part, context.channels).map((range) => ({ ...range, type: 'channel' })),
+    ].sort((a, b) => a.start - b.start || b.end - a.end)
+      .filter((range, index, all) => !all.slice(0, index).some((prior) => range.start < prior.end && range.end > prior.start));
     if (!ranges.length) return formatEscapedInline(escapeRichText(part));
     let html = '';
     let cursor = 0;
     for (const range of ranges) {
       html += formatEscapedInline(escapeRichText(part.slice(cursor, range.start)));
-      const isMe = range.username.toLowerCase() === (context.me || '').toLowerCase();
-      html += `<span class="mention${isMe ? ' mention-me' : ''}">${escapeRichText(part.slice(range.start, range.end))}</span>`;
+      if (range.type === 'channel') {
+        html += `<button type="button" class="message-channel-link" data-channel-shortcut="${escapeRichText(range.channelId)}">${escapeRichText(part.slice(range.start, range.end))}</button>`;
+      } else {
+        const isMe = range.username.toLowerCase() === (context.me || '').toLowerCase();
+        html += `<span class="mention${isMe ? ' mention-me' : ''}">${escapeRichText(part.slice(range.start, range.end))}</span>`;
+      }
       cursor = range.end;
     }
     return html + formatEscapedInline(escapeRichText(part.slice(cursor)));
@@ -131,5 +165,5 @@ function formatRichText(content, context = {}) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { formatRichText, formatInlineText, formatTextBlock, findMentionRanges, escapeRichText };
+  module.exports = { formatRichText, formatInlineText, formatTextBlock, findMentionRanges, findChannelRanges, escapeRichText };
 }

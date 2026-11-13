@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { formatRichText } = require('../src/features/format');
 
-const context = { usernames: ['ann', 'ann marie', 'bob'], me: 'bob' };
+const context = { usernames: ['ann', 'ann marie', 'bob'], me: 'bob', channels: [{ id: 7, name: 'welcome' }, { id: 12, name: 'hr-inquiry' }] };
 const format = (text) => formatRichText(text, context);
 
 test('plain text is escaped and otherwise unchanged', () => {
@@ -39,6 +39,12 @@ test('links are only made from http(s) URLs', () => {
 test('mentions are highlighted, with a marker for mentions of the viewer', () => {
   assert.equal(format('hi @ann marie and @bob'),
     'hi <span class="mention">@ann marie</span> and <span class="mention mention-me">@bob</span>');
+});
+
+test('known channel names become clickable shortcuts and unknown hashtags stay plain', () => {
+  assert.equal(format('Go to #welcome or #hr-inquiry, not #missing.'),
+    'Go to <button type="button" class="message-channel-link" data-channel-shortcut="7">#welcome</button> or <button type="button" class="message-channel-link" data-channel-shortcut="12">#hr-inquiry</button>, not #missing.');
+  assert.equal(format('prefix#welcome and #welcome-extra'), 'prefix#welcome and #welcome-extra');
 });
 
 test('markup in user text can never become a tag or an attribute', () => {

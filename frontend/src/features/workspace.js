@@ -818,6 +818,14 @@ function handleChannelLinksUpdated({ channelId }) {
 }
 
 function setupWorkspaceFeatures() {
+  document.addEventListener('click', (event) => {
+    const shortcut = event.target.closest('[data-channel-shortcut]');
+    if (!shortcut) return;
+    event.preventDefault();
+    const channelId = Number(shortcut.dataset.channelShortcut);
+    if ((state.channels || []).some((channel) => Number(channel.id) === channelId)) openChannel(channelId);
+    else showToast('You no longer have access to that channel.', 'error');
+  });
   document.getElementById('btn-schedule')?.addEventListener('click', () => openScheduleModal('channel'));
   document.getElementById('btn-dm-schedule')?.addEventListener('click', () => openScheduleModal('dm'));
   document.getElementById('schedule-form')?.addEventListener('submit', saveScheduledMessage);

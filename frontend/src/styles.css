@@ -3327,6 +3327,19 @@ body.theme-dark .mention.mention-me {
   flex-shrink: 0;
 }
 
+.mention-channel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--chip-bg);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 900;
+}
+
 .mention-option-name {
   flex: 1;
   min-width: 0;
@@ -4240,6 +4253,21 @@ body.account-guest [data-create="channel"] {
   text-decoration: underline;
   word-break: break-all;
 }
+
+.message-channel-link {
+  display: inline;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 800;
+  line-height: inherit;
+  cursor: pointer;
+}
+.message-channel-link:hover { text-decoration: underline; }
+.message.own .message-text .message-channel-link { background: rgba(255, 255, 255, 0.2); color: #fff; }
 
 .message.own .message-text .message-link {
   color: #fff;
