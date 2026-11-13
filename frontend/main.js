@@ -74,6 +74,7 @@ function confineNavigation(win) {
 }
 
 function createWindow() {
+  const canUseDevTools = store.get('user')?.isSuperadmin === true;
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -86,6 +87,9 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // This is the actual Electron security boundary. Keyboard-event handlers
+      // alone cannot reliably suppress Chromium's built-in DevTools shortcut.
+      devTools: canUseDevTools,
       backgroundThrottling: false, // keep receiving messages and ringing while hidden in the tray
     },
     icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
@@ -99,8 +103,10 @@ function createWindow() {
   // main process for non-Superadmins; Superadmins retain the advertised shortcut.
   mainWindow.webContents.on('before-input-event', (event, input) => {
     const devtoolsShortcut = input.type === 'keyDown' && input.control && input.shift
-      && String(input.key || '').toLowerCase() === 'i';
-    if (devtoolsShortcut && !store.get('user')?.isSuperadmin) event.preventDefault();
+      && [input.key, input.code].some((value) => ['i', 'keyi'].includes(String(value || '').toLowerCase()));
+    // Read the current identity here as well: View As changes the stored user
+    // without recreating the Owner's BrowserWindow.
+    if (devtoolsShortcut && store.get('user')?.isSuperadmin !== true) event.preventDefault();
   });
 
   confineNavigation(mainWindow);
@@ -490,7 +496,7 @@ handleTrusted('app:command', (event, command) => {
       contents.reloadIgnoringCache();
       return true;
     case 'devtools':
-      if (!store.get('user')?.isSuperadmin) return false;
+      if (store.get('user')?.isSuperadmin !== true) return false;
       contents.toggleDevTools();
       return true;
     case 'zoom-in':
