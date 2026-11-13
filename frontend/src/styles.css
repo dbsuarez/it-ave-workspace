@@ -546,8 +546,7 @@ body.iav-dev .demo-banner {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.28) transparent;
+  scrollbar-width: none;
 }
 
 .pane-scroll > div:not([hidden]) {
@@ -562,10 +561,7 @@ body.iav-dev .demo-banner {
   flex-direction: column;
 }
 
-.pane-scroll::-webkit-scrollbar { width: 6px; }
-.pane-scroll::-webkit-scrollbar-track { background: transparent; }
-.pane-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.26); border-radius: 3px; }
-.pane-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.45); }
+.pane-scroll::-webkit-scrollbar { width: 0; height: 0; }
 
 .nav-label {
   font-size: 11px;
@@ -4378,10 +4374,30 @@ body.account-guest [data-create="channel"] {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 52%, transparent) transparent;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--muted-bg);
+}
+
+.sidebar-organizer-destinations::-webkit-scrollbar,
+.sidebar-channel-pool::-webkit-scrollbar { width: 8px; }
+.sidebar-organizer-destinations::-webkit-scrollbar-track,
+.sidebar-channel-pool::-webkit-scrollbar-track { background: transparent; }
+.sidebar-organizer-destinations::-webkit-scrollbar-thumb,
+.sidebar-channel-pool::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 52%, transparent);
+  background-clip: content-box;
+}
+.sidebar-organizer-destinations::-webkit-scrollbar-thumb:hover,
+.sidebar-channel-pool::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: content-box;
 }
 
 .sidebar-channel-pool-heading .modal-section-title { margin: 0; }
@@ -4566,9 +4582,15 @@ body.account-guest [data-create="channel"] {
 .sidebar-section-add,
 .sidebar-section-delete {
   flex: 0 0 30px;
+  box-sizing: border-box;
   width: 30px;
+  min-width: 30px;
+  max-width: 30px;
   height: 30px;
+  min-height: 30px;
+  max-height: 30px;
   padding: 0;
+  font-size: 16px;
   line-height: 1;
 }
 
