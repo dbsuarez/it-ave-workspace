@@ -47,7 +47,7 @@ const API = () => (sql, params = []) => {
     if (superadmins.has(id)) return { rows: [{}] };
     const ch = channels.get(Number(params[0]));
     if (ch && Number(ch.created_by) === id) return { rows: [{}] };
-    if (moderators.has(`${params[0]}:${id}`)) return { rows: [{}] };
+    if (sql.includes('cm.role') && moderators.has(`${params[0]}:${id}`)) return { rows: [{}] };
     return { rows: [] };
   }
   if (sql.includes('FROM channel_members')) { // generic fallback (unused path)
@@ -74,7 +74,7 @@ const API = () => (sql, params = []) => {
     if (String(params[2] ?? 'member') === 'moderator') moderators.add(key);
     return { rows: [{ role: params[2] ?? 'member' }] };
   }
-  if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: [] }] };
+  if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: ['create_channels'] }] };
   throw new Error(`Unexpected channels query: ${sql}`);
 };
 
@@ -180,13 +180,27 @@ test('channel creator can rename the channel', async () => {
   assert.equal((await response.json()).channel.name, 'renamed-channel');
 });
 
-test('only the superadmin can create a channel that is available to all', async () => {
+test('channel moderator cannot rename a channel without manage_channels', async () => {
+  const response = await fetch(`${baseUrl}/api/channels/42/name`, {
+    method: 'PATCH', headers: { ...authHeader(4), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'moderator-rename' }),
+  });
+  assert.equal(response.status, 403);
+});
+
+test('create_channels allows normal channels, while manage_workspace is required for available-to-all', async () => {
   const create = (userId, name) => fetch(`${baseUrl}/api/channels`, {
     method: 'POST',
     headers: { ...authHeader(userId), 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, availableToAll: true }),
   });
   assert.equal((await create(7, 'staff-only')).status, 403);
+  const ordinary = await fetch(`${baseUrl}/api/channels`, {
+    method: 'POST',
+    headers: { ...authHeader(7), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'ordinary-channel', availableToAll: false }),
+  });
+  assert.equal(ordinary.status, 201);
   queryCalls.length = 0;
   const response = await create(99, 'everyone');
   assert.equal(response.status, 201);

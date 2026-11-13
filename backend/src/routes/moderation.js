@@ -51,6 +51,8 @@ router.get('/access', async (req, res) => {
     res.json({
       canManageRoles: await can(query, req.user.userId, 'manage_roles'),
       canManageChannels: await can(query, req.user.userId, 'manage_channels'),
+      canManageWorkspace: await can(query, req.user.userId, 'manage_workspace'),
+      canCreateChannels: await can(query, req.user.userId, 'create_channels'),
       isSuperadmin: Boolean(result.rows[0]?.is_superadmin),
       isHr: Boolean(result.rows[0]?.is_hr),
       accountType: result.rows[0]?.account_type || 'member',
@@ -146,7 +148,9 @@ router.get('/channels/:channelId', async (req, res) => {
   try {
     const channelId = parseId(req.params.channelId);
     if (!channelId) return res.status(400).json({ error: 'A valid channel ID is required' });
-    await ensureChannelModerator(query, req.user.userId, channelId);
+    if (!(await can(query, req.user.userId, 'manage_channels'))) {
+      await ensureChannelModerator(query, req.user.userId, channelId);
+    }
     const [channel, members, timeouts, reports, auditLog] = await Promise.all([
       query('SELECT id, name, slowmode_seconds FROM channels WHERE id = $1', [channelId]),
       query(

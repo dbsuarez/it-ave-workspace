@@ -143,7 +143,7 @@ let state = {
     statusType: '',
   },
   files: [],
-  moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels' },
+  moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, canManageWorkspace: false, canCreateChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels' },
   notes: [],
   lists: [],
   listMembers: [],
@@ -2491,7 +2491,7 @@ function showPane(pane) {
     els.paneTitle.textContent = pane === 'home' ? 'Home' : pane === 'dms' ? 'Direct Messages' : 'Activity';
   }
   const paneAction = document.getElementById('btn-pane-action');
-  if (paneAction) paneAction.style.display = pane === 'home' ? 'flex' : 'none';
+  if (paneAction) paneAction.style.display = pane === 'home' && state.moderation.canCreateChannels ? 'flex' : 'none';
 }
 
 async function setSection(section) {
@@ -2561,27 +2561,39 @@ async function loadModerationAccess() {
     state.moderation.isHr = Boolean(data.isHr);
     state.moderation.canManageRoles = Boolean(data.canManageRoles);
     state.moderation.canManageChannels = Boolean(data.canManageChannels);
+    state.moderation.canManageWorkspace = Boolean(data.canManageWorkspace);
+    state.moderation.canCreateChannels = Boolean(data.canCreateChannels);
     if (typeof refreshLeaveSummary === 'function' && state.moderation.accountType !== 'guest') refreshLeaveSummary();
     if (typeof refreshAttendanceSummary === 'function' && state.moderation.accountType !== 'guest') refreshAttendanceSummary();
     state.moderation.moderatorChannelIds = data.moderatorChannelIds || [];
     state.moderation.accountType = data.accountType || 'member';
     applyAccountRestrictions();
+    applyChannelCreationAccess();
     const nav = document.getElementById('nav-moderation');
-    if (nav) nav.hidden = !state.moderation.isSuperadmin && !state.moderation.canManageRoles && !state.moderation.moderatorChannelIds.length;
+    if (nav) nav.hidden = !state.moderation.canManageChannels && !state.moderation.canManageRoles && !state.moderation.moderatorChannelIds.length;
     updateEditTopicVisibility(state.currentChannelId);
   } catch (err) {
     console.error('Load moderation access error:', err);
   }
 }
 
+function applyChannelCreationAccess() {
+  const allowed = Boolean(state.moderation.canCreateChannels);
+  document.querySelectorAll('[data-command="new-channel"], [data-create="channel"]').forEach((control) => {
+    control.hidden = !allowed;
+  });
+  const paneAction = document.getElementById('btn-pane-action');
+  if (paneAction) paneAction.style.display = state.section === 'home' && allowed ? 'flex' : 'none';
+}
+
 async function loadModerationView() {
   const container = document.getElementById('moderation-content');
   if (!container) return;
-  const channels = state.moderation.isSuperadmin
+  const channels = state.moderation.canManageChannels
     ? state.channels
     : state.channels.filter((channel) => state.moderation.moderatorChannelIds
       .some((id) => Number(id) === Number(channel.id)));
-  if (!channels.length && !state.moderation.canManageRoles && !state.moderation.isSuperadmin) {
+  if (!channels.length && !state.moderation.canManageRoles && !state.moderation.canManageChannels) {
     container.innerHTML = emptyRecordMarkup(
       'No channels to moderate',
       'You do not have moderation access to a channel yet.',
@@ -2684,19 +2696,24 @@ async function loadModerationChannel(channelId) {
         <span class="moderation-member-name">${escapeHtml(member.username)}</span>
         <span class="moderation-member-role">${escapeHtml(member.role)}</span>
         <div class="moderation-row-actions">
-          ${state.moderation.isSuperadmin ? `<select data-member-role="${member.id}" aria-label="Role for ${escapeHtml(member.username)}"><option value="member"${member.role === 'member' ? ' selected' : ''}>Member</option><option value="moderator"${member.role === 'moderator' ? ' selected' : ''}>Moderator</option></select><button class="btn" data-action="save-role" data-member-id="${member.id}">Save role</button><button class="btn" data-action="remove-member" data-member-id="${member.id}">Remove access</button>` : ''}
+          ${state.moderation.canManageChannels ? `<select data-member-role="${member.id}" aria-label="Role for ${escapeHtml(member.username)}"><option value="member"${member.role === 'member' ? ' selected' : ''}>Member</option><option value="moderator"${member.role === 'moderator' ? ' selected' : ''}>Moderator</option></select><button class="btn" data-action="save-role" data-member-id="${member.id}">Save role</button><button class="btn" data-action="remove-member" data-member-id="${member.id}">Remove access</button>` : ''}
           <button class="btn" data-action="timeout" data-member-id="${member.id}">Timeout</button>
         </div>
       </div>`).join('');
     const memberIds = new Set(members.map((member) => Number(member.id)));
     const addableUsers = state.users.filter((user) => !memberIds.has(Number(user.id)));
+    const selectedChannel = state.channels.find((channel) => Number(channel.id) === Number(channelId));
+    const ownerName = selectedChannel
+      ? ([selectedChannel.creatorFirstName, selectedChannel.creatorMiddleName, selectedChannel.creatorLastName].filter(Boolean).join(' ') || selectedChannel.creatorUsername || 'Unknown owner')
+      : 'Unknown owner';
     dataContainer.innerHTML = `
+      ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card moderation-channel-owner"><h2>Channel ownership</h2><div class="moderation-owner-row"><button type="button" class="avatar-mini" data-user-id="${selectedChannel.createdBy}" data-moderation-owner style="background:${escapeHtml(selectedChannel.creatorAvatarColor || '#64748b')}" title="${escapeHtml(ownerName)}" aria-label="Open ${escapeHtml(ownerName)}'s menu">${escapeHtml(ownerName.charAt(0).toUpperCase())}</button><span><strong>${escapeHtml(ownerName)}</strong><small>Owner of #${escapeHtml(selectedChannel.name)}</small></span></div></div>` : ''}
       <div class="moderation-card">
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
       </div>
       <div id="moderation-channel-permissions"></div>
-      ${state.moderation.isSuperadmin ? `
+      ${state.moderation.canManageChannels ? `
         <form class="moderation-card moderation-inline" data-moderation-form="add-member">
           <h2>Add channel access</h2>
           <select name="userId" required aria-label="Choose a user">${addableUsers.length
@@ -2716,6 +2733,10 @@ async function loadModerationChannel(channelId) {
       <div class="moderation-card"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
         <div class="moderation-row"><span>${escapeHtml(entry.actorUsername || 'former user')} · ${escapeHtml(entry.action)}${entry.targetUsername ? ` · ${escapeHtml(entry.targetUsername)}` : ''} ${entry.details ? ` ${escapeHtml(JSON.stringify(entry.details))}` : ''}</span><time>${escapeHtml(new Date(entry.createdAt).toLocaleString())}</time></div>
       `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
+    const ownerAvatar = dataContainer.querySelector('[data-moderation-owner]');
+    if (ownerAvatar && typeof paintAvatar === 'function') {
+      paintAvatar(ownerAvatar, { id: selectedChannel.createdBy, photoVersion: selectedChannel.creatorPhotoVersion }, ownerName.charAt(0).toUpperCase());
+    }
     loadChannelPermissionsCard(channelId);
     await loadChannelWebhooks(channelId);
   } catch (err) {
@@ -2726,7 +2747,7 @@ async function loadModerationChannel(channelId) {
 
 // The Superadmin, or the person who created the channel, may delete it.
 function canDeleteChannel(channelId) {
-  if (state.moderation.isSuperadmin) return true;
+  if (state.moderation.canManageChannels) return true;
   const channel = state.channels.find((c) => Number(c.id) === Number(channelId));
   return Boolean(channel && state.user && Number(channel.createdBy) === Number(state.user.id));
 }
@@ -4720,7 +4741,11 @@ function renderMarkdown(markdown) {
 // Channel Creation Modal
 // ============================================================
 function openCreateChannelModal() {
-  document.getElementById('new-channel-available-row').hidden = !(state.user && state.user.isSuperadmin);
+  if (!state.moderation.canCreateChannels) {
+    showToast('You do not have permission to create channels.', 'error');
+    return;
+  }
+  document.getElementById('new-channel-available-row').hidden = !state.moderation.canManageWorkspace;
   document.getElementById('new-channel-available-all').checked = false;
   document.getElementById('modal-create-channel').classList.add('open');
   document.getElementById('modal-overlay').classList.add('open');
@@ -4734,7 +4759,7 @@ function closeModalCreateChannel() {
 async function saveCreateChannel() {
   const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const topic = document.getElementById('new-channel-topic').value.trim();
-  const availableToAll = Boolean(state.user && state.user.isSuperadmin && document.getElementById('new-channel-available-all').checked);
+  const availableToAll = Boolean(state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
 
   if (!name) return;
 

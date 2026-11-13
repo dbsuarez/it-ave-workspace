@@ -237,7 +237,7 @@
         <div class="pane-scroll">
           <div id="pane-home">
             <h4 class="nav-label nav-label-action">Channels
-              <button class="nav-label-btn nav-label-btn-text" id="btn-organize-sidebar" type="button" title="Create, rename, and organize channels" aria-label="Open channel organizer">Channel organizer</button>
+              <button class="nav-label-btn nav-label-btn-text" id="btn-organize-sidebar" type="button" title="Organize channels" aria-label="Open channel organizer">Organize</button>
             </h4>
             <div id="channel-list"></div>
           </div>
@@ -772,12 +772,10 @@
       <form id="sidebar-form">
         <div class="modal-body sidebar-modal-body">
           <div class="sidebar-organizer-tabs" role="tablist" aria-label="Channel organizer views">
-            <button type="button" class="sidebar-organizer-tab active" role="tab" data-sidebar-tab="workspace" aria-selected="true">Workspace</button>
-            <button type="button" class="sidebar-organizer-tab" role="tab" data-sidebar-tab="mine" aria-selected="false">My sections</button>
-            <button type="button" class="sidebar-organizer-tab" role="tab" data-sidebar-tab="unassigned" aria-selected="false">Unassigned</button>
-            <button type="button" class="sidebar-organizer-tab" role="tab" data-sidebar-tab="others" aria-selected="false">Personal (Others)</button>
+            <button type="button" class="sidebar-organizer-tab active" role="tab" data-sidebar-tab="mine" aria-selected="true">My sidebar</button>
+            <button type="button" class="sidebar-organizer-tab" role="tab" data-sidebar-tab="workspace" aria-selected="false">Workspace layout</button>
           </div>
-          <section class="sidebar-organizer-panel" data-sidebar-panel="workspace">
+          <section class="sidebar-organizer-panel" data-sidebar-panel="workspace" hidden>
             <div id="workspace-sidebar-editor">
               <div class="sidebar-section-title-row"><h4 class="modal-section-title">Workspace sections</h4><button class="btn" type="button" id="btn-add-workspace-sidebar-section">+ Add workspace section</button></div>
               <p class="form-note" id="workspace-sidebar-readonly-note" hidden>You can view workspace sections, but only people with Manage workspace permission can add, rename, reorder, or delete them.</p>
@@ -785,19 +783,12 @@
               <div id="workspace-sidebar-sections"></div>
             </div>
           </section>
-          <section class="sidebar-organizer-panel" data-sidebar-panel="mine" hidden>
+          <section class="sidebar-organizer-panel" data-sidebar-panel="mine">
             <div class="sidebar-section-title-row"><h4 class="modal-section-title">My sections</h4><button class="btn" type="button" id="btn-add-sidebar-section">+ Add section</button></div>
             <div id="sidebar-sections"></div>
-          </section>
-          <section class="sidebar-organizer-panel" data-sidebar-panel="unassigned" hidden>
             <h4 class="modal-section-title">Unassigned channels</h4>
             <div id="sidebar-channels"></div>
-            <p class="form-note">Drop a channel here to remove it from a section. Workspace changes are shared; personal sections remain yours.</p>
-          </section>
-          <section class="sidebar-organizer-panel" data-sidebar-panel="others" hidden>
-            <h4 class="modal-section-title">Personal (Others)</h4>
-            <p class="form-note">Read-only channels created by other people. Select an owner avatar to open their menu.</p>
-            <div id="sidebar-other-channels"></div>
+            <p class="form-note">Drag unassigned channels into one of your sections. These choices affect only your sidebar.</p>
           </section>
         </div>
         <div class="modal-footer">

@@ -838,6 +838,22 @@ body.iav-dev .demo-banner {
   margin: 0;
   font-size: 15px;
 }
+.moderation-owner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.moderation-owner-row .avatar-mini {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+}
+.moderation-owner-row span { display: grid; gap: 2px; }
+.moderation-owner-row small { color: var(--text-muted); }
 .moderation-settings,
 .moderation-inline {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

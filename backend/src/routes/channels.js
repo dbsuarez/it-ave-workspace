@@ -177,7 +177,7 @@ router.patch('/:channelId', authenticateToken, async (req, res) => {
   }
 });
 
-// Rename a channel. The creator, a moderator, the Superadmin, or manage_channels may do this.
+// Rename a channel. The creator, an Owner, or manage_channels may do this.
 router.patch('/:channelId/name', authenticateToken, async (req, res) => {
   try {
     const channelId = Number(req.params.channelId);
@@ -187,9 +187,7 @@ router.patch('/:channelId/name', authenticateToken, async (req, res) => {
     }
     const permission = await query(
       `SELECT 1 FROM channels c JOIN users u ON u.id = $2
-       WHERE c.id = $1 AND (u.is_superadmin = TRUE OR c.created_by = u.id OR EXISTS (
-         SELECT 1 FROM channel_members cm WHERE cm.channel_id = c.id AND cm.user_id = u.id AND cm.role = 'moderator'
-       ))`, [channelId, req.user.userId]
+       WHERE c.id = $1 AND (u.is_superadmin = TRUE OR c.created_by = u.id)`, [channelId, req.user.userId]
     );
     if (!permission.rows.length && !(await can(query, req.user.userId, 'manage_channels'))) {
       return res.status(403).json({ error: 'You cannot rename this channel' });
@@ -213,8 +211,9 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
     if (!Number.isInteger(channelId) || typeof availableToAll !== 'boolean') {
       return res.status(400).json({ error: 'A valid channel and availableToAll value are required' });
     }
-    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
-    if (!actor?.is_superadmin) return res.status(403).json({ error: 'Only the Superadmin can change channel availability' });
+    if (!(await can(query, req.user.userId, 'manage_workspace'))) {
+      return res.status(403).json({ error: 'Manage workspace permission is required to change channel availability' });
+    }
     const result = await query(
       `UPDATE channels SET available_to_all = $1 WHERE id = $2
        RETURNING id, available_to_all`,
@@ -242,10 +241,12 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, topic, isPrivate, availableToAll } = req.body;
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
+    if (!(await can(query, req.user.userId, 'create_channels'))) {
+      return res.status(403).json({ error: 'Create channels permission is required' });
+    }
 
-    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
-    if (availableToAll && !actor?.is_superadmin) {
-      return res.status(403).json({ error: 'Only the Superadmin can make a channel available to all' });
+    if (availableToAll && !(await can(query, req.user.userId, 'manage_workspace'))) {
+      return res.status(403).json({ error: 'Manage workspace permission is required to make a channel available to all' });
     }
     if (availableToAll && isPrivate) {
       return res.status(400).json({ error: 'A private channel cannot be available to all' });
