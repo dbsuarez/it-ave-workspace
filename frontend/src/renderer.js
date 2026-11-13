@@ -173,6 +173,7 @@ const els = {
   channelList: document.getElementById('channel-list'),
   dmList: document.getElementById('dm-list'),
   channelTitle: document.getElementById('channel-title'),
+  channelSettingsBtn: document.getElementById('btn-channel-settings'),
   channelTopic: document.getElementById('channel-topic'),
   editTopicBtn: document.getElementById('btn-edit-topic'),
   channelTopicForm: document.getElementById('channel-topic-form'),
@@ -561,6 +562,7 @@ function setupEventListeners() {
   on('moderation-content', 'change', handleModerationChange);
   on('moderation-content', 'input', handleModerationFilter);
   on('btn-channel-pins', 'click', togglePinnedMessages);
+  on('btn-channel-settings', 'click', openCurrentChannelSettings);
   on('btn-close-channel-pins', 'click', closePinnedMessages);
   on('channel-pins-list', 'click', handlePinnedMessageClick);
   on('btn-edit-topic', 'click', startEditChannelTopic);
@@ -1434,6 +1436,7 @@ async function openChannel(channelId) {
     els.channelTopic.textContent = ch.topic || '';
   }
   updateEditTopicVisibility(channelId);
+  updateChannelSettingsVisibility(channelId);
 
   resetChannelTab();
 
@@ -2572,6 +2575,7 @@ async function loadModerationAccess() {
     const nav = document.getElementById('nav-moderation');
     if (nav) nav.hidden = !state.moderation.canManageChannels && !state.moderation.canManageRoles && !state.moderation.moderatorChannelIds.length;
     updateEditTopicVisibility(state.currentChannelId);
+    updateChannelSettingsVisibility(state.currentChannelId);
   } catch (err) {
     console.error('Load moderation access error:', err);
   }
@@ -4092,6 +4096,20 @@ function canEditChannelTopic(channelId) {
 function updateEditTopicVisibility(channelId) {
   if (!els.editTopicBtn) return;
   els.editTopicBtn.hidden = !canEditChannelTopic(channelId);
+}
+
+function updateChannelSettingsVisibility(channelId) {
+  if (!els.channelSettingsBtn) return;
+  els.channelSettingsBtn.hidden = !(state.moderation.canManageChannels || canModerateChannel(channelId));
+}
+
+async function openCurrentChannelSettings() {
+  const channel = state.channels.find((item) => Number(item.id) === Number(state.currentChannelId));
+  if (!channel || !(state.moderation.canManageChannels || canModerateChannel(channel.id))) return;
+  state.moderation.channel = channel;
+  state.moderation.tab = 'channels';
+  state.moderation.channelSettingsTab = 'overview';
+  await setSection('moderation');
 }
 
 function startEditChannelTopic() {
