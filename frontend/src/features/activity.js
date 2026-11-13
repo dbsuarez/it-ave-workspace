@@ -9,7 +9,7 @@
 function knownUsernames() {
   const names = (state.users || []).map((user) => user.username);
   if (state.user?.username) names.push(state.user.username);
-  names.push(...userGroupHandles());
+  names.push(...groupHandles());
   return names;
 }
 

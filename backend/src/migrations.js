@@ -769,4 +769,19 @@ $$`,
   `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('Owner', '#B45309', 0, ARRAY['view_channel','send_messages','attach_files','add_reactions','mention_everyone','create_channels','manage_channels','manage_messages','timeout_members','manage_roles','manage_people','view_audit_log','manage_workspace'], 'owner') ON CONFLICT (builtin_key) DO NOTHING`,
   `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('HR', '#0F766E', 10, ARRAY['manage_people'], 'hr') ON CONFLICT (builtin_key) DO NOTHING`,
   `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('Everyone', '#6B7280', 1000, ARRAY['view_channel','send_messages','attach_files','add_reactions','create_channels'], 'everyone') ON CONFLICT (builtin_key) DO NOTHING`,
+  // Merge user_groups into roles (each group becomes a zero-permission role; membership is copied, tables dropped).
+  `INSERT INTO roles (name, color, position, permissions, created_by)
+   SELECT COALESCE(NULLIF(TRIM(g.name), ''), g.handle),
+     '#1264A3', 100, '{}', MIN(g.created_by)
+   FROM user_groups g
+   GROUP BY LOWER(COALESCE(NULLIF(TRIM(g.name), ''), g.handle)), COALESCE(NULLIF(TRIM(g.name), ''), g.handle)
+   ON CONFLICT DO NOTHING`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_by)
+   SELECT DISTINCT ugm.user_id, r.id, g.created_by
+   FROM user_group_members ugm
+   JOIN user_groups g ON g.id = ugm.group_id
+   JOIN roles r ON lower(r.name) = lower(COALESCE(NULLIF(TRIM(g.name), ''), g.handle))
+   ON CONFLICT DO NOTHING`,
+  `DROP TABLE IF EXISTS user_group_members`,
+  `DROP TABLE IF EXISTS user_groups`,
 ];

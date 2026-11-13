@@ -57,17 +57,21 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
       findMentionedUsers(messageData.content, members.rows)
         .forEach((user) => mentionedById.set(Number(user.id), user));
 
-      const groups = await query('SELECT id, handle AS username FROM user_groups');
-      const mentionedGroups = findMentionedUsers(messageData.content, groups.rows);
-      if (mentionedGroups.length) {
-        const groupMembers = await query(
-          `SELECT DISTINCT ugm.user_id AS id
-           FROM user_group_members ugm
-           JOIN channel_members cm ON cm.user_id = ugm.user_id AND cm.channel_id = $2
-           WHERE ugm.group_id = ANY($1::int[])`,
-          [mentionedGroups.map((group) => group.id), messageData.channelId]
+      const departments = await query('SELECT id, name FROM departments');
+      const departmentCandidates = departments.rows.map((dept) => ({
+        id: dept.id,
+        username: roleHandle(dept.name),
+      }));
+      const mentionedDepartments = findMentionedUsers(messageData.content, departmentCandidates);
+      if (mentionedDepartments.length) {
+        const departmentMembers = await query(
+          `SELECT DISTINCT u.id AS id
+           FROM users u
+           JOIN channel_members cm ON cm.user_id = u.id AND cm.channel_id = $2
+           WHERE u.department_id = ANY($1::int[])`,
+          [mentionedDepartments.map((dept) => dept.id), messageData.channelId]
         );
-        groupMembers.rows.forEach((user) => mentionedById.set(Number(user.id), user));
+        departmentMembers.rows.forEach((user) => mentionedById.set(Number(user.id), user));
       }
 
       // @team-lead style mentions of a role reach everyone who holds it (and is in this channel)

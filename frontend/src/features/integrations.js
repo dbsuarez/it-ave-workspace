@@ -1,33 +1,41 @@
-// IT Avenue Workspace - user groups (@group mentions) and incoming webhooks.
+// IT Avenue Workspace - @mentionable departments and roles, plus incoming webhooks.
 //
 // Loaded before renderer.js; defines functions only.
 
+function roleHandle(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 // ============================================================
-// User groups
+// Departments (@department mention)
 // ============================================================
-async function loadUserGroups() {
+async function loadDepartments() {
   try {
-    const res = await api('/api/user-groups');
+    const res = await api('/api/hr/departments');
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not load user groups');
-    state.userGroups = data.groups || [];
+    if (!res.ok) throw new Error(data.error || 'Could not load departments');
+    state.departments = data.departments || [];
   } catch (err) {
-    console.error('Load user groups error:', err);
-    state.userGroups = state.userGroups || [];
+    console.error('Load departments error:', err);
+    state.departments = state.departments || [];
   }
 }
 
-function userGroupHandles() {
-  return [...(state.userGroups || []).map((group) => group.handle), ...(state.roleMentions || []).map((role) => role.handle)];
+function departmentHandles() {
+  return (state.departments || []).map((department) => roleHandle(department.name));
+}
+
+function groupHandles() {
+  return [...departmentHandles(), ...(state.roleMentions || []).map((role) => role.handle)];
 }
 
 // Entries for the @ picker, shaped like channel members.
 function groupMentionCandidates() {
-  const groups = (state.userGroups || []).map((group) => ({
-    id: `group-${group.id}`,
-    username: group.handle,
-    avatarColor: '#1264A3',
-    role: `group · ${group.members.length}`,
+  const departments = (state.departments || []).map((department) => ({
+    id: `department-${department.id}`,
+    username: roleHandle(department.name),
+    avatarColor: '#0F766E',
+    role: `department · ${department.memberCount}${department.headUsername ? ` · headed by ${department.headUsername}` : ''}`,
     isGroup: true,
   }));
   const roles = (state.roleMentions || []).map((role) => ({
@@ -37,7 +45,7 @@ function groupMentionCandidates() {
     role: `role · ${role.memberCount}`,
     isGroup: true,
   }));
-  return [...groups, ...roles];
+  return [...departments, ...roles];
 }
 
 // The roles anyone can @mention, loaded at start and whenever roles change.
@@ -48,99 +56,6 @@ async function loadRoleMentions() {
     if (res.ok) state.roleMentions = data.roles || [];
   } catch (err) {
     console.error('Load role mentions error:', err);
-  }
-}
-
-async function handleUserGroupsUpdated() {
-  await loadUserGroups();
-  if (state.view === 'channel' && state.currentChannelId) {
-    const container = document.getElementById('messages');
-    const scrollTop = container.scrollTop;
-    renderMessages('messages', state.messages[state.currentChannelId] || []);
-    container.scrollTop = scrollTop;
-  }
-  if (document.getElementById('admin-user-groups')) renderUserGroupsAdmin();
-}
-
-function userGroupsAdminHtml() {
-  return '<div class="moderation-card" id="admin-user-groups" data-mod-tab="people"></div>';
-}
-
-function renderUserGroupsAdmin() {
-  const card = document.getElementById('admin-user-groups');
-  if (!card) return;
-  const people = (adminState().users || []).filter((user) => user.accountType !== 'bot');
-  const rows = (state.userGroups || []).map((group) => {
-    const memberIds = new Set(group.members.map((member) => Number(member.id)));
-    const addable = people.filter((user) => !memberIds.has(Number(user.id)));
-    return `
-      <div class="user-group-row" data-user-group="${group.id}">
-        <div class="moderation-row">
-          <span><strong>@${escapeHtml(group.handle)}</strong>${group.name !== group.handle ? ` · ${escapeHtml(group.name)}` : ''}</span>
-          <div class="moderation-row-actions">
-            <select data-group-add-user aria-label="Add someone to @${escapeHtml(group.handle)}"${addable.length ? '' : ' disabled'}>
-              ${addable.length ? addable.map((user) => `<option value="${user.id}">${escapeHtml(user.username)}</option>`).join('') : '<option value="">Everyone is in this group</option>'}
-            </select>
-            <button class="btn" type="button" data-group-action="add-member"${addable.length ? '' : ' disabled'}>Add</button>
-            <button class="btn" type="button" data-group-action="delete-group">Delete group</button>
-          </div>
-        </div>
-        <div class="user-group-members">
-          ${group.members.length
-    ? group.members.map((member) => `<span class="user-group-chip">${escapeHtml(member.username)}<button type="button" data-group-action="remove-member" data-user-id="${member.id}" aria-label="Remove ${escapeHtml(member.username)}">×</button></span>`).join('')
-    : '<span class="form-note">No members yet.</span>'}
-        </div>
-      </div>`;
-  }).join('');
-  card.innerHTML = `
-    <h2>User groups</h2>
-    <p class="form-note">Mention a group with @handle to notify everyone in it who is in that channel.</p>
-    <form class="moderation-inline" data-group-form="create">
-      <label>Handle<input name="handle" type="text" maxlength="31" placeholder="e.g. support" required></label>
-      <label>Name (optional)<input name="name" type="text" maxlength="80" placeholder="e.g. Customer support"></label>
-      <button class="btn primary" type="submit">Create group</button>
-    </form>
-    <div class="moderation-list">${rows || '<p>No groups yet.</p>'}</div>`;
-}
-
-async function handleUserGroupClick(event) {
-  const button = event.target.closest('[data-group-action]');
-  if (!button) return;
-  const row = button.closest('[data-user-group]');
-  const groupId = row?.dataset.userGroup;
-  const action = button.dataset.groupAction;
-  try {
-    if (action === 'add-member') {
-      const userId = row.querySelector('[data-group-add-user]').value;
-      if (!userId) return;
-      await adminApi(`/api/user-groups/${groupId}/members/${userId}`, 'PUT');
-    } else if (action === 'remove-member') {
-      await adminApi(`/api/user-groups/${groupId}/members/${button.dataset.userId}`, 'DELETE');
-    } else if (action === 'delete-group') {
-      if (!confirm('Delete this group? Its handle will stop notifying people.')) return;
-      await adminApi(`/api/user-groups/${groupId}`, 'DELETE');
-    }
-    await loadUserGroups();
-    renderUserGroupsAdmin();
-  } catch (err) {
-    showToast(err.message || 'Could not update the group.', 'error');
-  }
-}
-
-async function handleUserGroupSubmit(event) {
-  const form = event.target.closest('[data-group-form="create"]');
-  if (!form) return;
-  event.preventDefault();
-  try {
-    await adminApi('/api/user-groups', 'POST', {
-      handle: form.elements.handle.value.trim().toLowerCase(),
-      name: form.elements.name.value,
-    });
-    await loadUserGroups();
-    renderUserGroupsAdmin();
-    showToast('Group created.', 'success');
-  } catch (err) {
-    showToast(err.message || 'Could not create the group.', 'error');
   }
 }
 
@@ -217,8 +132,6 @@ async function handleWebhookSubmit(event) {
 
 function setupIntegrationFeatures() {
   const host = document.getElementById('moderation-content');
-  host?.addEventListener('click', handleUserGroupClick);
-  host?.addEventListener('submit', handleUserGroupSubmit);
   host?.addEventListener('click', handleWebhookClick);
   host?.addEventListener('submit', handleWebhookSubmit);
 }

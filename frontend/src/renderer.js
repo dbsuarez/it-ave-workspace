@@ -280,7 +280,7 @@ async function init() {
       loadChannels();
       loadUsers();
       loadModerationAccess();
-      loadUserGroups();
+      loadDepartments();
       loadRoleMentions();
       // their private screens too: real while Pre-launch (testing), made-up samples once Live; read-only either way
       loadActivity();
@@ -300,7 +300,7 @@ async function init() {
     loadSaved();
     loadReminders();
     loadSidebarLayout();
-    loadUserGroups();
+    loadDepartments();
     loadRoleMentions();
     // Presence keepalive / refresh: mark self online and re-render dot colors
     startPresenceLoop();
@@ -997,6 +997,7 @@ function connectSocket() {
       await loadModerationAccess();
       loadUsers();
       loadRoleMentions();
+      loadDepartments();
       if (typeof refreshOwnProfile === 'function') refreshOwnProfile();
       if (state.currentChannelId && !state.channels.some((c) => Number(c.id) === Number(state.currentChannelId))) {
         state.currentChannelId = null;
@@ -1111,7 +1112,6 @@ function connectSocket() {
 
   state.socket.on('activity', handleActivityEvent);
   state.socket.on('canvas_activity', handleCanvasActivityEvent);
-  state.socket.on('user_groups_updated', handleUserGroupsUpdated);
   state.socket.on('scheduled_message_sent', handleScheduledDelivered);
   state.socket.on('scheduled_message_failed', handleScheduledFailed);
   state.socket.on('channel_links_updated', handleChannelLinksUpdated);

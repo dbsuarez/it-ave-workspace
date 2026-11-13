@@ -272,13 +272,10 @@ function renderWorkspaceAdmin() {
         ${channelContext ? '<button class="btn" type="button" data-action="close-channel-people">Show all workspace members</button>' : ''}</div>
       <input class="workspace-member-search" type="search" placeholder="Search workspace members..." aria-label="Search workspace members" data-workspace-member-search>
       <div class="moderation-list" data-workspace-member-list>${userRows}</div>
-    </div>
-    ${userGroupsAdminHtml()}`;
-  renderUserGroupsAdmin();
+    </div>`;
   const panelKeys = {
     'admin-create-accounts': 'accounts',
     'admin-workspace-members': 'members',
-    'admin-user-groups': 'groups',
     'admin-prelaunch-access': 'prelaunch',
     'admin-registration': 'registration',
     'admin-invite-form': 'invite',

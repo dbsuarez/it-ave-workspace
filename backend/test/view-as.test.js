@@ -19,7 +19,8 @@ test('in testing mode every GET is allowed except signing in elsewhere and start
 
 test('View as may read channels, channel messages, people and lists, and nothing that writes or is private', () => {
   for (const path of ['/api/auth/me', '/api/channels', '/api/channels/my', '/api/channels/4/members', '/api/messages/4', '/api/messages/4?limit=50',
-    '/api/messages/4/pins', '/api/messages/4/threads/9', '/api/people', '/api/people/3', '/api/users', '/api/user-groups',
+    '/api/messages/4/pins', '/api/messages/4/threads/9', '/api/people', '/api/people/3', '/api/users',
+    '/api/hr/departments',
     '/api/roles/mentionable', '/api/moderation/access', '/api/canvas/channel/4', '/api/lists', '/api/lists/2', '/api/settings', '/api/settings/sidebar']) {
     assert.equal(viewAsRefusal('GET', path), null, path);
   }

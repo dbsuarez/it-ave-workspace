@@ -20,7 +20,7 @@ const VIEW_AS_ALLOWED = [
   /^\/api\/messages\/\d+\/(context|threads)\/\d+$/,
   /^\/api\/users$/,
   /^\/api\/people(\/\d+)?$/,
-  /^\/api\/user-groups$/,
+  /^\/api\/hr\/departments$/,
   /^\/api\/roles\/mentionable$/,
   /^\/api\/moderation\/access$/,
   /^\/api\/canvas\/channel\/\d+$/,
