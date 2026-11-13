@@ -256,6 +256,7 @@ function openSidebarModal() {
   state.sidebarChannelNameDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, channel.name]));
   state.sidebarOrganizerFilter = state.sidebarOrganizerFilter || 'all';
   state.sidebarOrganizerQuery = '';
+  state.sidebarOrganizerShowAssigned = false;
   renderSidebarModal();
   openSettingsModal(document.getElementById('modal-sidebar'));
 }
@@ -266,6 +267,7 @@ function renderSidebarModal() {
   const canManageWorkspace = Boolean(draft.canManageWorkspaceSections);
   const channelById = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
   const workspaceChannelIds = new Set(workspaceDraft.sections.flatMap((section) => section.channelIds.map(Number)));
+  const assignedChannelIds = new Set([...workspaceDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
   const canSeeOtherPersonal = Boolean(state.user?.isSuperadmin || state.moderation?.canManageChannels);
   const canRenameChannel = (channel, readOnly) => !readOnly && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
@@ -350,12 +352,14 @@ function renderSidebarModal() {
       || (filter === 'workspace' && (workspaceChannelIds.has(Number(channel.id)) || Boolean(channel.availableToAll)))
       || (filter === 'mine' && Number(channel.createdBy) === Number(state.user?.id))
       || (filter === 'others' && otherPersonal);
-    return matchesFilter && (!query || [channel.name, creatorName(channel)].some((value) => String(value).toLowerCase().includes(query)));
+    const matchesAssignment = state.sidebarOrganizerShowAssigned || !assignedChannelIds.has(Number(channel.id));
+    return matchesAssignment && matchesFilter && (!query || [channel.name, creatorName(channel)].some((value) => String(value).toLowerCase().includes(query)));
   });
   const filterControl = document.getElementById('sidebar-channel-filter');
   filterControl.value = filter;
   filterControl.querySelector('option[value="others"]').hidden = !canSeeOtherPersonal;
   document.getElementById('sidebar-channel-search').value = state.sidebarOrganizerQuery || '';
+  document.getElementById('sidebar-show-assigned').checked = Boolean(state.sidebarOrganizerShowAssigned);
   document.getElementById('sidebar-channels').innerHTML = `
     <div class="sidebar-unassigned-dropzone" data-drop-unassigned>
       ${poolChannels.map((channel) => channelCard(channel, canManageWorkspace || !workspaceChannelIds.has(Number(channel.id)), filter === 'others' && Number(channel.createdBy) !== Number(state.user?.id))).join('') || '<p class="sidebar-drop-hint">No channels match this search.</p>'}
@@ -512,6 +516,12 @@ function handleSidebarModalClick(event) {
 }
 
 function handleSidebarModalChange(event) {
+  if (event.target.id === 'sidebar-show-assigned') {
+    syncSidebarDraft();
+    state.sidebarOrganizerShowAssigned = event.target.checked;
+    renderSidebarModal();
+    return;
+  }
   if (event.target.id === 'sidebar-channel-filter') {
     syncSidebarDraft();
     state.sidebarOrganizerFilter = event.target.value;

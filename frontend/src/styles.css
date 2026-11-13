@@ -4353,10 +4353,12 @@ body.account-guest [data-create="channel"] {
 
 .sidebar-channel-pool-heading .modal-section-title { margin: 0; }
 .sidebar-channel-pool-heading .form-note { margin: 3px 0 0; }
-.sidebar-channel-pool-tools { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 8px; margin: 12px 0; }
-.sidebar-channel-pool-tools input,
+.sidebar-channel-pool-tools { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; align-items: center; gap: 8px; margin: 12px 0; }
+.sidebar-channel-pool-tools > input[type="search"],
 .sidebar-channel-pool-tools select,
 .sidebar-channel-move { min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); }
+.sidebar-show-assigned { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.sidebar-show-assigned input { margin: 0; padding: 0; }
 
 #modal-sidebar .modal-section-title {
   margin: 20px 0 6px;
