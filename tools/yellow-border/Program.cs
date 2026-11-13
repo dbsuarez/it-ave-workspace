@@ -81,15 +81,11 @@ internal sealed class BorderContext : ApplicationContext
 
         foreach (var screen in Screen.AllScreens)
         {
-            var area = screen.Bounds;
-            borders.Add(CreateStrip(new Rectangle(area.Left, area.Top, area.Width, Thickness)));
-            borders.Add(CreateStrip(new Rectangle(area.Left, area.Bottom - Thickness, area.Width, Thickness)));
-            borders.Add(CreateStrip(new Rectangle(area.Left, area.Top, Thickness, area.Height)));
-            borders.Add(CreateStrip(new Rectangle(area.Right - Thickness, area.Top, Thickness, area.Height)));
+            borders.Add(CreateBorder(screen.Bounds));
         }
     }
 
-    private Form CreateStrip(Rectangle bounds)
+    private Form CreateBorder(Rectangle bounds)
     {
         var form = new ClickThroughForm
         {
@@ -100,6 +96,13 @@ internal sealed class BorderContext : ApplicationContext
             StartPosition = FormStartPosition.Manual,
             TopMost = true,
         };
+        var edge = new Region(new Rectangle(0, 0, bounds.Width, bounds.Height));
+        edge.Exclude(new Rectangle(
+            Thickness,
+            Thickness,
+            Math.Max(0, bounds.Width - (Thickness * 2)),
+            Math.Max(0, bounds.Height - (Thickness * 2))));
+        form.Region = edge;
         form.Show();
         return form;
     }
