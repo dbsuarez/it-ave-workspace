@@ -3,6 +3,7 @@ const path = require('path');
 const { pool } = require('./db');
 const config = require('./config');
 const recovery = require('./backupRecovery');
+const { ensureDefaultChannels } = require('./defaultChannels');
 
 let resetting = false;
 
@@ -56,6 +57,7 @@ async function resetWorkspace(actorId) {
     try {
       await client.query('BEGIN');
       await clearDatabase(client);
+      await ensureDefaultChannels(client);
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});

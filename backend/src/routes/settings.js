@@ -2,6 +2,7 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { can, requirePermission } = require('../permissions');
+const { DEFAULT_CHANNELS, withDefaultSection } = require('../defaultChannels');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -296,7 +297,12 @@ router.put('/sidebar', async (req, res) => {
 router.put('/sidebar/workspace', async (req, res) => {
   try {
     await requirePermission(query, req.user.userId, 'manage_workspace');
-    const layout = normalizeWorkspaceSidebarLayout(req.body?.layout);
+    let layout = normalizeWorkspaceSidebarLayout(req.body?.layout);
+    const defaultRows = (await query(
+      'SELECT id FROM channels WHERE name = ANY($1::text[]) ORDER BY array_position($1::text[], name)',
+      [DEFAULT_CHANNELS.map(([name]) => name)]
+    )).rows;
+    layout = withDefaultSection(layout, defaultRows.map((row) => row.id));
     const ids = layout.sections.flatMap((section) => section.channelIds);
     if (ids.length) {
       const personal = await query('SELECT 1 FROM channels WHERE id = ANY($1::int[]) AND (is_personal = TRUE OR team_section_id IS NOT NULL) LIMIT 1', [ids]);

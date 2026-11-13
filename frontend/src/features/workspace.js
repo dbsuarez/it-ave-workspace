@@ -254,6 +254,8 @@ async function toggleSidebarSection(sectionId) {
 }
 
 // ---- Organize dialog ----
+const BUILT_IN_CHANNEL_NAMES = new Set(['welcome', 'announcements', 'general']);
+
 function openSidebarModal() {
   state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
   state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
@@ -274,12 +276,14 @@ function renderSidebarModal() {
   const canManageWorkspace = Boolean(draft.canManageWorkspaceSections);
   const channelById = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
   const workspaceChannelIds = new Set(workspaceDraft.sections.flatMap((section) => section.channelIds.map(Number)));
+  const builtInWorkspaceChannelIds = new Set(workspaceDraft.sections.filter((section) => section.builtIn)
+    .flatMap((section) => section.channelIds.map(Number)));
   const teamChannelIds = new Set(teamDraft.sections.flatMap((section) => section.channelIds.map(Number)));
   const assignedChannelIds = new Set([...workspaceDraft.sections, ...teamDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
-  const canRenameChannel = (channel, readOnly) => !readOnly && Boolean(state.user?.isSuperadmin
+  const canRenameChannel = (channel, readOnly) => !readOnly && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
-  const canDeleteOrganizerChannel = (channel, readOnly) => !readOnly && Boolean(state.user?.isSuperadmin
+  const canDeleteOrganizerChannel = (channel, readOnly) => !readOnly && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
   const creatorName = (channel) => [channel.creatorFirstName, channel.creatorMiddleName, channel.creatorLastName]
@@ -292,7 +296,7 @@ function renderSidebarModal() {
   };
   const moveOptions = (channel) => {
     const selected = sectionTarget(channel.id);
-    const workspaceOptions = workspaceDraft.sections.filter((section) => canManageWorkspace || selected === `workspace:${section.id}`)
+    const workspaceOptions = workspaceDraft.sections.filter((section) => !section.builtIn && (canManageWorkspace || selected === `workspace:${section.id}`))
       .map((section) => `<option value="workspace:${escapeHtml(section.id)}"${selected === `workspace:${section.id}` ? ' selected' : ''}>${escapeHtml(section.name)}</option>`).join('');
     const personalOptions = draft.sections.map((section) => `<option value="personal:${escapeHtml(section.id)}"${selected === `personal:${section.id}` ? ' selected' : ''}>${escapeHtml(section.name)}</option>`).join('');
     return `<option value=""${selected ? '' : ' selected'}>Unassigned</option>${workspaceOptions ? `<optgroup label="Workspace sections">${workspaceOptions}</optgroup>` : ''}${personalOptions ? `<optgroup label="Configurable sections">${personalOptions}</optgroup>` : ''}`;
@@ -325,16 +329,16 @@ function renderSidebarModal() {
   document.getElementById('workspace-sidebar-readonly-note').hidden = canManageWorkspace;
   document.getElementById('workspace-sidebar-sections').innerHTML = workspaceDraft.sections.length
     ? workspaceDraft.sections.map((section, index) => `
-      <div class="sidebar-section-card workspace" data-workspace-section-index="${index}">
+      <div class="sidebar-section-card workspace${section.builtIn ? ' locked' : ''}" data-workspace-section-index="${index}">
         <div class="sidebar-section-card-head">
-          <span class="sidebar-drag-handle" ${canManageWorkspace ? 'draggable="true"' : ''} title="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}" aria-label="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}">&#8942;&#8942;</span>
-          ${canManageWorkspace
+          <span class="sidebar-drag-handle" ${canManageWorkspace && !section.builtIn ? 'draggable="true"' : ''} title="${section.builtIn ? 'Built-in section' : canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}" aria-label="${section.builtIn ? 'Built-in section' : canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}">${section.builtIn ? '&#128274;' : '&#8942;&#8942;'}</span>
+          ${canManageWorkspace && !section.builtIn
     ? `<input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-workspace-section-name aria-label="Workspace section name">`
     : `<span class="sidebar-section-name-readonly">${escapeHtml(section.name)}</span>`}
-          ${canManageWorkspace ? `${state.moderation.canCreateChannels ? '<button class="icon-btn sidebar-section-add" type="button" data-add-channel-to-section title="Create a channel in this section" aria-label="Create channel">+</button>' : ''}<button class="btn danger-text" type="button" data-workspace-section-delete>Delete</button>` : '<span class="sidebar-section-badge">Workspace</span>'}
+          ${section.builtIn ? '<span class="sidebar-section-badge">Built-in</span>' : canManageWorkspace ? `${state.moderation.canCreateChannels ? '<button class="icon-btn sidebar-section-add" type="button" data-add-channel-to-section title="Create a channel in this section" aria-label="Create channel">+</button>' : ''}<button class="btn danger-text" type="button" data-workspace-section-delete>Delete</button>` : '<span class="sidebar-section-badge">Workspace</span>'}
         </div>
         <div class="sidebar-section-dropzone" data-drop-scope="workspace" data-drop-section-id="${escapeHtml(section.id)}">
-          ${sectionChannels(section, canManageWorkspace) || '<p class="sidebar-drop-hint">Drop channels here</p>'}
+          ${sectionChannels(section, canManageWorkspace && !section.builtIn) || '<p class="sidebar-drop-hint">Drop channels here</p>'}
         </div>
       </div>`).join('')
     : '<p class="form-note">No workspace sections yet.</p>';
@@ -409,7 +413,8 @@ function renderSidebarModal() {
   document.getElementById('sidebar-show-assigned').checked = Boolean(state.sidebarOrganizerShowAssigned);
   document.getElementById('sidebar-channels').innerHTML = `
     <div class="sidebar-unassigned-dropzone" data-drop-unassigned>
-      ${poolChannels.map((channel) => channelCard(channel, canManageWorkspace || !workspaceChannelIds.has(Number(channel.id)))).join('') || '<p class="sidebar-drop-hint">No channels match this search.</p>'}
+      ${poolChannels.map((channel) => channelCard(channel, !builtInWorkspaceChannelIds.has(Number(channel.id))
+        && (canManageWorkspace || !workspaceChannelIds.has(Number(channel.id))))).join('') || '<p class="sidebar-drop-hint">No channels match this search.</p>'}
     </div>`;
   if (typeof paintAvatarsIn === 'function') paintAvatarsIn(document.getElementById('modal-sidebar'));
 }
@@ -493,11 +498,14 @@ function handleSidebarDrop(event) {
     const kind = card?.hasAttribute('data-workspace-section-index') ? 'workspace'
       : card?.hasAttribute('data-section-index') ? 'personal' : null;
     if (kind !== payload.kind) return;
+    if (kind === 'workspace' && (state.workspaceSidebarDraft.sections[payload.index]?.builtIn
+      || state.workspaceSidebarDraft.sections[Number(card.dataset.workspaceSectionIndex)]?.builtIn)) return;
     const indexKey = kind === 'workspace' ? 'workspaceSectionIndex' : 'sectionIndex';
     moveSidebarDraftItem(kind, payload.index, Number(card.dataset[indexKey]));
   } else if (payload.type === 'channel') {
     const scope = target.dataset.dropScope;
-    if (scope === 'workspace' && !state.sidebarDraft.canManageWorkspaceSections) return;
+    if (scope === 'workspace' && (!state.sidebarDraft.canManageWorkspaceSections
+      || state.workspaceSidebarDraft.sections.find((item) => item.id === target.dataset.dropSectionId)?.builtIn)) return;
     const section = scope === 'workspace'
       ? state.workspaceSidebarDraft.sections.find((item) => item.id === target.dataset.dropSectionId)
       : scope === 'personal'
@@ -593,6 +601,7 @@ async function handleSidebarModalClick(event) {
   }
   const workspaceRow = event.target.closest('[data-workspace-section-index]');
   if (workspaceRow) {
+    if (state.workspaceSidebarDraft.sections[Number(workspaceRow.dataset.workspaceSectionIndex)]?.builtIn) return;
     if (event.target.closest('[data-workspace-section-delete]')) {
       syncSidebarDraft();
       state.workspaceSidebarDraft.sections.splice(Number(workspaceRow.dataset.workspaceSectionIndex), 1);

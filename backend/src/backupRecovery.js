@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { Pool } = require('pg');
 const config = require('./config');
 const migrations = require('./migrations');
+const { ensureDefaultChannels } = require('./defaultChannels');
 const appVersion = require('../package.json').version;
 
 const run = promisify(execFile);
@@ -198,6 +199,7 @@ async function restoreBackup(stamp, query) {
       await fs.promises.cp(path.join(extracted, name), path.join(config.UPLOAD_DIR, name), { recursive: true });
     }
     await applyCurrentMigrations({ query });
+    await ensureDefaultChannels({ query });
     await writeStatus({ state: 'restored', stamp, safetyBackup: safetyBackup.stamp });
     return { restored: true, stamp, safetyBackup: safetyBackup.stamp };
   } catch (err) {

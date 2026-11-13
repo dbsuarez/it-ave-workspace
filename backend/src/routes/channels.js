@@ -5,6 +5,9 @@ const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership } = require('../security');
 const { viewableChannels, can } = require('../permissions');
 const { ensureNotGuest } = require('../guests');
+const { DEFAULT_CHANNELS } = require('../defaultChannels');
+
+const DEFAULT_CHANNEL_NAMES = DEFAULT_CHANNELS.map(([name]) => name);
 
 // Get all channels (with member count)
 router.get('/', authenticateToken, async (req, res) => {
@@ -194,6 +197,8 @@ router.patch('/:channelId/name', authenticateToken, async (req, res) => {
        WHERE c.id = $1 AND (c.created_by = u.id OR (c.is_personal = FALSE AND u.is_superadmin = TRUE))`, [channelId, req.user.userId]
     );
     const personal = await query('SELECT is_personal FROM channels WHERE id = $1', [channelId]);
+    const builtIn = await query('SELECT 1 FROM channels WHERE id = $1 AND name = ANY($2::text[])', [channelId, DEFAULT_CHANNEL_NAMES]);
+    if (builtIn.rows.length) return res.status(409).json({ error: 'Built-in channels cannot be renamed' });
     const canManage = personal.rows[0]?.is_personal
       ? await can(query, req.user.userId, 'manage_personal_channels')
       : await can(query, req.user.userId, 'manage_channels');
@@ -221,6 +226,9 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
     }
     if (!(await can(query, req.user.userId, 'manage_workspace'))) {
       return res.status(403).json({ error: 'Manage workspace permission is required to change channel availability' });
+    }
+    if (!availableToAll && (await query('SELECT 1 FROM channels WHERE id = $1 AND name = ANY($2::text[])', [channelId, DEFAULT_CHANNEL_NAMES])).rows.length) {
+      return res.status(409).json({ error: 'Built-in channels must remain visible to all' });
     }
     const result = await query(
       `UPDATE channels SET available_to_all = $1 WHERE id = $2 AND is_personal = FALSE AND team_section_id IS NULL

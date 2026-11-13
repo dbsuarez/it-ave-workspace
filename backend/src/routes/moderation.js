@@ -8,6 +8,8 @@ const config = require('../config');
 const { ensureChannelMembership, ensureChannelModerator } = require('../security');
 
 const router = express.Router();
+const { DEFAULT_CHANNELS } = require('../defaultChannels');
+const DEFAULT_CHANNEL_NAMES = DEFAULT_CHANNELS.map(([name]) => name);
 router.use(authenticateToken);
 
 function parseId(value) {
@@ -646,6 +648,7 @@ router.delete('/channels/:channelId', async (req, res) => {
     if (!channelId) return res.status(400).json({ error: 'A valid channel ID is required' });
     const channel = (await query('SELECT id, name, created_by, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (DEFAULT_CHANNEL_NAMES.includes(channel.name)) return res.status(409).json({ error: 'Built-in channels cannot be deleted' });
     const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
     const allowed = Number(channel.created_by) === Number(req.user.userId)
       || (channel.is_personal
