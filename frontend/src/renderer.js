@@ -560,6 +560,7 @@ function setupEventListeners() {
   on('messages', 'click', handleReactionClick);
   on('messages', 'click', handleMessagePinClick);
   on('messages', 'click', handleModerationMessageClick);
+  on('messages', 'click', handleChannelIntroClick);
   on('moderation-content', 'click', handleModerationClick);
   on('moderation-content', 'submit', handleModerationSubmit);
   on('moderation-content', 'change', handleModerationChange);
@@ -1840,13 +1841,54 @@ function dateSeparator(message) {
   return sep;
 }
 
+function channelCreatorName(channel) {
+  return [channel?.creatorFirstName, channel?.creatorMiddleName, channel?.creatorLastName]
+    .filter(Boolean).join(' ') || channel?.creatorUsername || (channel?.createdBy ? 'Unknown owner' : 'Built-in');
+}
+
+function channelIntroEl() {
+  const channel = state.channels.find((item) => Number(item.id) === Number(state.currentChannelId));
+  if (!channel) return null;
+  const intro = document.createElement('section');
+  intro.className = 'channel-intro';
+  intro.dataset.channelIntro = String(channel.id);
+  const accessLabel = channel.isPersonal ? 'Personal'
+    : channel.teamSectionId ? 'Team'
+      : channel.isPrivate ? 'Private' : channel.availableToAll ? 'Visible to all' : 'Channel';
+  const canConfigure = state.moderation.canManageChannels || canModerateChannel(channel.id);
+  intro.innerHTML = `
+    <div class="channel-intro-icon" aria-hidden="true"><span>#</span>${channel.isPrivate || channel.isPersonal ? '<span class="channel-intro-lock">&#128274;</span>' : ''}</div>
+    <h2></h2>
+    <p></p>
+    ${canConfigure ? `<div class="channel-intro-actions">
+      ${channel.isPersonal ? '' : '<button class="btn" type="button" data-channel-intro-action="access">Add members or roles</button>'}
+      <button class="btn" type="button" data-channel-intro-action="edit">Edit channel</button>
+    </div>` : ''}
+    <div class="channel-intro-chips"><span class="channel-intro-chip access"></span><span class="channel-intro-chip owner"></span></div>`;
+  intro.querySelector('h2').textContent = `Welcome to #${channel.name}!`;
+  intro.querySelector('p').textContent = channel.topic || `This is the start of the #${channel.name} channel.`;
+  intro.querySelector('.channel-intro-chip.access').textContent = accessLabel;
+  intro.querySelector('.channel-intro-chip.owner').textContent = channelCreatorName(channel);
+  return intro;
+}
+
+function handleChannelIntroClick(event) {
+  const button = event.target.closest('[data-channel-intro-action]');
+  if (!button) return;
+  openChannelSettings(state.currentChannelId, button.dataset.channelIntroAction === 'access' ? 'permissions' : 'overview');
+}
+
 function renderMessages(containerId, messages) {
   const container = document.getElementById(containerId);
   keepBottomWhileLoading(container);
 
   if (!messages || messages.length === 0) {
     container._messageList = null;
-    container.innerHTML = emptyRecordMarkup('No messages yet', 'Send the first message.');
+    if (containerId === 'messages') {
+      container.replaceChildren(channelIntroEl());
+    } else {
+      container.innerHTML = emptyRecordMarkup('No messages yet', 'Send the first message.');
+    }
     return;
   }
 
@@ -1889,6 +1931,7 @@ function renderMessages(containerId, messages) {
   }
 
   container.innerHTML = '';
+  if (containerId === 'messages') container.appendChild(channelIntroEl());
   let lastDate = null;
   messages.forEach((msg, index) => {
     const msgDate = new Date(msg.createdAt).toDateString();
@@ -4421,12 +4464,12 @@ async function openCurrentChannelSettings() {
   await openChannelSettings(state.currentChannelId);
 }
 
-async function openChannelSettings(channelId) {
+async function openChannelSettings(channelId, settingsTab = 'overview') {
   const channel = state.channels.find((item) => Number(item.id) === Number(channelId));
   if (!channel || !(state.moderation.canManageChannels || canModerateChannel(channel.id))) return;
   state.moderation.channel = channel;
   state.moderation.tab = 'channels';
-  state.moderation.channelSettingsTab = 'overview';
+  state.moderation.channelSettingsTab = settingsTab;
   await setSection('moderation');
 }
 

@@ -1305,6 +1305,83 @@ body.iav-dev .demo-banner {
   gap: 14px;
 }
 
+.channel-intro {
+  flex: 0 0 auto;
+  padding: 10px 2px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+.channel-intro-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface-2) 82%, var(--text) 18%);
+  color: var(--text);
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.channel-intro-lock {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.channel-intro h2 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.channel-intro > p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.channel-intro-actions,
+.channel-intro-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.channel-intro-actions + .channel-intro-chips {
+  margin-top: 12px;
+}
+
+.channel-intro-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.channel-intro-chip.access::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .empty-state {
   flex: 1;
   display: flex;
