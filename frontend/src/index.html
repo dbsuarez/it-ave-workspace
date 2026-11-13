@@ -202,6 +202,7 @@
             <button class="menu-item" data-account="status" role="menuitem">Set status</button>
             <button class="menu-item" data-account="profile" role="menuitem">Profile</button>
             <button class="menu-item" data-account="manage-profile" id="user-manage-profile" role="menuitem" hidden>Manage profile</button>
+            <button class="menu-item" data-account="personal-page" id="user-personal-page" role="menuitem" hidden>My personal page</button>
             <button class="menu-item" data-account="preferences" role="menuitem">Preferences</button>
             <button class="menu-item" data-account="account" role="menuitem">Account settings</button>
             <div class="menu-sep"></div>
@@ -217,6 +218,7 @@
         </div>
         <div class="menu-sep"></div>
         <button class="menu-item" data-user-action="profile" role="menuitem" id="user-context-profile">View profile</button>
+        <button class="menu-item" data-user-action="personal-page" role="menuitem" id="user-context-personal-page">Open personal page</button>
         <button class="menu-item" data-user-action="message" role="menuitem" id="user-context-message">Message</button>
         <button class="menu-item" data-user-action="edit" role="menuitem" id="user-context-edit">Edit my profile</button>
         <button class="menu-item" data-user-action="preferences" role="menuitem" id="user-context-preferences">Preferences</button>
@@ -768,16 +770,16 @@
         <div class="modal-body sidebar-modal-body">
           <div id="workspace-sidebar-editor" hidden>
             <h4 class="modal-section-title">Workspace sections</h4>
-            <p class="form-note">Drag sections to reorder them. Drag a channel onto a section to place it there for everyone.</p>
+            <p class="form-note">Drag section headers to reorder. Drag channels directly into a workspace section to place them there for everyone.</p>
             <div id="workspace-sidebar-sections"></div>
             <button class="btn" type="button" id="btn-add-workspace-sidebar-section">Add workspace section</button>
           </div>
           <h4 class="modal-section-title">Your sections</h4>
           <div id="sidebar-sections"></div>
           <button class="btn" type="button" id="btn-add-sidebar-section">Add section</button>
-          <h4 class="modal-section-title">Channels</h4>
+          <h4 class="modal-section-title">Unassigned channels</h4>
           <div id="sidebar-channels"></div>
-          <p class="form-note">Drag channels onto sections, or into this Channels area to remove them from a section. Your sections are personal; workspace sections are locked and shared with everyone.</p>
+          <p class="form-note">Drop a channel here to remove it from a section. Workspace changes are shared; personal sections remain yours.</p>
         </div>
         <div class="modal-footer">
           <button class="btn" type="button" id="btn-cancel-sidebar">Cancel</button>

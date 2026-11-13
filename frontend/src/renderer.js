@@ -211,6 +211,7 @@ const els = {
   userContextName: document.getElementById('user-context-name'),
   userContextStatus: document.getElementById('user-context-status'),
   userContextProfile: document.getElementById('user-context-profile'),
+  userContextPersonalPage: document.getElementById('user-context-personal-page'),
   userContextSep: document.getElementById('user-context-sep'),
   userContextMessage: document.getElementById('user-context-message'),
   userContextEdit: document.getElementById('user-context-edit'),
@@ -418,6 +419,8 @@ function setupEventListeners() {
       const action = item.dataset.userAction;
       if (action === 'profile') {
         showUserProfile(userId);
+      } else if (action === 'personal-page' && typeof openPersonPage === 'function') {
+        openPersonPage(Number(userId));
       } else if (action === 'message') {
         openDM(userId);
       } else if (action === 'edit') {
@@ -3407,6 +3410,7 @@ function openUserContextMenu(anchor, userId, usernameHint) {
   }
   const toggle = (el, show) => { if (el) el.hidden = !show; };
   toggle(els.userContextMessage, !isSelf);
+  toggle(els.userContextPersonalPage, isSelf || user?.accountType === 'member');
   toggle(els.userContextEdit, isSelf);
   toggle(els.userContextPreferences, isSelf);
   toggle(els.userContextSignout, isSelf);
@@ -3620,6 +3624,8 @@ function handleAccountAction(action) {
     openProfileModal();
   } else if (action === 'manage-profile' && state.user?.isSuperadmin && typeof openAdminDetails === 'function') {
     openAdminDetails();
+  } else if (action === 'personal-page' && state.user?.isSuperadmin && typeof openPersonPage === 'function') {
+    openPersonPage(state.user.id);
   } else if (action === 'preferences') {
     openPreferencesModal();
   } else if (action === 'account') {

@@ -6,6 +6,14 @@ module.exports = [
   // database/init.sql this is the whole schema; server.js runs only this list.
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN NOT NULL DEFAULT FALSE',
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_visit_count INTEGER NOT NULL DEFAULT 0',
+  `CREATE TABLE IF NOT EXISTS profile_likes (
+     profile_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     PRIMARY KEY (profile_user_id, user_id),
+     CHECK (profile_user_id <> user_id)
+   )`,
   "ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'member'",
   'ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INTEGER NOT NULL DEFAULT 0',

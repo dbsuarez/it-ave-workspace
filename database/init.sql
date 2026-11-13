@@ -11,7 +11,16 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_color VARCHAR(20) DEFAULT '#6B21A8',
   status VARCHAR(20) DEFAULT 'online',
   last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  profile_visit_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS profile_likes (
+  profile_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  PRIMARY KEY (profile_user_id, user_id),
+  CHECK (profile_user_id <> user_id)
 );
 
 CREATE TABLE IF NOT EXISTS channels (

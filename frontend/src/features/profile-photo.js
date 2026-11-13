@@ -142,6 +142,8 @@ function paintAccountMenu() {
   if (!state.user) return;
   const manage = document.getElementById('user-manage-profile');
   if (manage) manage.hidden = !state.user.isSuperadmin;
+  const personalPage = document.getElementById('user-personal-page');
+  if (personalPage) personalPage.hidden = !state.user.isSuperadmin;
   const full = [state.user.firstName, state.user.middleName, state.user.lastName].map((x) => String(x || '').trim()).filter(Boolean).join(' ');
   if (els.userName) els.userName.textContent = full || state.user.username;
   if (els.userEmail) els.userEmail.textContent = [full ? `@${state.user.username}` : '', state.user.email || ''].filter(Boolean).join(' · ');

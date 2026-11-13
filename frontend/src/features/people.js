@@ -383,6 +383,11 @@ function renderPersonPage() {
         <p>${escapeText(personLine(person)) || '<span class="pp-muted">No title yet</span>'}</p>
         ${(person.roles || []).length ? `<p class="pp-roles">${person.roles.map((r) => `<span class="pp-role-chip"><span class="role-dot" style="background:${escapeText(r.color)}"></span>${escapeText(r.name)}</span>`).join('')}</p>` : ''}
         <p class="pp-muted">${[personFullName(person) ? '@' + person.username : '', person.location, [person.statusEmoji, person.statusText].filter(Boolean).join(' ')].filter(Boolean).map(escapeText).join(' · ')}</p>
+        <div class="pp-page-stats">
+          <span>${Number(person.visits || 0).toLocaleString()} page ${Number(person.visits || 0) === 1 ? 'visit' : 'visits'}</span>
+          <span>${Number(person.likes || 0).toLocaleString()} ${Number(person.likes || 0) === 1 ? 'like' : 'likes'}</span>
+          ${mine ? '' : `<button type="button" class="pp-like-btn${person.likedByMe ? ' liked' : ''}" data-page-like="${person.id}" aria-pressed="${person.likedByMe ? 'true' : 'false'}">${person.likedByMe ? 'Liked' : 'Like'}</button>`}
+        </div>
       </div>
       <div class="pp-hero-actions">
         ${mine ? '<button type="button" class="btn primary" data-edit-page>Edit my page</button>'
@@ -511,6 +516,21 @@ async function savePageEditor(event) {
   }
 }
 
+async function setPageLike(personId, liked) {
+  try {
+    const res = await api(`/api/people/${personId}/like`, { method: 'PUT', body: JSON.stringify({ liked }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not update the like');
+    if (peopleState.page && Number(peopleState.page.person.id) === Number(personId)) {
+      peopleState.page.person.likes = data.likes;
+      peopleState.page.person.likedByMe = data.liked;
+      renderPeopleBody();
+    }
+  } catch (err) {
+    showToast(err.message || 'Could not update the like.', 'error');
+  }
+}
+
 // ---- events ------------------------------------------------------------------------------------
 
 if (typeof document !== 'undefined') {
@@ -534,6 +554,8 @@ if (typeof document !== 'undefined') {
     if (profile) { openPersonPage(Number(profile.dataset.profileUser)); return; }
     if (t.closest('[data-people-back]')) { peopleState.pageId = null; peopleState.page = null; renderPeople(); return; }
     if (t.closest('[data-edit-page]')) { openPageEditor(); return; }
+    const like = t.closest('[data-page-like]');
+    if (like) { setPageLike(Number(like.dataset.pageLike), like.getAttribute('aria-pressed') !== 'true'); return; }
     const message = t.closest('[data-page-message]');
     if (message) { openDM(Number(message.dataset.pageMessage)); return; }
     const huddle = t.closest('[data-page-huddle]');

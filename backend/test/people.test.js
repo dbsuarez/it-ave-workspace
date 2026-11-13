@@ -29,6 +29,7 @@ test.before(async () => {
     [name, `${name}@x.test`, 'x', type, superadmin]
   )).rows[0].id;
   ids.boss = await user('boss', { superadmin: true });
+  ids.hiddenAdmin = await user('admin', { superadmin: true });
   ids.ann = await user('ann');
   ids.bob = await user('bob');
   ids.cy = await user('cy');
@@ -70,6 +71,35 @@ test('the directory lists members only, and guests cannot browse it', async (t) 
   assert.equal((await call(ids.ann, 'GET', `/${ids.guest}`)).status, 404, 'a guest has no page in the directory');
   assert.equal((await call(ids.ann, 'GET', `/${ids.bot}`)).status, 404);
   assert.equal((await call(ids.ann, 'GET', '/abc')).status, 400);
+});
+
+test('the hidden admin can open their own personal page without appearing in the directory', async (t) => {
+  if (skip(t)) return;
+  const list = await call(ids.ann, 'GET', '');
+  assert.ok(!list.json.people.some((person) => person.id === ids.hiddenAdmin));
+  const own = await call(ids.hiddenAdmin, 'GET', `/${ids.hiddenAdmin}`);
+  assert.equal(own.status, 200);
+  assert.equal(own.json.person.username, 'admin');
+  assert.equal((await call(ids.ann, 'GET', `/${ids.hiddenAdmin}`)).status, 404);
+});
+
+test('personal pages count visits from other employees and show the total to everyone', async (t) => {
+  if (skip(t)) return;
+  assert.equal((await call(ids.boss, 'GET', `/${ids.boss}`)).json.person.visits, 0, 'opening your own page is not a visit');
+  assert.equal((await call(ids.ann, 'GET', `/${ids.boss}`)).json.person.visits, 1);
+  assert.equal((await call(ids.bob, 'GET', `/${ids.boss}`)).json.person.visits, 2);
+  assert.equal((await call(ids.boss, 'GET', `/${ids.boss}`)).json.person.visits, 2, 'the owner sees the same public count');
+});
+
+test('employees can like a personal page once, unlike it, and everyone sees the total', async (t) => {
+  if (skip(t)) return;
+  assert.equal((await call(ids.boss, 'PUT', `/${ids.boss}/like`, { liked: true })).status, 400, 'no self likes');
+  assert.equal((await call(ids.guest, 'PUT', `/${ids.boss}/like`, { liked: true })).status, 403);
+  assert.deepEqual((await call(ids.ann, 'PUT', `/${ids.boss}/like`, { liked: true })).json, { liked: true, likes: 1 });
+  assert.deepEqual((await call(ids.ann, 'PUT', `/${ids.boss}/like`, { liked: true })).json, { liked: true, likes: 1 }, 'liking twice is still one like');
+  assert.equal((await call(ids.bob, 'GET', `/${ids.boss}`)).json.person.likes, 1);
+  assert.equal((await call(ids.ann, 'GET', `/${ids.boss}`)).json.person.likedByMe, true);
+  assert.deepEqual((await call(ids.ann, 'PUT', `/${ids.boss}/like`, { liked: false })).json, { liked: false, likes: 0 });
 });
 
 test('someone customizes their own page', async (t) => {

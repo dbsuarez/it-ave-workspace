@@ -90,7 +90,7 @@ function cleanProfile(body) {
 }
 
 const PERSON_COLUMNS = `u.id, u.username, u.last_name, u.first_name, u.middle_name, u.email, u.avatar_color, u.status, u.status_text, u.status_emoji, u.job_title,
-  u.department, u.location, u.manager_id, u.photo_file, u.photo_updated_at, u.profile, u.created_at, u.account_type,
+  u.department, u.location, u.manager_id, u.photo_file, u.photo_updated_at, u.profile, u.profile_visit_count, u.created_at, u.account_type,
   COALESCE((SELECT array_agg(sm.manager_id ORDER BY sm.position, sm.manager_id) FROM user_secondary_managers sm WHERE sm.user_id = u.id), '{}') AS secondary_manager_ids,
   COALESCE((SELECT json_agg(json_build_object('name', r.name, 'color', r.color) ORDER BY r.position, r.id) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id), '[]'::json) AS role_chips`;
 
@@ -129,6 +129,9 @@ function mapPerson(row, viewerId, { full = false } = {}) {
     person.sections = Array.isArray(profile.sections) ? profile.sections : [];
     person.links = Array.isArray(profile.links) ? profile.links : [];
     person.memberSince = row.created_at;
+    person.visits = Number(row.profile_visit_count) || 0;
+    person.likes = Number(row.profile_like_count) || 0;
+    person.likedByMe = Boolean(row.profile_liked_by_me);
     if (own) person.hide = { email: Boolean(hide.email), phone: Boolean(hide.phone), location: Boolean(hide.location) };
   }
   return person;
@@ -182,9 +185,28 @@ router.get('/:id', async (req, res) => {
     const me = await requireMember(req.user.userId);
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
-    const result = await query(`SELECT ${PERSON_COLUMNS} FROM users u WHERE u.id = $1 AND ${MEMBERS_ONLY}`, [id]);
+    const result = await query(
+      `SELECT ${PERSON_COLUMNS} FROM users u
+       WHERE u.id = $1 AND (${MEMBERS_ONLY} OR (u.id = $2 AND u.is_superadmin = TRUE AND u.account_type = 'member' AND u.deactivated_at IS NULL))`,
+      [id, me.id]
+    );
     const row = result.rows[0];
     if (!row) throw fail(404, 'Person not found');
+    if (Number(id) !== Number(me.id)) {
+      const visit = (await query(
+        'UPDATE users SET profile_visit_count = profile_visit_count + 1 WHERE id = $1 RETURNING profile_visit_count',
+        [id]
+      )).rows[0];
+      row.profile_visit_count = visit?.profile_visit_count ?? row.profile_visit_count;
+    }
+    const likes = (await query(
+      `SELECT COUNT(*)::int AS count,
+              COALESCE(BOOL_OR(user_id = $2), FALSE) AS liked_by_me
+       FROM profile_likes WHERE profile_user_id = $1`,
+      [id, me.id]
+    )).rows[0];
+    row.profile_like_count = likes?.count || 0;
+    row.profile_liked_by_me = Boolean(likes?.liked_by_me);
     const person = mapPerson(row, me.id, { full: true });
     const manager = row.manager_id
       ? (await query(`SELECT ${PERSON_COLUMNS} FROM users u WHERE u.id = $1 AND ${MEMBERS_ONLY}`, [row.manager_id])).rows[0]
@@ -211,6 +233,29 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Get person error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/people/:id/like - one like per employee; nobody likes their own page.
+router.put('/:id/like', async (req, res) => {
+  try {
+    const me = await requireMember(req.user.userId);
+    const id = parseId(req.params.id);
+    if (id === null || typeof req.body?.liked !== 'boolean') throw fail(400, 'A valid person ID and liked value are required');
+    if (Number(id) === Number(me.id)) throw fail(400, 'You cannot like your own page');
+    const target = (await query(`SELECT 1 FROM users u WHERE u.id = $1 AND ${MEMBERS_ONLY}`, [id])).rows[0];
+    if (!target) throw fail(404, 'Person not found');
+    if (req.body.liked) {
+      await query('INSERT INTO profile_likes (profile_user_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, me.id]);
+    } else {
+      await query('DELETE FROM profile_likes WHERE profile_user_id = $1 AND user_id = $2', [id, me.id]);
+    }
+    const count = Number((await query('SELECT COUNT(*)::int AS count FROM profile_likes WHERE profile_user_id = $1', [id])).rows[0]?.count) || 0;
+    res.json({ liked: req.body.liked, likes: count });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Like person page error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
