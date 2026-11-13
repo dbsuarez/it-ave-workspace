@@ -81,6 +81,7 @@ function renderPeople() {
     tabsRow.hidden = false;
     tabsRow.innerHTML = `
       <button type="button" class="pp-tab${peopleState.tab === 'directory' ? ' active' : ''}" data-people-tab="directory" role="tab">Directory</button>
+      <button type="button" class="pp-tab${peopleState.tab === 'team' ? ' active' : ''}" data-people-tab="team" role="tab">My team</button>
       <button type="button" class="pp-tab${peopleState.tab === 'chart' ? ' active' : ''}" data-people-tab="chart" role="tab">Org chart</button>
       <button type="button" class="pp-tab${peopleState.tab === 'leave' ? ' active' : ''}" data-people-tab="leave" role="tab">Leave${typeof leaveState !== 'undefined' && leaveState.waiting ? ` (${leaveState.waiting})` : ''}</button>
       <button type="button" class="pp-tab${peopleState.tab === 'attendance' ? ' active' : ''}" data-people-tab="attendance" role="tab">Attendance</button>
@@ -106,7 +107,7 @@ function renderPeopleBody() {
   }
   if (peopleState.tab === 'manage' && !canManageEmployees()) peopleState.tab = 'directory';
   body.className = `people-body ${peopleState.tab === 'chart' ? 'people-chart-body' : peopleState.tab === 'manage' || peopleState.tab === 'leave' || peopleState.tab === 'attendance' ? 'people-manage-body' : 'people-directory-body'}`;
-  if (peopleState.tab === 'chart') renderOrgChart(body); else if (peopleState.tab === 'manage') renderEmployeeManagement(body); else if (peopleState.tab === 'leave') renderLeave(body); else if (peopleState.tab === 'attendance') renderAttendance(body); else renderDirectory(body);
+  if (peopleState.tab === 'chart') renderOrgChart(body); else if (peopleState.tab === 'team') renderMyTeam(body); else if (peopleState.tab === 'manage') renderEmployeeManagement(body); else if (peopleState.tab === 'leave') renderLeave(body); else if (peopleState.tab === 'attendance') renderAttendance(body); else renderDirectory(body);
   paintPeoplePhotos(body);
 }
 
@@ -134,6 +135,19 @@ function renderDirectory(body) {
         ${p.location ? `<span class="pp-card-meta">${escapeText(p.location)}</span>` : ''}
       </span>
     </button>`).join('')}</div>`;
+}
+
+function renderMyTeam(body) {
+  const myId = Number(state.user?.id);
+  const team = peopleState.list.filter((person) => Number(person.managerId) === myId
+    || (person.secondaryManagerIds || []).map(Number).includes(myId));
+  const help = `<section class="pp-team-help"><h3>How My team is managed</h3><p>My team follows the workspace reporting lines. HR or the Superadmin can update a person's manager in People → Org chart → Edit reporting lines, or from the employee's page.</p></section>`;
+  if (!team.length) {
+    body.innerHTML = `${help}${emptyRecordMarkup('No team members assigned', 'Ask HR or the Superadmin to update reporting lines if someone should appear here.')}`;
+    return;
+  }
+  body.innerHTML = `${help}<div class="pp-grid">${team.sort((a, b) => personName(a).localeCompare(personName(b))).map((person) => `
+    <button type="button" class="pp-card" data-person="${person.id}">${peopleAvatar(person, 'lg')}<span class="pp-card-body"><span class="pp-card-name">${escapeText(personName(person))} ${presenceDot(person)}</span><span class="pp-card-title">${escapeText(person.jobTitle) || 'No title yet'}</span><span class="pp-card-meta">${Number(person.managerId) === myId ? 'Direct report' : 'Dotted-line report'}</span></span></button>`).join('')}</div>`;
 }
 
 // ---- org chart ---------------------------------------------------------------------------------
@@ -524,7 +538,7 @@ async function setPageLike(personId, liked) {
     if (peopleState.page && Number(peopleState.page.person.id) === Number(personId)) {
       peopleState.page.person.likes = data.likes;
       peopleState.page.person.likedByMe = data.liked;
-      renderPeopleBody();
+      renderPersonPage();
     }
   } catch (err) {
     showToast(err.message || 'Could not update the like.', 'error');
@@ -548,14 +562,14 @@ if (typeof document !== 'undefined') {
     }
     if (t.closest('[data-people-edit-lines]')) { peopleState.editLines = !peopleState.editLines; renderPeople(); return; }
     if (t.closest('.org-manager-select, .org-also-edit')) return;
+    const like = t.closest('[data-page-like]');
+    if (like) { setPageLike(Number(like.dataset.pageLike), like.getAttribute('aria-pressed') !== 'true'); return; }
     const person = t.closest('[data-person]');
     if (person) { openPersonPage(Number(person.dataset.person)); return; }
     const profile = t.closest('[data-profile-user]');
     if (profile) { openPersonPage(Number(profile.dataset.profileUser)); return; }
     if (t.closest('[data-people-back]')) { peopleState.pageId = null; peopleState.page = null; renderPeople(); return; }
     if (t.closest('[data-edit-page]')) { openPageEditor(); return; }
-    const like = t.closest('[data-page-like]');
-    if (like) { setPageLike(Number(like.dataset.pageLike), like.getAttribute('aria-pressed') !== 'true'); return; }
     const message = t.closest('[data-page-message]');
     if (message) { openDM(Number(message.dataset.pageMessage)); return; }
     const huddle = t.closest('[data-page-huddle]');

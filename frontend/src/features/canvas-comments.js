@@ -171,6 +171,12 @@ function canvasCommentsChanged(canvasId) {
 }
 
 if (typeof document !== 'undefined') document.addEventListener('click', async (event) => {
+  if (event.target.closest('#btn-close-canvas-comments')) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeSettingsModal();
+    return;
+  }
   const openButton = event.target.closest('#btn-canvas2-comments, #btn-canvas-sheet-comments');
   if (openButton) {
     ccOpen(openButton.id === 'btn-canvas2-comments' ? 'standalone' : 'sheet');

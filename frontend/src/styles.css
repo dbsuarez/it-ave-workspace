@@ -726,7 +726,7 @@ body.iav-dev .demo-banner {
 /* Flyout submenu panel */
 .submenu {
   position: absolute;
-  left: calc(100% + 6px);
+  left: 100%;
   top: -6px;
   display: none;
   flex-direction: column;
@@ -742,6 +742,15 @@ body.iav-dev .demo-banner {
 .has-submenu.open > .submenu,
 .has-submenu:hover > .submenu {
   display: flex;
+}
+
+.has-submenu::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 100%;
+  width: 10px;
+  height: calc(100% + 12px);
 }
 
 /* Rail menus anchored beside the create / avatar buttons */
@@ -1623,7 +1632,7 @@ body.iav-dev .demo-banner {
 
 /* Input area */
 .input-area {
-  min-height: 94px;
+  min-height: 72px;
   background: var(--surface);
   border-top: 1px solid var(--border);
   padding: 12px 24px;
@@ -1698,9 +1707,23 @@ body.iav-dev .demo-banner {
   font-size: 14px;
 }
 
-.input-row > textarea {
+.message-compose-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.message-compose-field textarea {
+  width: 100%;
   height: 40px;
   min-height: 40px;
+  display: block;
+}
+
+.message-format-guide {
+  margin: 4px 3px 0;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.2;
 }
 
 textarea {
@@ -4217,7 +4240,18 @@ body.account-guest [data-create="channel"] {
   white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--text);
 }
+.sidebar-channel-name:focus { border-color: var(--primary); background: var(--surface); outline: none; }
+.sidebar-channel-owner { flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; }
+.sidebar-channel-delete { width: 26px; height: 26px; color: var(--text-muted); }
+.sidebar-other-personal { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.sidebar-other-personal summary { padding: 10px 12px; cursor: pointer; font-size: 12px; font-weight: 800; }
+.sidebar-other-personal summary span { color: var(--text-muted); margin-left: 4px; }
 
 .sidebar-drop-hint {
   margin: 8px;
@@ -6991,6 +7025,9 @@ h4.cv-h { font-size: 15px; }
 .pp-edit-triple { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .pp-name-edit { display: grid; gap: 8px; }
 .pp-name-edit input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.pp-team-help { margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.pp-team-help h3 { margin: 0 0 5px; font-size: 14px; }
+.pp-team-help p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .admin-help { margin: 6px 0; font-size: 12px; color: var(--text-muted); }
 .admin-note { margin: 6px 0; font-size: 12px; color: var(--purple); }
 .admin-bulk-label { display: block; margin-top: 10px; font-size: 13px; }
@@ -7165,6 +7202,14 @@ h4.cv-h { font-size: 15px; }
 /* Thumbnails of picture files */
 .file-card .preview { height: 130px; }
 .file-card .preview.has-thumb { background-size: cover; background-position: center; background-repeat: no-repeat; }
+
+.file-preview-overlay { z-index: 1200; }
+.file-preview-modal { width: min(980px, calc(100vw - 48px)); height: min(760px, calc(100vh - 48px)); display: flex; flex-direction: column; }
+.file-preview-modal .modal-header p { margin: 3px 0 0; color: var(--text-muted); font-size: 12px; }
+.file-preview-body { flex: 1; min-height: 0; display: grid; place-items: center; overflow: auto; padding: 14px; background: var(--bg); }
+.file-preview-body img, .file-preview-body video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.file-preview-body iframe { width: 100%; height: 100%; border: 0; background: white; }
+.file-preview-body audio { width: min(620px, 90%); }
 .later-file-icon.has-thumb { display: inline-block; width: 44px; height: 44px; border-radius: 8px; background-size: cover; background-position: center; }
 
 /* Roles panel (Moderation) */

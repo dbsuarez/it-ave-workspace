@@ -258,6 +258,7 @@ function renderActivityFeed() {
       </span>
       <span class="activity-item-time">${escapeHtml(shortTime(item.createdAt))}</span>
     </button>`).join('');
+  if (typeof paintAvatarsIn === 'function') paintAvatarsIn(feed);
 }
 
 async function loadActivity({ markSeen = false } = {}) {

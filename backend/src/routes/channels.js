@@ -155,6 +155,34 @@ router.patch('/:channelId', authenticateToken, async (req, res) => {
   }
 });
 
+// Rename a channel. The creator, a moderator, the Superadmin, or manage_channels may do this.
+router.patch('/:channelId/name', authenticateToken, async (req, res) => {
+  try {
+    const channelId = Number(req.params.channelId);
+    const name = String(req.body?.name || '').trim().toLowerCase();
+    if (!Number.isInteger(channelId) || !/^[a-z0-9-]+$/.test(name)) {
+      return res.status(400).json({ error: 'Channel name must use lowercase letters, numbers, and hyphens only' });
+    }
+    const permission = await query(
+      `SELECT 1 FROM channels c JOIN users u ON u.id = $2
+       WHERE c.id = $1 AND (u.is_superadmin = TRUE OR c.created_by = u.id OR EXISTS (
+         SELECT 1 FROM channel_members cm WHERE cm.channel_id = c.id AND cm.user_id = u.id AND cm.role = 'moderator'
+       ))`, [channelId, req.user.userId]
+    );
+    if (!permission.rows.length && !(await can(query, req.user.userId, 'manage_channels'))) {
+      return res.status(403).json({ error: 'You cannot rename this channel' });
+    }
+    const result = await query('UPDATE channels SET name = $1 WHERE id = $2 RETURNING id, name', [name, channelId]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Channel not found' });
+    req.io?.emit?.('channel_renamed', { channelId, name });
+    res.json({ channel: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Channel name already exists' });
+    console.error('Rename channel error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Keep a channel in every employee's workspace. Superadmin only.
 router.patch('/:channelId/availability', authenticateToken, async (req, res) => {
   try {

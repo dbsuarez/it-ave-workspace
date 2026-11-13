@@ -559,6 +559,7 @@ function setupEventListeners() {
   on('moderation-content', 'click', handleModerationClick);
   on('moderation-content', 'submit', handleModerationSubmit);
   on('moderation-content', 'change', handleModerationChange);
+  on('moderation-content', 'input', handleModerationFilter);
   on('btn-channel-pins', 'click', togglePinnedMessages);
   on('btn-close-channel-pins', 'click', closePinnedMessages);
   on('channel-pins-list', 'click', handlePinnedMessageClick);
@@ -2599,6 +2600,7 @@ async function loadModerationView() {
     ${tabs.length > 1 ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" role="tab">${label}</button>`).join('')}</div>` : ''}
     ${channels.length ? `<div class="moderation-toolbar" data-mod-tab="channels">
       <label for="moderation-channel-select">Channel</label>
+      <input type="search" id="moderation-channel-filter" placeholder="Search channels…" aria-label="Filter channels">
       <select id="moderation-channel-select">${channels.map((channel) => `<option value="${channel.id}"${Number(channel.id) === selectedId ? ' selected' : ''}>#${escapeHtml(channel.name)}</option>`).join('')}</select>
     </div>` : ''}
     ${state.moderation.isSuperadmin ? `
@@ -2702,7 +2704,7 @@ async function loadModerationChannel(channelId) {
           <select name="role" aria-label="Choose a channel role"><option value="member">Member</option><option value="moderator">Moderator</option></select>
           <button class="btn primary" type="submit" ${addableUsers.length ? '' : 'disabled'}>Add user</button>
         </form>` : ''}
-      <div class="moderation-card"><h2>Channel members</h2><div class="moderation-list">${memberRows || '<p>No channel members.</p>'}</div></div>
+      <div class="moderation-card"><h2>Channel members</h2><p class="admin-help">Search this channel's explicit members. Workspace roles and channel permission rules can grant access without adding every employee one by one.</p><input type="search" id="moderation-member-filter" placeholder="Search members…" aria-label="Filter channel members"><div class="moderation-list" id="moderation-member-list">${memberRows || '<p>No channel members.</p>'}</div></div>
       <div class="moderation-card"><h2>Active timeouts</h2><div class="moderation-list">${(data.timeouts || []).map((timeout) => `
         <div class="moderation-row"><span>${escapeHtml(timeout.username)} · until ${escapeHtml(new Date(timeout.expiresAt).toLocaleString())}${timeout.reason ? ` · ${escapeHtml(timeout.reason)}` : ''}</span><button class="btn" data-action="remove-timeout" data-member-id="${timeout.userId}">Remove timeout</button></div>
       `).join('') || '<p>No active timeouts.</p>'}</div></div>
@@ -2833,6 +2835,22 @@ async function handleModerationSubmit(event) {
 async function handleModerationChange(event) {
   if (event.target.id !== 'moderation-channel-select') return;
   await loadModerationChannel(Number(event.target.value));
+}
+
+function handleModerationFilter(event) {
+  if (event.target.id === 'moderation-channel-filter') {
+    const query = event.target.value.trim().toLowerCase();
+    const select = document.getElementById('moderation-channel-select');
+    if (!select) return;
+    Array.from(select.options).forEach((option) => { option.hidden = Boolean(query) && !option.textContent.toLowerCase().includes(query); });
+    const first = Array.from(select.options).find((option) => !option.hidden);
+    if (first && select.selectedOptions[0]?.hidden) { select.value = first.value; loadModerationChannel(Number(first.value)); }
+  } else if (event.target.id === 'moderation-member-filter') {
+    const query = event.target.value.trim().toLowerCase();
+    document.querySelectorAll('#moderation-member-list .moderation-member-row').forEach((row) => {
+      row.hidden = Boolean(query) && !row.textContent.toLowerCase().includes(query);
+    });
+  }
 }
 
 async function handleModerationMessageClick(event) {
@@ -3736,7 +3754,7 @@ function renderFiles(files) {
     `;
     card.addEventListener('click', (event) => {
       if (event.target.closest('[data-delete-file]')) return;
-      downloadFile(f.id, f.name);
+      previewFile(f);
     });
     card.querySelector('[data-delete-file]')?.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -3750,6 +3768,41 @@ function renderFiles(files) {
     grid.appendChild(card);
   });
   hydrateThumbnails(grid); // pictures show a thumbnail instead of the icon, as they scroll into view
+}
+
+async function previewFile(file) {
+  const mime = String(file.mimeType || '').toLowerCase();
+  const supported = mime.startsWith('image/') || mime === 'application/pdf'
+    || mime.startsWith('text/') || mime.startsWith('audio/') || mime.startsWith('video/');
+  if (!supported) {
+    await downloadFile(file.id, file.name);
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/files/${file.id}/download`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!res.ok) throw new Error('Could not load the preview');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay file-preview-overlay open';
+    const media = mime.startsWith('image/') ? `<img src="${url}" alt="${escapeHtml(file.name)}">`
+      : mime.startsWith('video/') ? `<video src="${url}" controls autoplay></video>`
+        : mime.startsWith('audio/') ? `<audio src="${url}" controls autoplay></audio>`
+          : `<iframe src="${url}" title="Preview ${escapeHtml(file.name)}"></iframe>`;
+    modal.innerHTML = `<div class="modal file-preview-modal open" role="dialog" aria-modal="true" aria-label="Preview ${escapeHtml(file.name)}">
+      <div class="modal-header"><div><h3>${escapeHtml(file.name)}</h3><p>${escapeHtml(mime || 'File')} · ${escapeHtml(humanSize(file.size))}</p></div><button type="button" class="modal-close" data-close-file-preview aria-label="Close">&times;</button></div>
+      <div class="file-preview-body">${media}</div>
+      <div class="modal-footer"><button type="button" class="btn" data-download-preview>Download</button><button type="button" class="btn primary" data-close-file-preview>Close</button></div>
+    </div>`;
+    const close = () => { URL.revokeObjectURL(url); modal.remove(); };
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal || event.target.closest('[data-close-file-preview]')) close();
+      else if (event.target.closest('[data-download-preview]')) downloadFile(file.id, file.name);
+    });
+    document.body.appendChild(modal);
+  } catch (err) {
+    showToast(err.message || 'Could not preview this file.', 'error');
+  }
 }
 
 function canModerateChannel(channelId) {
@@ -4693,7 +4746,18 @@ async function saveCreateChannel() {
     document.getElementById('new-channel-topic').value = '';
 
     await loadChannels();
-    openChannel(data.channel.id);
+    if (state.channelCreationSectionTarget && state.sidebarDraft) {
+      const target = state.channelCreationSectionTarget.kind === 'workspace'
+        ? state.workspaceSidebarDraft.sections.find((section) => section.id === state.channelCreationSectionTarget.id)
+        : state.sidebarDraft.sections.find((section) => section.id === state.channelCreationSectionTarget.id);
+      if (target) target.channelIds.push(Number(data.channel.id));
+      state.channelCreationSectionTarget = null;
+      state.sidebarAvailabilityDraft[data.channel.id] = Boolean(data.channel.availableToAll);
+      state.sidebarChannelNameDraft[data.channel.id] = data.channel.name;
+      renderSidebarModal();
+    } else {
+      openChannel(data.channel.id);
+    }
   } catch (err) {
     console.error('Create channel error:', err);
     showToast('Failed to create channel.', 'error');

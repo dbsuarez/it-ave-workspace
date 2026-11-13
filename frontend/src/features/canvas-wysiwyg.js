@@ -578,8 +578,9 @@ const canvasWysiwyg = (() => {
         closeColorPalette();
       }
     });
-    inst.colorInput.addEventListener('input', () => inst.editor.chain().focus().setTextColor(inst.colorInput.value).run());
-    inst.colorInput.addEventListener('change', closeColorPalette);
+    // Focusing the editor dismisses the native picker as soon as its handle moves.
+    // The editor keeps its last selection, so applying without focus lets dragging work.
+    inst.colorInput.addEventListener('input', () => inst.editor.chain().setTextColor(inst.colorInput.value).run());
     // keep the selection in the page while a button is pressed
     [inst.toolbar, inst.contextual].forEach((bar) => {
       bar.addEventListener('mousedown', (event) => { if (event.target.closest('button')) event.preventDefault(); });

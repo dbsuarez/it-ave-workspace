@@ -63,6 +63,12 @@ const API = () => (sql, params = []) => {
     ch.topic = params[0];
     return { rows: [ch] };
   }
+  if (sql.includes('UPDATE channels SET name')) {
+    const ch = channels.get(Number(params[1]));
+    if (!ch) return { rows: [] };
+    ch.name = params[0];
+    return { rows: [ch] };
+  }
   if (sql.includes('INSERT INTO channel_members')) {
     const key = `${params[0]}:${params[1]}`;
     if (String(params[2] ?? 'member') === 'moderator') moderators.add(key);
@@ -163,6 +169,15 @@ test('emits channel_topic_updated when the topic changes', async () => {
   assert.ok(update, 'should emit channel_topic_updated');
   assert.equal(update.room, 'channel_42');
   assert.equal(update.payload.topic, 'broadcast test');
+});
+
+test('channel creator can rename the channel', async () => {
+  const response = await fetch(`${baseUrl}/api/channels/42/name`, {
+    method: 'PATCH', headers: { ...authHeader(3), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'renamed-channel' }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).channel.name, 'renamed-channel');
 });
 
 test('only the superadmin can create a channel that is available to all', async () => {
