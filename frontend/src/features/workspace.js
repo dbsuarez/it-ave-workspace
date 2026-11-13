@@ -348,7 +348,7 @@ function renderSidebarModal() {
   const query = String(state.sidebarOrganizerQuery || '').trim().toLowerCase();
   const poolChannels = state.channels.filter((channel) => {
     const otherPersonal = Number(channel.memberCount || 0) <= 1 && Number(channel.createdBy) !== Number(state.user?.id);
-    const matchesFilter = filter === 'all'
+    const matchesFilter = (filter === 'all' && !otherPersonal)
       || (filter === 'workspace' && (workspaceChannelIds.has(Number(channel.id)) || Boolean(channel.availableToAll)))
       || (filter === 'mine' && Number(channel.createdBy) === Number(state.user?.id))
       || (filter === 'others' && otherPersonal);
