@@ -899,6 +899,37 @@ body.iav-dev .demo-banner {
   justify-content: stretch;
   gap: 8px;
 }
+.audit-log-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.audit-log-heading .admin-help { margin: 3px 0 0; }
+.audit-log-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) 90px;
+  gap: 10px;
+  align-items: end;
+}
+.audit-log-toolbar label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.audit-log-toolbar input,
+.audit-log-toolbar select { width: 100%; }
+.audit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.audit-pagination > div { display: flex; gap: 8px; }
 .audit-entry-summary {
   display: flex;
   align-items: baseline;
@@ -941,6 +972,7 @@ body.iav-dev .demo-banner {
   overflow-wrap: anywhere;
 }
 @media (max-width: 720px) {
+  .audit-log-toolbar { grid-template-columns: 1fr; }
   .audit-entry-summary { align-items: flex-start; flex-direction: column; gap: 8px; }
   .audit-entry-meta { width: 100%; justify-content: space-between; }
 }

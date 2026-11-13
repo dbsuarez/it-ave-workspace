@@ -2664,17 +2664,46 @@ async function loadModerationView() {
   if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
 }
 
+const moderationAuditQuery = { page: 1, pageSize: 50, action: '', search: '' };
+let moderationAuditSearchTimer = null;
+
 async function loadModerationAudit() {
   const container = document.getElementById('moderation-workspace-audit');
   if (!container) return;
+  const scrollHost = document.getElementById('moderation-content');
+  const previousScrollTop = scrollHost?.scrollTop || 0;
   try {
-    const response = await api('/api/moderation/audit?limit=100');
+    const params = new URLSearchParams({
+      page: String(moderationAuditQuery.page),
+      pageSize: String(moderationAuditQuery.pageSize),
+    });
+    if (moderationAuditQuery.action) params.set('action', moderationAuditQuery.action);
+    if (moderationAuditQuery.search) params.set('search', moderationAuditQuery.search);
+    const response = await api(`/api/moderation/audit?${params}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not load workspace audit log');
+    const page = data.page || { number: 1, size: moderationAuditQuery.pageSize, total: 0, pages: 1 };
+    if (moderationAuditQuery.page > page.pages) {
+      moderationAuditQuery.page = page.pages;
+      return loadModerationAudit();
+    }
     container.innerHTML = `
-      <div class="moderation-card"><h2>Workspace audit log</h2><div class="moderation-list">${(data.entries || []).map((entry) => `
+      <div class="moderation-card audit-log-card">
+        <div class="audit-log-heading"><div><h2>Workspace audit log</h2><p class="admin-help">${page.total} matching event${page.total === 1 ? '' : 's'}</p></div></div>
+        <div class="audit-log-toolbar">
+          <label class="audit-search">Search<input id="moderation-audit-search" type="search" maxlength="100" value="${escapeHtml(moderationAuditQuery.search)}" placeholder="Person, channel or detail…"></label>
+          <label>Action<select id="moderation-audit-action"><option value="">All actions</option>${(data.actions || []).map((action) => `<option value="${escapeHtml(action)}"${action === moderationAuditQuery.action ? ' selected' : ''}>${escapeHtml(humanizeAuditAction(action))}</option>`).join('')}</select></label>
+          <label>Rows<select id="moderation-audit-page-size">${[25, 50, 100].map((size) => `<option value="${size}"${size === page.size ? ' selected' : ''}>${size}</option>`).join('')}</select></label>
+        </div>
+        <div class="moderation-list">${(data.entries || []).map((entry) => `
         ${renderAuditEntry(entry)}
-      `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
+      `).join('') || '<p>No audit events match these filters.</p>'}</div>
+        <div class="audit-pagination">
+          <span>Page ${page.number} of ${page.pages}</span>
+          <div><button class="btn" type="button" data-action="audit-page" data-page="${page.number - 1}"${page.number <= 1 ? ' disabled' : ''}>Previous</button><button class="btn" type="button" data-action="audit-page" data-page="${page.number + 1}"${page.number >= page.pages ? ' disabled' : ''}>Next</button></div>
+        </div>
+      </div>`;
+    if (scrollHost) scrollHost.scrollTop = previousScrollTop;
   } catch (err) {
     console.error('Load workspace audit log error:', err);
     container.innerHTML = '<div class="moderation-card"><h2>Workspace audit log</h2><p>Could not load the audit log.</p></div>';
@@ -2850,10 +2879,10 @@ async function loadModerationChannel(channelId) {
       <div class="moderation-card"><h2>Open reports</h2><div class="moderation-list">${(data.reports || []).map((report) => `
         <div class="moderation-row moderation-report"><span>Message #${report.messageId} · reported by ${escapeHtml(report.reporterUsername || 'former user')} · ${escapeHtml(report.targetUsername)}: ${escapeHtml(report.reason)}</span><div class="moderation-row-actions"><button class="btn" data-action="resolve-report" data-report-id="${report.id}">Resolve</button><button class="btn" data-action="dismiss-report" data-report-id="${report.id}">Dismiss</button></div></div>
       `).join('') || '<p>No open reports.</p>'}</div></div>
-      ${canDeleteChannel(channelId) ? `<div class="moderation-card moderation-danger"><h2>Delete this channel</h2><p class="admin-help">Deletes #${escapeHtml(data.channel.name)} for everyone: its messages, files, canvas, lists and links. This cannot be undone. The audit log keeps a record that it happened.</p><button class="btn danger" type="button" data-action="delete-channel">Delete channel…</button></div>` : ''}
       <div class="moderation-card"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
         ${renderAuditEntry({ ...entry, channelName: data.channel.name })}
-      `).join('') || '<p>No moderation actions yet.</p>'}</div></div>`;
+      `).join('') || '<p>No moderation actions yet.</p>'}</div></div>
+      ${canDeleteChannel(channelId) ? `<div class="moderation-card moderation-danger" id="channel-danger-zone"><h2>Danger zone</h2><p class="admin-help"><strong>Delete #${escapeHtml(data.channel.name)}</strong><br>Deletes this channel for everyone, including its messages, files, canvas, lists and links. This cannot be undone. The audit log keeps a record that it happened.</p><button class="btn danger" type="button" data-action="delete-channel">Delete channel…</button></div>` : ''}`;
     const ownerAvatar = dataContainer.querySelector('[data-moderation-owner]');
     if (ownerAvatar && typeof paintAvatar === 'function') {
       paintAvatar(ownerAvatar, { id: selectedChannel.createdBy, photoVersion: selectedChannel.creatorPhotoVersion }, ownerName.charAt(0).toUpperCase());
@@ -2889,6 +2918,11 @@ async function handleModerationClick(event) {
   const userId = Number(button.dataset.memberId ?? button.dataset.userId);
   const action = button.dataset.action;
   try {
+    if (action === 'audit-page') {
+      moderationAuditQuery.page = Number(button.dataset.page);
+      await loadModerationAudit();
+      return;
+    }
     if (action === 'view-audit-details') {
       showAuditDetails(decodeURIComponent(button.dataset.auditDetails || ''));
       return;
@@ -2980,9 +3014,18 @@ async function handleModerationSubmit(event) {
 }
 
 async function handleModerationChange(event) {
-  if (event.target.id !== 'moderation-channel-select') return;
-  const channelId = moderationChannelId(event.target);
-  if (channelId) await loadModerationChannel(channelId);
+  if (event.target.id === 'moderation-channel-select') {
+    const channelId = moderationChannelId(event.target);
+    if (channelId) await loadModerationChannel(channelId);
+  } else if (event.target.id === 'moderation-audit-action') {
+    moderationAuditQuery.action = event.target.value;
+    moderationAuditQuery.page = 1;
+    await loadModerationAudit();
+  } else if (event.target.id === 'moderation-audit-page-size') {
+    moderationAuditQuery.pageSize = Number(event.target.value);
+    moderationAuditQuery.page = 1;
+    await loadModerationAudit();
+  }
 }
 
 function handleModerationFilter(event) {
@@ -2993,6 +3036,14 @@ function handleModerationFilter(event) {
     document.querySelectorAll('#moderation-member-list .moderation-member-row').forEach((row) => {
       row.hidden = Boolean(query) && !row.textContent.toLowerCase().includes(query);
     });
+  } else if (event.target.id === 'moderation-audit-search') {
+    clearTimeout(moderationAuditSearchTimer);
+    const value = event.target.value.trim();
+    moderationAuditSearchTimer = setTimeout(() => {
+      moderationAuditQuery.search = value;
+      moderationAuditQuery.page = 1;
+      loadModerationAudit();
+    }, 300);
   }
 }
 

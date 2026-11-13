@@ -155,7 +155,7 @@ async function loadChannelWebhooks(channelId, newPath = null) {
     card = document.createElement('div');
     card.className = 'moderation-card';
     card.id = 'channel-webhooks';
-    host.appendChild(card);
+    host.insertBefore(card, document.getElementById('channel-danger-zone'));
   }
   card.dataset.channelId = String(channelId);
   try {

@@ -71,27 +71,64 @@ router.get('/audit', async (req, res) => {
     }
     if (channelId) await ensureChannelModerator(query, req.user.userId, channelId);
     else await requireWorkspacePermission(req.user.userId, 'view_audit_log');
-    const limit = Number(req.query.limit || 100);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      return res.status(400).json({ error: 'Limit must be between 1 and 100' });
+    const page = Number(req.query.page || 1);
+    const pageSize = Number(req.query.pageSize || req.query.limit || 50);
+    const action = String(req.query.action || '').trim() || null;
+    const search = String(req.query.search || '').trim() || null;
+    if (!Number.isInteger(page) || page < 1) {
+      return res.status(400).json({ error: 'Page must be a positive whole number' });
     }
-    const result = await query(
+    if (![25, 50, 100].includes(pageSize)) {
+      return res.status(400).json({ error: 'Page size must be 25, 50 or 100' });
+    }
+    if (action && action.length > 80) {
+      return res.status(400).json({ error: 'Action filter is too long' });
+    }
+    if (search && search.length > 100) {
+      return res.status(400).json({ error: 'Search must be 100 characters or fewer' });
+    }
+    const searchPattern = search ? `%${search}%` : null;
+    const filters = `WHERE ($1::integer IS NULL OR l.channel_id = $1)
+       AND ($2::text IS NULL OR l.action = $2)
+       AND ($3::text IS NULL OR actor.username ILIKE $3 OR target.username ILIKE $3
+         OR channel.name ILIKE $3 OR l.action ILIKE $3 OR l.details::text ILIKE $3)`;
+    const [result, countResult, actionResult] = await Promise.all([
+      query(
       `SELECT l.id, l.channel_id, channel.name AS channel_name, actor.username AS actor_username,
               target.username AS target_username, l.action, l.details, l.created_at
        FROM moderation_audit_log l
        LEFT JOIN channels channel ON channel.id = l.channel_id
        LEFT JOIN users actor ON actor.id = l.actor_id
        LEFT JOIN users target ON target.id = l.target_user_id
-       WHERE ($1::integer IS NULL OR l.channel_id = $1)
-       ORDER BY l.created_at DESC LIMIT $2`,
-      [channelId, limit]
-    );
+       ${filters}
+       ORDER BY l.created_at DESC LIMIT $4 OFFSET $5`,
+        [channelId, action, searchPattern, pageSize, (page - 1) * pageSize]
+      ),
+      query(
+        `SELECT COUNT(*)::integer AS total
+         FROM moderation_audit_log l
+         LEFT JOIN channels channel ON channel.id = l.channel_id
+         LEFT JOIN users actor ON actor.id = l.actor_id
+         LEFT JOIN users target ON target.id = l.target_user_id
+         ${filters}`,
+        [channelId, action, searchPattern]
+      ),
+      query(
+        `SELECT DISTINCT l.action FROM moderation_audit_log l
+         WHERE ($1::integer IS NULL OR l.channel_id = $1)
+         ORDER BY l.action`,
+        [channelId]
+      ),
+    ]);
+    const total = Number(countResult.rows[0]?.total || 0);
     res.json({
       entries: result.rows.map((entry) => ({
         id: entry.id, channelId: entry.channel_id, channelName: entry.channel_name,
         actorUsername: entry.actor_username, targetUsername: entry.target_username,
         action: entry.action, details: entry.details, createdAt: entry.created_at,
       })),
+      actions: actionResult.rows.map((entry) => entry.action),
+      page: { number: page, size: pageSize, total, pages: Math.max(1, Math.ceil(total / pageSize)) },
     });
   } catch (err) {
     sendError(res, err, 'Get moderation audit log error');

@@ -31,6 +31,11 @@ require.cache[dbPath] = {
       if (sql.includes('SELECT default_timeout_minutes, max_timeout_minutes')) {
         return { rows: [savedSettings] };
       }
+      if (sql.includes('SELECT l.id, l.channel_id')) {
+        return { rows: [{ id: 41, channel_id: 7, channel_name: 'general', actor_username: 'admin', target_username: 'dante', action: 'member_role_changed', details: { role: 'moderator' }, created_at: '2026-11-13T00:00:00.000Z' }] };
+      }
+      if (sql.includes('COUNT(*)::integer AS total')) return { rows: [{ total: 61 }] };
+      if (sql.includes('SELECT DISTINCT l.action')) return { rows: [{ action: 'member_role_changed' }, { action: 'user_timed_out' }] };
       if (sql.includes('UPDATE moderation_settings')) {
         savedSettings = { default_timeout_minutes: params[0], max_timeout_minutes: params[1] };
         return { rows: [savedSettings] };
@@ -106,6 +111,20 @@ test('a role that grants manage_workspace opens the settings for someone who is 
   assert.equal((await fetch(`${baseUrl}/api/moderation/settings`, { headers: headers() })).status, 403);
   rolePermissions = ['manage_workspace'];
   assert.equal((await fetch(`${baseUrl}/api/moderation/settings`, { headers: headers() })).status, 200);
+  rolePermissions = [];
+});
+
+test('workspace audit log paginates, searches and filters on the server', async () => {
+  superadmin = false;
+  rolePermissions = ['view_audit_log'];
+  const response = await fetch(`${baseUrl}/api/moderation/audit?page=2&pageSize=50&action=member_role_changed&search=dante`, { headers: headers() });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.entries.length, 1);
+  assert.deepEqual(body.actions, ['member_role_changed', 'user_timed_out']);
+  assert.deepEqual(body.page, { number: 2, size: 50, total: 61, pages: 2 });
+  const listQuery = queries.findLast(({ sql }) => sql.includes('SELECT l.id, l.channel_id'));
+  assert.deepEqual(listQuery.params, [null, 'member_role_changed', '%dante%', 50, 50]);
   rolePermissions = [];
 });
 
