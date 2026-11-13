@@ -1,5 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 const { query } = require('../db');
 const { passwordProblem } = require('../authLimits');
 const { hrActor, canManageEmployees, temporaryPassword, applyChecklist } = require('../hr');
@@ -507,6 +509,57 @@ router.delete('/invitations/:id', async (req, res) => {
   } catch (err) {
     sendError(res, err, 'Revoke invitation error');
   }
+});
+
+// Superadmin recovery controls. Backup files live outside the database so they remain available during a restore.
+router.get('/backups', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const recovery = require('../backupRecovery');
+    res.json({ backups: await recovery.listBackups(), status: await recovery.readStatus() });
+  } catch (err) { sendError(res, err, 'List backups error'); }
+});
+
+router.post('/backups', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const recovery = require('../backupRecovery');
+    const result = await recovery.createBackup();
+    await audit(req.user.userId, 'backup_created', null, { stamp: result.stamp });
+    res.status(201).json(result);
+  } catch (err) { sendError(res, err, 'Create backup error'); }
+});
+
+router.post('/backups/:stamp/validate', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    res.json(await require('../backupRecovery').validateBackup(req.params.stamp));
+  } catch (err) { sendError(res, err, 'Validate backup error'); }
+});
+
+router.get('/backups/:stamp/:kind', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    if (!['database', 'uploads'].includes(req.params.kind)) throw fail(400, 'Choose database or uploads');
+    const files = require('../backupRecovery').backupPaths(req.params.stamp);
+    const file = files[req.params.kind];
+    await fs.promises.access(file, fs.constants.R_OK);
+    res.download(file, path.basename(file));
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Backup file not found' });
+    return sendError(res, err, 'Download backup error');
+  }
+});
+
+router.post('/backups/:stamp/restore', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const expected = `RESTORE ${req.params.stamp}`;
+    if (req.body?.confirmation !== expected) throw fail(400, `Type ${expected} to confirm`);
+    const result = await require('../backupRecovery').restoreBackup(req.params.stamp, query);
+    await audit(req.user.userId, 'backup_restored', null, { stamp: result.stamp, safetyBackup: result.safetyBackup });
+    res.json(result);
+  } catch (err) { sendError(res, err, 'Restore backup error'); }
 });
 
 module.exports = router;

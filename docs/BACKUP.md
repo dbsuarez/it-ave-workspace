@@ -4,6 +4,20 @@ Two things hold all the data: the **PostgreSQL database** (volume `itavenue_db_d
 **uploaded files** (volume `itavenue_uploads`). Back up both, from the same moment where you can.
 Your `.env` (secrets) is a third item: keep a copy somewhere private, never in git.
 
+## Superadmin screen
+
+Open **Moderation → Rules and audit log → Backup and restore**. From there a Superadmin can:
+
+- create a matched database/uploads recovery point;
+- download either file for off-machine storage;
+- validate both files before recovery; and
+- restore a complete pair after typing the displayed `RESTORE <stamp>` confirmation.
+
+A restore first creates a new safety backup, temporarily puts the API in maintenance mode, restores the database and
+uploads together, reapplies current schema migrations, and records the result in `backups/recovery-status.json`.
+The screen intentionally does not accept arbitrary uploads: place an approved matching pair in `backups/` first so it
+can be validated before restore. Keep an off-machine copy because the in-app backup folder is still on this computer.
+
 The commands below were run against this stack and restore verified (same user and message counts
 in the restored copy). They use PowerShell from the repo folder; `POSTGRES_USER` and
 `POSTGRES_DB` come from `.env`.

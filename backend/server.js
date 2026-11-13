@@ -73,6 +73,13 @@ if (config.LOG_REQUESTS) app.use(requestLogger());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use((req, res, next) => {
+  if (require('./src/backupRecovery').isRestoring() && req.originalUrl !== '/api/health') {
+    return res.status(503).json({ error: 'The workspace is temporarily unavailable while a backup is being restored' });
+  }
+  return next();
+});
+
 // Attach io to request for use in routes
 app.use((req, res, next) => {
   req.io = io;

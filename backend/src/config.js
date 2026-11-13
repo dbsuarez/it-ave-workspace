@@ -77,6 +77,7 @@ module.exports = {
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   MAX_FILE_SIZE_MB: parseInt(process.env.MAX_FILE_SIZE_MB || '25', 10),
   UPLOAD_DIR: process.env.UPLOAD_DIR || '/app/uploads',
+  BACKUP_DIR: process.env.BACKUP_DIR || '/backups',
   // extra web origins allowed to call the API (comma separated); the desktop app and local tools always are
   CORS_ORIGINS: process.env.CORS_ORIGINS || '',
   // how long a deleted personal canvas can be restored before it is removed for good

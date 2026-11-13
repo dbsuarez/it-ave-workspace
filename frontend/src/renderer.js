@@ -2911,7 +2911,7 @@ async function loadModerationView() {
       <input type="search" id="moderation-channel-select" list="moderation-channel-options" value="#${escapeHtml(channels.find((channel) => Number(channel.id) === selectedId)?.name || '')}" data-channel-id="${selectedId}" placeholder="Type to find a channel…" aria-label="Search and select channel" autocomplete="off">
       <datalist id="moderation-channel-options">${channels.map((channel) => `<option value="#${escapeHtml(channel.name)}" data-channel-id="${channel.id}"></option>`).join('')}</datalist>
     </div>` : ''}
-    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('rules', 'Rules and audit log', [['timeouts', 'Timeout policy'], ['slowmode', 'Slow mode'], ['launch', 'Launch mode'], ['audit', 'Audit log']], `
+    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('rules', 'Rules and audit log', [['timeouts', 'Timeout policy'], ['slowmode', 'Slow mode'], ['launch', 'Launch mode'], ['audit', 'Audit log'], ['recovery', 'Backup and restore']], `
       <form class="moderation-card moderation-settings" id="admin-timeout-policy" data-moderation-form="settings" data-admin-control-panel="timeouts">
         <h2>Workspace timeout policy</h2>
         <label>Default timeout (minutes)<input name="defaultTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.defaultTimeoutMinutes || 5}" required></label>
@@ -2925,7 +2925,8 @@ async function loadModerationView() {
       <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
     </div>
     <div id="moderation-launch" data-admin-control-panel="launch"></div>
-    <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>`) : ''}
+    <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>
+    <div id="moderation-recovery" data-admin-control-panel="recovery"></div>`) : ''}
     ${channels.length ? '<div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>' : ''}
     ${state.moderation.canManagePersonalChannels ? '<div id="moderation-personal-channel-inventory" data-mod-tab="channels"></div>' : ''}
     ${canRoles ? adminConfiguratorHtml('roles', 'Roles', [['definitions', 'Role definitions'], ['assignments', 'Assignments'], ['access', 'Access check']], '<div id="moderation-roles"></div>') : ''}`;
@@ -2960,7 +2961,59 @@ async function loadModerationView() {
   if (selectedId) await loadModerationChannel(selectedId);
   if (state.moderation.canManagePersonalChannels) await loadPersonalChannelInventory();
   if (state.moderation.isSuperadmin) await loadModerationAudit();
+  if (state.moderation.isSuperadmin) await loadRecoveryPanel();
   if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
+}
+
+function backupSize(bytes) {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function downloadBackup(stamp, kind) {
+  const response = await fetch(`${API_BASE}/api/admin/backups/${encodeURIComponent(stamp)}/${kind}`, {
+    headers: { Authorization: `Bearer ${state.token}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Could not download backup');
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = kind === 'database' ? `db-${stamp}.dump` : `uploads-${stamp}.tar.gz`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+async function loadRecoveryPanel() {
+  const host = document.getElementById('moderation-recovery');
+  if (!host) return;
+  host.innerHTML = '<div class="loading-state">Loading backups…</div>';
+  try {
+    const response = await api('/api/admin/backups');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load backups');
+    const status = data.status || { state: 'idle' };
+    host.innerHTML = `<div class="moderation-card recovery-summary">
+      <div><h2>Workspace backups</h2><p class="admin-help">Each recovery point contains the PostgreSQL database and uploaded files from the same moment. Download copies to another disk or cloud storage.</p></div>
+      <div class="moderation-row-actions"><span class="sidebar-section-badge">${escapeHtml(status.state || 'idle')}</span><button class="btn primary" type="button" data-action="create-backup">Create backup now</button></div>
+      ${status.error ? `<p class="recovery-error">Last operation failed: ${escapeHtml(status.error)}</p>` : ''}
+    </div>
+    <div class="moderation-card recovery-list-card"><h2>Recovery points</h2><div class="moderation-list">${(data.backups || []).map((backup) => `
+      <div class="moderation-row recovery-row">
+        <span><strong>${escapeHtml(backup.stamp)}</strong><small>${backup.complete ? `Database ${backupSize(backup.database.size)} · Uploads ${backupSize(backup.uploads.size)}` : 'Incomplete backup — restore unavailable'}</small></span>
+        <div class="moderation-row-actions">
+          ${backup.database.exists ? `<button class="btn" type="button" data-action="download-backup" data-backup-kind="database" data-backup-stamp="${escapeHtml(backup.stamp)}">Database</button>` : ''}
+          ${backup.uploads.exists ? `<button class="btn" type="button" data-action="download-backup" data-backup-kind="uploads" data-backup-stamp="${escapeHtml(backup.stamp)}">Uploads</button>` : ''}
+          ${backup.complete ? `<button class="btn" type="button" data-action="validate-backup" data-backup-stamp="${escapeHtml(backup.stamp)}">Validate</button><button class="btn danger-outline" type="button" data-action="restore-backup" data-backup-stamp="${escapeHtml(backup.stamp)}">Restore…</button>` : ''}
+        </div>
+      </div>`).join('') || '<p>No backups yet. Create one before making major workspace changes.</p>'}</div></div>`;
+  } catch (err) {
+    host.innerHTML = `<div class="moderation-card"><h2>Backup and restore</h2><p>${escapeHtml(err.message || 'Could not load backups.')}</p></div>`;
+  }
 }
 
 async function loadPersonalChannelInventory() {
@@ -3033,6 +3086,8 @@ async function loadModerationAudit() {
 const AUDIT_ACTION_LABELS = {
   account_role_changed: 'changed the account role for',
   back_to_prelaunch: 'returned the workspace to pre-launch mode',
+  backup_created: 'created a workspace backup',
+  backup_restored: 'restored a workspace backup',
   channel_deleted: 'deleted a channel',
   default_slowmode_changed: 'changed the default slow mode',
   email_changed: 'changed the email address for',
@@ -3344,6 +3399,39 @@ async function handleModerationClick(event) {
     if (action === 'audit-page') {
       moderationAuditQuery.page = Number(button.dataset.page);
       await loadModerationAudit();
+      return;
+    }
+    if (action === 'create-backup') {
+      button.disabled = true;
+      button.textContent = 'Creating…';
+      await checkedApi('/api/admin/backups', 'POST', {});
+      showToast('Database and uploads backup created.', 'success');
+      await loadRecoveryPanel();
+      return;
+    }
+    if (action === 'download-backup') {
+      await downloadBackup(button.dataset.backupStamp, button.dataset.backupKind);
+      return;
+    }
+    if (action === 'validate-backup') {
+      button.disabled = true;
+      button.textContent = 'Validating…';
+      await checkedApi(`/api/admin/backups/${button.dataset.backupStamp}/validate`, 'POST', {});
+      showToast('The database dump and uploads archive are readable.', 'success');
+      await loadRecoveryPanel();
+      return;
+    }
+    if (action === 'restore-backup') {
+      const stamp = button.dataset.backupStamp;
+      const phrase = `RESTORE ${stamp}`;
+      const typed = await askText(`This replaces the current database and uploaded files. A safety backup will be created first. Type ${phrase} to continue.`, { placeholder: phrase, maxLength: 40 });
+      if (typed === null) return;
+      if (typed.trim() !== phrase) { showToast('The confirmation did not match. Nothing was restored.', 'error'); return; }
+      button.disabled = true;
+      button.textContent = 'Restoring…';
+      await checkedApi(`/api/admin/backups/${stamp}/restore`, 'POST', { confirmation: phrase });
+      showToast('Workspace restored. Reloading…', 'success');
+      setTimeout(() => window.location.reload(), 1000);
       return;
     }
     if (action === 'open-channel-audit') {
