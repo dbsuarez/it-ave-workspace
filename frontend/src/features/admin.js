@@ -168,9 +168,26 @@ function renderWorkspaceAdmin() {
   if (!section) return;
   const admin = adminState();
   const channelName = (id) => state.channels.find((channel) => Number(channel.id) === Number(id))?.name || `channel ${id}`;
+  const channelContext = state.moderation.peopleChannelId
+    ? state.channels.find((channel) => Number(channel.id) === Number(state.moderation.peopleChannelId))
+    : null;
+  const channelMembers = new Map((state.moderation.channelMembers || []).map((member) => [Number(member.id), member]));
 
   const userRows = admin.users.map((user) => {
     const self = Number(user.id) === Number(state.user.id);
+    const channelMember = channelContext ? channelMembers.get(Number(user.id)) : null;
+    const channelAccess = channelContext ? `
+      <div class="admin-channel-access">
+        <span class="channel-access-state${channelMember ? ' has-access' : ''}">${channelMember ? 'Has access' : 'No access'}</span>
+        <select data-member-role="${user.id}" aria-label="Channel role for ${escapeHtml(user.username)}">
+          <option value="member"${!channelMember || channelMember.role === 'member' ? ' selected' : ''}>Member</option>
+          <option value="moderator"${channelMember?.role === 'moderator' ? ' selected' : ''}>Moderator</option>
+        </select>
+        <button class="btn" type="button" data-action="save-role" data-member-id="${user.id}">${channelMember ? 'Save role' : 'Add access'}</button>
+        ${channelMember ? `<button class="btn" type="button" data-action="timeout" data-member-id="${user.id}">Timeout</button>` : ''}
+        ${channelMember && !channelContext.availableToAll ? `<button class="btn danger-outline" type="button" data-action="remove-member" data-member-id="${user.id}">Remove access</button>` : ''}
+        ${channelMember && channelContext.availableToAll ? '<span class="form-note">Required for everyone</span>' : ''}
+      </div>` : '';
     return `
       <div class="moderation-row admin-user-row" data-admin-user="${user.id}">
         <span><strong>${escapeHtml(user.username)}</strong>${self ? ' (you)' : ''}<br><small>${escapeHtml(user.email)} · ${user.channelCount} channel${user.channelCount === 1 ? '' : 's'}${user.moderatorChannelCount ? ` · moderator in ${user.moderatorChannelCount}` : ''}</small></span>
@@ -183,6 +200,7 @@ function renderWorkspaceAdmin() {
           ${user.accountType === 'member' ? `<label class="admin-inline-check" title="HR can manage employee records, departments and reporting lines"><input type="checkbox" data-admin-hr${user.isHr ? ' checked' : ''}> HR</label>` : ''}
           <button class="btn" type="button" data-admin-action="save-user"${self ? ' disabled' : ''}>Save</button>
         </div>
+        ${channelAccess}
       </div>`;
   }).join('');
 
@@ -247,7 +265,12 @@ function renderWorkspaceAdmin() {
       ${admin.lastCode ? `<p class="admin-invite-code">New code: <code id="admin-last-code">${escapeHtml(admin.lastCode)}</code> <button class="btn" type="button" data-admin-action="copy-code">Copy</button><br><small>Share it now. It is shown only once and works for one sign-up.</small></p>` : ''}
     </form>
     <div class="moderation-card" data-mod-tab="signup"><h2>Invitations</h2><div class="moderation-list">${invitationRows || '<p>No invitations yet.</p>'}</div></div>
-    <div class="moderation-card" data-mod-tab="people"><h2>Workspace members</h2><div class="moderation-list">${userRows}</div></div>
+    <div class="moderation-card" data-mod-tab="people">
+      <div class="workspace-members-head"><div><h2>Workspace members</h2>${channelContext ? `<p class="admin-help">Managing explicit access to <strong>#${escapeHtml(channelContext.name)}</strong>. Workspace roles and channel permissions may also grant access.</p>` : '<p class="admin-help">Manage workspace accounts and roles from one directory.</p>'}</div>
+        ${channelContext ? '<button class="btn" type="button" data-action="close-channel-people">Show all workspace members</button>' : ''}</div>
+      <input class="workspace-member-search" type="search" placeholder="Search workspace members..." aria-label="Search workspace members" data-workspace-member-search>
+      <div class="moderation-list" data-workspace-member-list>${userRows}</div>
+    </div>
     ${userGroupsAdminHtml()}`;
   renderUserGroupsAdmin();
 }
@@ -400,4 +423,11 @@ async function handleAdminSubmit(event) {
 function setupAdminFeatures() {
   document.addEventListener('click', handleAdminClick);
   document.addEventListener('submit', handleAdminSubmit);
+  document.addEventListener('input', (event) => {
+    if (!event.target.matches?.('[data-workspace-member-search]')) return;
+    const query = event.target.value.trim().toLowerCase();
+    document.querySelectorAll('[data-workspace-member-list] [data-admin-user]').forEach((row) => {
+      row.hidden = Boolean(query) && !row.textContent.toLowerCase().includes(query);
+    });
+  });
 }

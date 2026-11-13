@@ -7409,12 +7409,15 @@ h4.cv-h { font-size: 15px; }
 .pp-tabs-row .pp-tab.active { border-bottom-color: var(--purple); background: transparent; color: var(--text); box-shadow: none; }
 .people-actions .pp-search { width: 260px; }
 
-/* Moderation > Channel members: name, role and actions in fixed columns, all left-aligned */
-.moderation-member-row { display: grid; grid-template-columns: minmax(120px, 1.2fr) 110px minmax(0, 3fr); align-items: center; gap: 12px; justify-content: stretch; }
-.moderation-member-row .moderation-member-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.moderation-member-row .moderation-member-role { text-align: left; color: var(--text-muted); text-transform: capitalize; }
-.moderation-member-row .moderation-row-actions { justify-content: flex-start; }
 .moderation-danger { border-color: rgba(220, 38, 38, 0.45); }
+.workspace-members-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.workspace-members-head h2 { margin-bottom: 4px; }
+.workspace-member-search { width: min(100%, 420px); margin: 10px 0 14px; }
+.admin-user-row { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, auto); }
+.admin-channel-access { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%; padding-top: 10px; border-top: 1px solid var(--border); }
+.channel-access-state { min-width: 76px; color: var(--text-muted); font-size: 12px; font-weight: 700; }
+.channel-access-state.has-access { color: var(--success); }
+.btn.danger-outline { border-color: var(--danger); color: var(--danger); background: transparent; }
 
 /* Per-channel configurator: stable navigation keeps large settings screens scannable. */
 .channel-configurator {
