@@ -5365,14 +5365,19 @@ function renderMarkdown(markdown) {
 // Channel Creation Modal
 // ============================================================
 function openCreateChannelModal({ personal = false, team = false } = {}) {
-  if (!state.moderation.canCreateChannels) {
-    showToast('You do not have permission to create channels.', 'error');
+  const allowed = personal
+    ? state.moderation.canManagePersonalChannels
+    : state.moderation.canCreateChannels;
+  if (!allowed) {
+    showToast(personal
+      ? 'You do not have permission to manage personal channels.'
+      : 'You do not have permission to create shared channels.', 'error');
     return;
   }
   const personalInput = document.getElementById('new-channel-personal');
   state.channelCreationFromOrganizer = document.getElementById('modal-sidebar')?.classList.contains('open') || false;
   personalInput.checked = personal;
-  document.getElementById('new-channel-personal-row').hidden = team;
+  document.getElementById('new-channel-personal-row').hidden = team || !state.moderation.canManagePersonalChannels;
   document.getElementById('new-channel-available-row').hidden = personal || team || !state.moderation.canManageWorkspace;
   document.getElementById('new-channel-available-all').checked = false;
   personalInput.onchange = () => {
