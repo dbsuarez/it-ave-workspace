@@ -4349,8 +4349,10 @@ body.account-guest [data-create="channel"] {
 }
 
 .sidebar-modal-body {
-  height: min(74vh, 780px);
-  max-height: min(74vh, 780px);
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
   overflow: hidden;
   padding: 18px 22px 24px;
 }
@@ -4358,6 +4360,7 @@ body.account-guest [data-create="channel"] {
 #modal-sidebar {
   width: min(1240px, calc(100vw - 48px));
   max-width: 1240px;
+  height: min(88vh, 900px);
 }
 
 .sidebar-organizer-layout {
@@ -4373,6 +4376,8 @@ body.account-guest [data-create="channel"] {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -4610,7 +4615,8 @@ body.account-guest [data-create="channel"] {
 }
 
 @media (max-width: 900px) {
-  .sidebar-modal-body { height: min(78vh, 820px); overflow-y: auto; }
+  #modal-sidebar { height: 88vh; }
+  .sidebar-modal-body { overflow-y: auto; }
   .sidebar-organizer-layout { grid-template-columns: 1fr; height: auto; }
   .sidebar-organizer-destinations,
   .sidebar-channel-pool { max-height: none; overflow: visible; }
