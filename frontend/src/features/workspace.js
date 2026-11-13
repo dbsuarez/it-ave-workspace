@@ -155,9 +155,14 @@ function channelNavItem(channel) {
   const item = document.createElement('div');
   item.className = 'nav-item' + (active ? ' active' : '');
   const unread = channel.unreadCount || 0;
-  item.innerHTML = `<span>#</span><span>${escapeHtml(channel.name)}</span>${unread > 0 && !active ? `<span class="unread-badge">${unread}</span>` : ''}`;
+  const canConfigure = state.moderation.canManageChannels || canModerateChannel(channel.id);
+  item.innerHTML = `<span>#</span><span class="channel-nav-name">${escapeHtml(channel.name)}</span>${unread > 0 && !active ? `<span class="unread-badge">${unread}</span>` : ''}${canConfigure ? `<button type="button" class="channel-nav-settings" title="Channel settings" aria-label="Open settings for ${escapeHtml(channel.name)}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.09A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.16.4.37.74.6 1 .3.3.7.5 1.1.6h.09v4h-.09a1.7 1.7 0 0 0-1.7.4z"/></svg></button>` : ''}`;
   item.title = channel.topic || '';
   item.onclick = (event) => { event.stopPropagation(); openChannel(channel.id); };
+  item.querySelector('.channel-nav-settings')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    openChannelSettings(channel.id);
+  });
   return item;
 }
 

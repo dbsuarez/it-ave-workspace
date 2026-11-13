@@ -606,6 +606,33 @@ body.iav-dev .demo-banner {
 }
 
 .nav-item.active .unread-badge { background: #fff; color: #2A0D36; }
+.channel-nav-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.channel-nav-settings {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  margin: -4px -5px -4px auto;
+  padding: 0;
+  flex: 0 0 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: rgba(255,255,255,0.72);
+  background: transparent;
+  cursor: pointer;
+}
+.channel-nav-settings:hover,
+.channel-nav-settings:focus-visible { color: #fff; background: rgba(255,255,255,0.14); }
+@media (hover: hover) and (pointer: fine) {
+  .channel-nav-settings { opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+  .nav-item:hover .channel-nav-settings,
+  .nav-item:focus-within .channel-nav-settings { opacity: 1; pointer-events: auto; }
+}
 
 .nav-item .dot {
   width: 7px;
@@ -1125,21 +1152,6 @@ body.iav-dev .demo-banner {
 .channel-actions {
   display: flex;
   gap: 8px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  #view-channel #btn-channel-settings:not([hidden]) {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-2px);
-    transition: opacity 140ms ease, transform 140ms ease;
-  }
-  #view-channel .channel-header:hover #btn-channel-settings:not([hidden]),
-  #view-channel #btn-channel-settings:focus-visible {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
-  }
 }
 
 .channel-pins-toggle {

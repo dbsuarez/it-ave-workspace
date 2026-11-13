@@ -2576,6 +2576,7 @@ async function loadModerationAccess() {
     if (nav) nav.hidden = !state.moderation.canManageChannels && !state.moderation.canManageRoles && !state.moderation.moderatorChannelIds.length;
     updateEditTopicVisibility(state.currentChannelId);
     updateChannelSettingsVisibility(state.currentChannelId);
+    renderSidebar();
   } catch (err) {
     console.error('Load moderation access error:', err);
   }
@@ -4104,7 +4105,11 @@ function updateChannelSettingsVisibility(channelId) {
 }
 
 async function openCurrentChannelSettings() {
-  const channel = state.channels.find((item) => Number(item.id) === Number(state.currentChannelId));
+  await openChannelSettings(state.currentChannelId);
+}
+
+async function openChannelSettings(channelId) {
+  const channel = state.channels.find((item) => Number(item.id) === Number(channelId));
   if (!channel || !(state.moderation.canManageChannels || canModerateChannel(channel.id))) return;
   state.moderation.channel = channel;
   state.moderation.tab = 'channels';
