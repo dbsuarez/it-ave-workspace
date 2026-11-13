@@ -7393,6 +7393,7 @@ h4.cv-h { font-size: 15px; }
   border-bottom: 1px solid var(--border);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
+.mod-tabs .lv-tab { font-size: 13px; }
 .admin-page-heading { padding: 6px 0; border-bottom: 1px solid var(--border); }
 .admin-page-heading h2 { margin: 0; font-size: 20px; }
 .admin-page-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
