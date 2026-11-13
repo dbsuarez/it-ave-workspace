@@ -5365,9 +5365,8 @@ function renderMarkdown(markdown) {
 // Channel Creation Modal
 // ============================================================
 function openCreateChannelModal({ personal = false, team = false } = {}) {
-  const allowed = personal
-    ? state.moderation.canManagePersonalChannels
-    : state.moderation.canCreateChannels;
+  const allowed = team
+    || (personal ? state.moderation.canManagePersonalChannels : state.moderation.canCreateChannels);
   if (!allowed) {
     showToast(personal
       ? 'You do not have permission to manage personal channels.'

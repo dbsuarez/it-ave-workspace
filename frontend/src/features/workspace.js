@@ -352,7 +352,7 @@ function renderSidebarModal() {
     ? `<input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-team-section-name aria-label="Team section name">`
     : `<span class="sidebar-section-name-readonly">${escapeHtml(section.name)}</span>`}
           <span class="sidebar-section-badge">${section.editable ? 'My team' : escapeHtml(section.ownerUsername || 'Team')}</span>
-          ${section.editable && state.moderation.canCreateChannels ? '<button class="icon-btn sidebar-section-add" type="button" data-add-team-channel title="Create a team channel" aria-label="Create team channel">+</button>' : ''}
+          ${section.editable ? '<button class="icon-btn sidebar-section-add" type="button" data-add-team-channel title="Create a team channel" aria-label="Create team channel">+</button>' : ''}
           ${section.editable ? '<button class="icon-btn sidebar-section-delete" type="button" data-team-section-delete title="Delete team section" aria-label="Delete team section">&times;</button>' : ''}
         </div>
         <div class="sidebar-section-dropzone">

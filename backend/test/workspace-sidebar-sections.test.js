@@ -45,9 +45,12 @@ test('team leaders create team-only sections and channels for their direct repor
   assert.equal(created.status, 201);
   const sectionId = created.json.section.id;
 
+  // Team leadership, not the workspace-wide create_channels permission, authorizes this channel.
+  await admin.query("UPDATE roles SET permissions = array_remove(permissions, 'create_channels') WHERE builtin_key = 'everyone'");
   const channel = await request(ids.leader, '/api/channels', {
     method: 'POST', body: JSON.stringify({ name: 'zz-mis-only', teamSectionId: sectionId }),
   });
+  await admin.query("UPDATE roles SET permissions = array_append(permissions, 'create_channels') WHERE builtin_key = 'everyone' AND NOT ('create_channels' = ANY(permissions))");
   assert.equal(channel.status, 201);
   assert.equal(Number(channel.json.channel.teamSectionId), Number(sectionId));
 
