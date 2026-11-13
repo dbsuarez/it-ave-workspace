@@ -21,6 +21,9 @@ test('backup identifiers cannot escape the configured backup directory', () => {
 test('backup inventory pairs database and uploads and keeps incomplete points visible', async () => {
   fs.writeFileSync(path.join(backupDir, 'db-20261113-123456.dump'), 'db');
   fs.writeFileSync(path.join(backupDir, 'uploads-20261113-123456.tar.gz'), 'files');
+  fs.writeFileSync(path.join(backupDir, 'manifest-20261113-123456.json'), JSON.stringify({
+    schemaRevision: 999999,
+  }));
   fs.writeFileSync(path.join(backupDir, 'db-20261112-0900.dump'), 'legacy');
   fs.writeFileSync(path.join(backupDir, 'ignore-me.txt'), 'x');
   const list = await recovery.listBackups();
@@ -28,4 +31,6 @@ test('backup inventory pairs database and uploads and keeps incomplete points vi
     ['20261113-123456', true],
     ['20261112-0900', false],
   ]);
+  assert.equal(list[0].compatibility, 'newer-version');
+  assert.equal(list[1].compatibility, 'unverified');
 });

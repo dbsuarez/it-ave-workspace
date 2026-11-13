@@ -74,8 +74,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
-  if (require('./src/backupRecovery').isRestoring() && req.originalUrl !== '/api/health') {
-    return res.status(503).json({ error: 'The workspace is temporarily unavailable while a backup is being restored' });
+  if ((require('./src/backupRecovery').isRestoring() || require('./src/workspaceReset').isResetting()) && req.originalUrl !== '/api/health') {
+    return res.status(503).json({ error: 'The workspace is temporarily unavailable during maintenance' });
   }
   return next();
 });

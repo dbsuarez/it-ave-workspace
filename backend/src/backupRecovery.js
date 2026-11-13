@@ -2,7 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const crypto = require('crypto');
+const { Pool } = require('pg');
 const config = require('./config');
+const migrations = require('./migrations');
+const appVersion = require('../package.json').version;
 
 const run = promisify(execFile);
 const BACKUP_DIR = config.BACKUP_DIR;
@@ -33,7 +37,52 @@ function backupPaths(stamp) {
   return {
     database: path.join(BACKUP_DIR, `db-${stamp}.dump`),
     uploads: path.join(BACKUP_DIR, `uploads-${stamp}.tar.gz`),
+    manifest: path.join(BACKUP_DIR, `manifest-${stamp}.json`),
   };
+}
+
+async function sha256(file) {
+  const hash = crypto.createHash('sha256');
+  await new Promise((resolve, reject) => fs.createReadStream(file).on('data', (chunk) => hash.update(chunk)).on('end', resolve).on('error', reject));
+  return hash.digest('hex');
+}
+
+async function readManifest(file) {
+  try { return JSON.parse(await fs.promises.readFile(file, 'utf8')); } catch { return null; }
+}
+
+async function writeManifest(stamp, files, extra = {}) {
+  const manifest = {
+    format: 1, stamp, createdAt: new Date().toISOString(), appVersion,
+    schemaRevision: migrations.length,
+    checksums: { database: await sha256(files.database), uploads: await sha256(files.uploads) },
+    ...extra,
+  };
+  await fs.promises.writeFile(files.manifest, JSON.stringify(manifest, null, 2));
+  return manifest;
+}
+
+async function applyCurrentMigrations(target) {
+  let pending = migrations.map((sql, index) => ({ sql, index, error: null }));
+  while (pending.length) {
+    const deferred = [];
+    let applied = 0;
+    for (const migration of pending) {
+      try {
+        await target.query(migration.sql);
+        applied += 1;
+      } catch (error) {
+        deferred.push({ ...migration, error });
+      }
+    }
+    if (!deferred.length) return;
+    if (!applied) {
+      const first = deferred[0];
+      first.error.message = `Migration ${first.index + 1} could not be applied: ${first.error.message}`;
+      throw first.error;
+    }
+    pending = deferred;
+  }
 }
 
 async function listBackups() {
@@ -51,7 +100,11 @@ async function listBackups() {
       try { const stat = await fs.promises.stat(file); return { exists: true, size: stat.size, modifiedAt: stat.mtime.toISOString() }; }
       catch { return { exists: false, size: 0, modifiedAt: null }; }
     }));
-    backups.push({ stamp, complete: database.exists && uploads.exists, database, uploads });
+    const manifest = await readManifest(paths.manifest);
+    const compatibility = Number(manifest?.schemaRevision) > migrations.length
+      ? 'newer-version'
+      : manifest?.validatedWithSchemaRevision === migrations.length ? 'compatible' : 'unverified';
+    backups.push({ stamp, complete: database.exists && uploads.exists, database, uploads, manifest, compatibility });
   }
   return backups.sort((a, b) => b.stamp.localeCompare(a.stamp));
 }
@@ -70,6 +123,7 @@ async function createBackup({ reason = 'manual' } = {}) {
     await fs.promises.rename(dbPartial, files.database);
     await run('tar', ['-czf', uploadsPartial, '-C', config.UPLOAD_DIR, '.'], { maxBuffer: 1024 * 1024 });
     await fs.promises.rename(uploadsPartial, files.uploads);
+    await writeManifest(stamp, files);
     await writeStatus({ state: 'ready', stamp, reason });
     return { stamp };
   } catch (err) {
@@ -91,7 +145,35 @@ async function validateBackup(stamp) {
     return path.isAbsolute(clean) || clean.split('/').includes('..');
   });
   if (unsafe) throw Object.assign(new Error('Uploads archive contains an unsafe path'), { status: 400 });
-  return { valid: true, stamp };
+  let manifest = await readManifest(files.manifest);
+  if (Number(manifest?.schemaRevision) > migrations.length) {
+    throw Object.assign(new Error('This backup was created by a newer app version and cannot be restored here'), { status: 400 });
+  }
+  if (manifest?.checksums) {
+    const checksums = { database: await sha256(files.database), uploads: await sha256(files.uploads) };
+    if (checksums.database !== manifest.checksums.database || checksums.uploads !== manifest.checksums.uploads) {
+      throw Object.assign(new Error('Backup checksum verification failed'), { status: 400 });
+    }
+  }
+  const scratch = `itavenue_validate_${process.pid}_${Date.now()}`;
+  const maintenance = new URL(config.DATABASE_URL);
+  maintenance.pathname = '/postgres';
+  const scratchUrl = new URL(config.DATABASE_URL);
+  scratchUrl.pathname = `/${scratch}`;
+  try {
+    await run('createdb', ['--maintenance-db', maintenance.toString(), scratch]);
+    await run('pg_restore', ['--dbname', scratchUrl.toString(), '--no-owner', files.database], { maxBuffer: 16 * 1024 * 1024 });
+    const scratchPool = new Pool({ connectionString: scratchUrl.toString() });
+    try { await applyCurrentMigrations(scratchPool); } finally { await scratchPool.end(); }
+  } finally {
+    await run('dropdb', ['--force', '--maintenance-db', maintenance.toString(), scratch]).catch(() => {});
+  }
+  manifest = await writeManifest(stamp, files, {
+    ...(manifest || { source: 'legacy' }),
+    validatedAt: new Date().toISOString(), validatedWithAppVersion: appVersion,
+    validatedWithSchemaRevision: migrations.length,
+  });
+  return { valid: true, compatible: true, stamp, manifest };
 }
 
 async function restoreBackup(stamp, query) {
@@ -115,8 +197,7 @@ async function restoreBackup(stamp, query) {
     for (const name of await fs.promises.readdir(extracted)) {
       await fs.promises.cp(path.join(extracted, name), path.join(config.UPLOAD_DIR, name), { recursive: true });
     }
-    const migrations = require('./migrations');
-    for (const sql of migrations) await query(sql);
+    await applyCurrentMigrations({ query });
     await writeStatus({ state: 'restored', stamp, safetyBackup: safetyBackup.stamp });
     return { restored: true, stamp, safetyBackup: safetyBackup.stamp };
   } catch (err) {
@@ -128,4 +209,4 @@ async function restoreBackup(stamp, query) {
   }
 }
 
-module.exports = { backupPaths, createBackup, isRestoring: () => activeOperation === 'restore', listBackups, readStatus, restoreBackup, validateBackup };
+module.exports = { applyCurrentMigrations, backupPaths, createBackup, isRestoring: () => activeOperation === 'restore', listBackups, readStatus, restoreBackup, validateBackup };

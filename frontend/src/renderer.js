@@ -2852,7 +2852,7 @@ function adminConfiguratorHtml(tab, label, sections, content = '') {
   state.moderation.adminSections[tab] = selected;
   return `<div class="admin-control-configurator" data-mod-tab="${tab}" data-admin-configurator="${tab}">
     <nav class="admin-control-nav" aria-label="${escapeHtml(label)} controls">
-      ${sections.map(([key, title]) => `<button type="button" class="admin-control-nav-item${selected === key ? ' active' : ''}" data-admin-section-tab="${key}">${escapeHtml(title)}</button>`).join('')}
+      ${sections.map(([key, title]) => `<button type="button" class="admin-control-nav-item${selected === key ? ' active' : ''}${tab === 'superadmin' ? ' superadmin-only' : ''}" data-admin-section-tab="${key}"${tab === 'superadmin' ? ' title="Superadmin only"' : ''}>${escapeHtml(title)}</button>`).join('')}
     </nav>
     <div class="admin-control-content" data-admin-tab-content="${tab}">${content}</div>
   </div>`;
@@ -2890,16 +2890,17 @@ async function loadModerationView() {
     signup: ['Sign-up and invitations', 'Control account registration, invitations, and pre-launch access.'],
     roles: ['Roles', 'Define workspace roles and review the permissions assigned to people.'],
     rules: ['Rules and audit log', 'Set workspace-wide chat rules and review administrative activity.'],
+    superadmin: ['Superadmin', 'Back up, restore, reset, and control workspace launch state.'],
   };
   const tabKeys = state.moderation.isSuperadmin
-    ? ['channels', 'people', 'signup', 'roles', 'rules']
+    ? ['channels', 'people', 'signup', 'roles', 'rules', 'superadmin']
     : [...(channels.length || state.moderation.canManagePersonalChannels ? ['channels'] : []), ...(canRoles ? ['roles'] : [])];
   const tabs = tabKeys.map((key) => [key, ...tabDefinitions[key]]);
   if (!tabs.some(([key]) => key === state.moderation.tab)) state.moderation.tab = tabs.length ? tabs[0][0] : 'channels';
   container.dataset.tab = state.moderation.tab;
   const activeTab = tabs.find(([key]) => key === state.moderation.tab) || tabs[0];
   container.innerHTML = `
-    ${tabs.length > 1 ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label, description]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" data-tab-title="${escapeHtml(label)}" data-tab-description="${escapeHtml(description)}" role="tab" aria-selected="${state.moderation.tab === key}">${escapeHtml(label)}</button>`).join('')}</div>` : ''}
+    ${tabs.length > 1 ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label, description]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}${['people', 'signup', 'rules', 'superadmin'].includes(key) ? ' superadmin-only' : ''}" data-mod-tab-button="${key}" data-tab-title="${escapeHtml(label)}" data-tab-description="${escapeHtml(description)}" role="tab" aria-selected="${state.moderation.tab === key}"${['people', 'signup', 'rules', 'superadmin'].includes(key) ? ' title="Superadmin only"' : ''}>${escapeHtml(label)}</button>`).join('')}</div>` : ''}
     <header class="admin-page-heading">
       <h2 data-admin-page-title>${escapeHtml(activeTab?.[1] || 'Administration')}</h2>
       <p data-admin-page-description>${escapeHtml(activeTab?.[2] || '')}</p>
@@ -2911,7 +2912,7 @@ async function loadModerationView() {
       <input type="search" id="moderation-channel-select" list="moderation-channel-options" value="#${escapeHtml(channels.find((channel) => Number(channel.id) === selectedId)?.name || '')}" data-channel-id="${selectedId}" placeholder="Type to find a channel…" aria-label="Search and select channel" autocomplete="off">
       <datalist id="moderation-channel-options">${channels.map((channel) => `<option value="#${escapeHtml(channel.name)}" data-channel-id="${channel.id}"></option>`).join('')}</datalist>
     </div>` : ''}
-    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('rules', 'Rules and audit log', [['timeouts', 'Timeout policy'], ['slowmode', 'Slow mode'], ['launch', 'Launch mode'], ['audit', 'Audit log'], ['recovery', 'Backup and restore']], `
+    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('rules', 'Rules and audit log', [['timeouts', 'Timeout policy'], ['slowmode', 'Slow mode'], ['audit', 'Audit log']], `
       <form class="moderation-card moderation-settings" id="admin-timeout-policy" data-moderation-form="settings" data-admin-control-panel="timeouts">
         <h2>Workspace timeout policy</h2>
         <label>Default timeout (minutes)<input name="defaultTimeoutMinutes" type="number" min="1" max="10080" value="${state.moderation.settings?.defaultTimeoutMinutes || 5}" required></label>
@@ -2924,13 +2925,15 @@ async function loadModerationView() {
       <div class="moderation-inline"><label>Default for new channels (seconds)<input id="slowmode-default" type="number" min="0" max="3600" value="5"></label><button class="btn primary" type="button" data-action="save-default-slowmode">Save default</button></div>
       <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
     </div>
-    <div id="moderation-launch" data-admin-control-panel="launch"></div>
-    <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>
-    <div id="moderation-recovery" data-admin-control-panel="recovery"></div>`) : ''}
+    <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>`) : ''}
+    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('superadmin', 'Superadmin', [['recovery', 'Backup and restore'], ['reset', 'Workspace reset'], ['launch', 'Launch mode']], `
+      <div id="moderation-recovery" data-admin-control-panel="recovery"></div>
+      <div id="moderation-workspace-reset" data-admin-control-panel="reset"></div>
+      <div id="moderation-launch" data-admin-control-panel="launch"></div>`) : ''}
     ${channels.length ? '<div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>' : ''}
     ${state.moderation.canManagePersonalChannels ? '<div id="moderation-personal-channel-inventory" data-mod-tab="channels"></div>' : ''}
     ${canRoles ? adminConfiguratorHtml('roles', 'Roles', [['definitions', 'Role definitions'], ['assignments', 'Assignments'], ['access', 'Access check']], '<div id="moderation-roles"></div>') : ''}`;
-  ['people', 'signup', 'roles', 'rules'].forEach(syncAdminConfigurator);
+  ['people', 'signup', 'roles', 'rules', 'superadmin'].forEach(syncAdminConfigurator);
   if (canRoles && state.moderation.tab === 'roles') loadRolesPanel();
   if (state.moderation.isSuperadmin && typeof loadLaunchCard === 'function') loadLaunchCard();
   if (state.moderation.isSuperadmin) {
@@ -2962,6 +2965,7 @@ async function loadModerationView() {
   if (state.moderation.canManagePersonalChannels) await loadPersonalChannelInventory();
   if (state.moderation.isSuperadmin) await loadModerationAudit();
   if (state.moderation.isSuperadmin) await loadRecoveryPanel();
+  if (state.moderation.isSuperadmin) await loadWorkspaceResetPanel();
   if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
 }
 
@@ -2999,20 +3003,41 @@ async function loadRecoveryPanel() {
     const status = data.status || { state: 'idle' };
     host.innerHTML = `<div class="moderation-card recovery-summary">
       <div><h2>Workspace backups</h2><p class="admin-help">Each recovery point contains the PostgreSQL database and uploaded files from the same moment. Download copies to another disk or cloud storage.</p></div>
-      <div class="moderation-row-actions"><span class="sidebar-section-badge">${escapeHtml(status.state || 'idle')}</span><button class="btn primary" type="button" data-action="create-backup">Create backup now</button></div>
+      <div class="moderation-row-actions"><span class="sidebar-section-badge">${escapeHtml(status.state || 'idle')}</span><button class="btn primary superadmin-only" type="button" data-action="create-backup" title="Superadmin only">Create backup now</button></div>
       ${status.error ? `<p class="recovery-error">Last operation failed: ${escapeHtml(status.error)}</p>` : ''}
     </div>
     <div class="moderation-card recovery-list-card"><h2>Recovery points</h2><div class="moderation-list">${(data.backups || []).map((backup) => `
       <div class="moderation-row recovery-row">
-        <span><strong>${escapeHtml(backup.stamp)}</strong><small>${backup.complete ? `Database ${backupSize(backup.database.size)} · Uploads ${backupSize(backup.uploads.size)}` : 'Incomplete backup — restore unavailable'}</small></span>
+        <span><strong>${escapeHtml(backup.stamp)}</strong><small>${backup.complete ? `Database ${backupSize(backup.database.size)} · Uploads ${backupSize(backup.uploads.size)} · ${backup.compatibility === 'compatible' ? 'Compatible' : backup.compatibility === 'newer-version' ? 'Newer version — restore unavailable' : 'Not yet validated'}` : 'Incomplete backup — restore unavailable'}</small></span>
         <div class="moderation-row-actions">
-          ${backup.database.exists ? `<button class="btn" type="button" data-action="download-backup" data-backup-kind="database" data-backup-stamp="${escapeHtml(backup.stamp)}">Database</button>` : ''}
-          ${backup.uploads.exists ? `<button class="btn" type="button" data-action="download-backup" data-backup-kind="uploads" data-backup-stamp="${escapeHtml(backup.stamp)}">Uploads</button>` : ''}
-          ${backup.complete ? `<button class="btn" type="button" data-action="validate-backup" data-backup-stamp="${escapeHtml(backup.stamp)}">Validate</button><button class="btn danger-outline" type="button" data-action="restore-backup" data-backup-stamp="${escapeHtml(backup.stamp)}">Restore…</button>` : ''}
+          ${backup.database.exists ? `<button class="btn superadmin-only" type="button" data-action="download-backup" data-backup-kind="database" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Database</button>` : ''}
+          ${backup.uploads.exists ? `<button class="btn superadmin-only" type="button" data-action="download-backup" data-backup-kind="uploads" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Uploads</button>` : ''}
+          ${backup.complete && backup.compatibility !== 'newer-version' ? `<button class="btn superadmin-only" type="button" data-action="validate-backup" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Validate</button><button class="btn danger-outline superadmin-only" type="button" data-action="restore-backup" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Restore…</button>` : ''}
         </div>
       </div>`).join('') || '<p>No backups yet. Create one before making major workspace changes.</p>'}</div></div>`;
   } catch (err) {
     host.innerHTML = `<div class="moderation-card"><h2>Backup and restore</h2><p>${escapeHtml(err.message || 'Could not load backups.')}</p></div>`;
+  }
+}
+
+async function loadWorkspaceResetPanel() {
+  const host = document.getElementById('moderation-workspace-reset');
+  if (!host) return;
+  try {
+    const response = await api('/api/admin/workspace-reset/preview');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not preview workspace reset');
+    const counts = data.counts || {};
+    host.innerHTML = `<div class="moderation-card moderation-danger workspace-reset-card">
+      <div><h2>Clean workspace content</h2><p class="admin-help">Preserves employees, reporting lines, departments, roles, permissions, channels, sections, settings, and integrations. Deletes shared and private content, workforce test records, audit history, and uploaded files.</p></div>
+      <div class="workspace-reset-counts">
+        ${[['Messages and DMs', counts.messages], ['Uploaded files', counts.files], ['Canvases', counts.canvases], ['Lists', counts.lists], ['Audit entries', counts.auditEntries], ['Saved and scheduled items', counts.personalItems], ['Attendance and leave records', counts.workforceRecords]].map(([label, value]) => `<span><strong>${Number(value || 0).toLocaleString()}</strong><small>${escapeHtml(label)}</small></span>`).join('')}
+      </div>
+      <p class="recovery-error">All users will be signed out. A validated safety backup is mandatory and a clean-baseline backup is created afterward.</p>
+      <button class="btn danger superadmin-only" type="button" data-action="reset-workspace" title="Superadmin only">Reset workspace…</button>
+    </div>`;
+  } catch (err) {
+    host.innerHTML = `<div class="moderation-card"><h2>Workspace reset</h2><p>${escapeHtml(err.message || 'Could not preview the reset.')}</p></div>`;
   }
 }
 
@@ -3432,6 +3457,18 @@ async function handleModerationClick(event) {
       await checkedApi(`/api/admin/backups/${stamp}/restore`, 'POST', { confirmation: phrase });
       showToast('Workspace restored. Reloading…', 'success');
       setTimeout(() => window.location.reload(), 1000);
+      return;
+    }
+    if (action === 'reset-workspace') {
+      const phrase = 'RESET WORKSPACE';
+      const typed = await askText(`This permanently clears all workspace content and signs everyone out. Accounts, roles, channels, sections, and settings remain. A validated safety backup is created first. Type ${phrase} to continue.`, { placeholder: phrase, maxLength: 40 });
+      if (typed === null) return;
+      if (typed.trim() !== phrase) { showToast('The confirmation did not match. Nothing was reset.', 'error'); return; }
+      button.disabled = true;
+      button.textContent = 'Creating safety backup and resetting…';
+      await checkedApi('/api/admin/workspace-reset', 'POST', { confirmation: phrase });
+      showToast('Workspace reset complete. Everyone must sign in again.', 'success');
+      setTimeout(() => window.location.reload(), 1200);
       return;
     }
     if (action === 'open-channel-audit') {

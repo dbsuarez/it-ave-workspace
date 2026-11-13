@@ -7684,6 +7684,19 @@ h4.cv-h { font-size: 15px; }
 #moderation-content:not([data-tab="signup"]) [data-mod-tab="signup"],
 #moderation-content:not([data-tab="roles"]) [data-mod-tab="roles"],
 #moderation-content:not([data-tab="rules"]) [data-mod-tab="rules"] { display: none; }
+#moderation-content:not([data-tab="superadmin"]) [data-mod-tab="superadmin"] { display: none; }
+
+.superadmin-only::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  vertical-align: middle;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 14%, transparent);
+}
 
 @media (max-width: 900px) {
   .mod-tabs { margin-inline: -24px; overflow-x: auto; }
@@ -7721,6 +7734,10 @@ h4.cv-h { font-size: 15px; }
 .recovery-summary .moderation-row-actions { justify-content: flex-end; }
 .recovery-error { grid-column: 1 / -1; color: var(--danger); font-size: 13px; }
 .recovery-row small { display: block; margin-top: 3px; color: var(--text-muted); }
+.workspace-reset-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
+.workspace-reset-counts span { display: grid; gap: 2px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--muted-bg); }
+.workspace-reset-counts strong { font-size: 20px; }
+.workspace-reset-counts small { color: var(--text-muted); }
 @media (max-width: 760px) {
   .recovery-summary { grid-template-columns: 1fr; }
   .recovery-summary .moderation-row-actions { justify-content: flex-start; }
