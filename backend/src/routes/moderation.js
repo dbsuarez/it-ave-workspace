@@ -50,6 +50,7 @@ router.get('/access', async (req, res) => {
     );
     res.json({
       canManageRoles: await can(query, req.user.userId, 'manage_roles'),
+      canManageChannels: await can(query, req.user.userId, 'manage_channels'),
       isSuperadmin: Boolean(result.rows[0]?.is_superadmin),
       isHr: Boolean(result.rows[0]?.is_hr),
       accountType: result.rows[0]?.account_type || 'member',

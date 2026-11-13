@@ -11,8 +11,13 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
       SELECT c.id, c.name, c.topic, c.is_private, c.available_to_all, c.created_at, c.created_by,
+             creator.username AS creator_username, creator.first_name AS creator_first_name,
+             creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
+             creator.avatar_color AS creator_avatar_color,
+             CASE WHEN creator.photo_file IS NOT NULL THEN EXTRACT(EPOCH FROM creator.photo_updated_at)::bigint ELSE NULL END AS creator_photo_version,
              COUNT(cm.user_id)::int AS member_count
       FROM channels c
+      LEFT JOIN users creator ON creator.id = c.created_by
       LEFT JOIN channel_members cm ON c.id = cm.channel_id
       WHERE (c.is_private = FALSE AND NOT EXISTS (
         SELECT 1 FROM users g WHERE g.id = $1 AND g.account_type = 'guest'
@@ -20,7 +25,7 @@ router.get('/', authenticateToken, async (req, res) => {
         SELECT 1 FROM channel_members mine
         WHERE mine.channel_id = c.id AND mine.user_id = $1
       ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)
-      GROUP BY c.id
+      GROUP BY c.id, creator.id
       ORDER BY c.name
     `, [req.user.userId]);
 
@@ -34,6 +39,12 @@ router.get('/', authenticateToken, async (req, res) => {
         memberCount: ch.member_count,
         createdAt: ch.created_at,
         createdBy: ch.created_by,
+        creatorUsername: ch.creator_username,
+        creatorFirstName: ch.creator_first_name,
+        creatorMiddleName: ch.creator_middle_name,
+        creatorLastName: ch.creator_last_name,
+        creatorAvatarColor: ch.creator_avatar_color,
+        creatorPhotoVersion: ch.creator_photo_version,
       })),
     });
   } catch (err) {
@@ -47,9 +58,14 @@ router.get('/my', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
       SELECT c.id, c.name, c.topic, c.is_private, c.available_to_all, c.created_at, c.created_by,
+             creator.username AS creator_username, creator.first_name AS creator_first_name,
+             creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
+             creator.avatar_color AS creator_avatar_color,
+             CASE WHEN creator.photo_file IS NOT NULL THEN EXTRACT(EPOCH FROM creator.photo_updated_at)::bigint ELSE NULL END AS creator_photo_version,
              COUNT(DISTINCT cm2.user_id)::int AS member_count,
              COUNT(DISTINCT m.id)::int AS unread_count
       FROM channels c
+      LEFT JOIN users creator ON creator.id = c.created_by
       LEFT JOIN channel_members cm ON c.id = cm.channel_id
       LEFT JOIN channel_members cm2 ON c.id = cm2.channel_id
       LEFT JOIN messages m
@@ -63,7 +79,7 @@ router.get('/my', authenticateToken, async (req, res) => {
       WHERE cm.user_id = $1 OR c.available_to_all = TRUE OR EXISTS (
         SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE
       )
-      GROUP BY c.id
+      GROUP BY c.id, creator.id
       ORDER BY c.name
     `, [req.user.userId]);
 
@@ -77,6 +93,12 @@ router.get('/my', authenticateToken, async (req, res) => {
         memberCount: ch.member_count,
         createdAt: ch.created_at,
         createdBy: ch.created_by,
+        creatorUsername: ch.creator_username,
+        creatorFirstName: ch.creator_first_name,
+        creatorMiddleName: ch.creator_middle_name,
+        creatorLastName: ch.creator_last_name,
+        creatorAvatarColor: ch.creator_avatar_color,
+        creatorPhotoVersion: ch.creator_photo_version,
         unreadCount: ch.unread_count || 0,
       })),
     });

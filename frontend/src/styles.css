@@ -4156,6 +4156,41 @@ body.account-guest [data-create="channel"] {
 
 #modal-sidebar .modal-section-title:first-child { margin-top: 0; }
 
+.sidebar-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 10px;
+}
+
+.sidebar-section-title-row .modal-section-title { margin: 0; }
+
+.sidebar-organizer-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-organizer-tab {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sidebar-organizer-tab.active { border-color: var(--primary); background: var(--primary); color: #fff; }
+.sidebar-organizer-panel[hidden] { display: none; }
+
 #workspace-sidebar-sections,
 #sidebar-sections {
   display: grid;
@@ -4196,6 +4231,15 @@ body.account-guest [data-create="channel"] {
 .sidebar-section-card-head input:focus {
   border-color: var(--primary);
   background: var(--surface);
+}
+
+.sidebar-section-name-readonly {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
 }
 
 .sidebar-section-badge {
@@ -4258,8 +4302,18 @@ body.account-guest [data-create="channel"] {
   color: var(--text);
 }
 .sidebar-channel-name:focus { border-color: var(--primary); background: var(--surface); outline: none; }
+.sidebar-channel-name-readonly { cursor: default; }
 .sidebar-channel-owner { flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; }
-.sidebar-channel-delete { width: 26px; height: 26px; color: var(--text-muted); }
+.sidebar-channel-delete,
+.sidebar-section-delete {
+  width: 26px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+  background: transparent;
+}
+.sidebar-channel-delete:hover,
+.sidebar-section-delete:hover { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .sidebar-other-personal { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .sidebar-other-personal summary { padding: 10px 12px; cursor: pointer; font-size: 12px; font-weight: 800; }
 .sidebar-other-personal summary span { color: var(--text-muted); margin-left: 4px; }

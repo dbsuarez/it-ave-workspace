@@ -143,7 +143,7 @@ let state = {
     statusType: '',
   },
   files: [],
-  moderation: { isSuperadmin: false, isHr: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels' },
+  moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels' },
   notes: [],
   lists: [],
   listMembers: [],
@@ -2560,6 +2560,7 @@ async function loadModerationAccess() {
     state.moderation.isSuperadmin = Boolean(data.isSuperadmin);
     state.moderation.isHr = Boolean(data.isHr);
     state.moderation.canManageRoles = Boolean(data.canManageRoles);
+    state.moderation.canManageChannels = Boolean(data.canManageChannels);
     if (typeof refreshLeaveSummary === 'function' && state.moderation.accountType !== 'guest') refreshLeaveSummary();
     if (typeof refreshAttendanceSummary === 'function' && state.moderation.accountType !== 'guest') refreshAttendanceSummary();
     state.moderation.moderatorChannelIds = data.moderatorChannelIds || [];
@@ -3379,9 +3380,9 @@ function renderActivity() {
 function handleDocumentClick(event) {
   // Clicking an image attachment opens the lightbox (wired on the element directly)
   // Clicking any avatar opens the profile context menu
-  const avatar = event.target.closest('[data-user-id]');
+  const avatar = event.target.closest('[data-user-id], [data-avatar-user]');
   if (avatar) {
-    const userId = avatar.getAttribute('data-user-id');
+    const userId = avatar.getAttribute('data-user-id') || avatar.getAttribute('data-avatar-user');
     if (userId) {
       handleAvatarContextClick(avatar, event);
       return;
@@ -3472,7 +3473,7 @@ function positionUserContextMenu(menu, anchor) {
 function handleAvatarContextClick(avatar, event) {
   event.preventDefault();
   event.stopPropagation();
-  const userId = avatar.getAttribute('data-user-id');
+  const userId = avatar.getAttribute('data-user-id') || avatar.getAttribute('data-avatar-user');
   if (!userId) return false;
   const container = avatar.closest('.message, .reaction-row, .later-item, .read-receipt-avatar, .dm-item, .user-profile-avatar, .huddle-participant');
   const name = container?.querySelector?.('.name, .reaction-row-name, .later-item-title strong, .dm-name, .huddle-participant-name')?.textContent

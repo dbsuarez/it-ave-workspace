@@ -249,6 +249,7 @@ function openSidebarModal() {
   state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
   state.sidebarAvailabilityDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, Boolean(channel.availableToAll)]));
   state.sidebarChannelNameDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, channel.name]));
+  state.sidebarOrganizerTab = state.sidebarOrganizerTab || 'workspace';
   renderSidebarModal();
   openSettingsModal(document.getElementById('modal-sidebar'));
 }
@@ -258,27 +259,40 @@ function renderSidebarModal() {
   const workspaceDraft = state.workspaceSidebarDraft || { sections: [] };
   const canManageWorkspace = Boolean(draft.canManageWorkspaceSections);
   const channelById = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
+  const canRenameChannel = (channel, readOnly) => !readOnly && Boolean(state.user?.isSuperadmin
+    || state.moderation?.canManageChannels
+    || Number(channel.createdBy) === Number(state.user?.id)
+    || state.moderation?.moderatorChannelIds?.some((id) => Number(id) === Number(channel.id)));
+  const canDeleteOrganizerChannel = (channel, readOnly) => !readOnly && Boolean(state.user?.isSuperadmin
+    || state.moderation?.canManageChannels
+    || Number(channel.createdBy) === Number(state.user?.id));
+  const creatorName = (channel) => [channel.creatorFirstName, channel.creatorMiddleName, channel.creatorLastName]
+    .filter(Boolean).join(' ') || channel.creatorUsername || 'Unknown owner';
   const channelCard = (channel, movable = true, showOwner = false) => `
     <div class="sidebar-channel-card${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
-      <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channels are managed centrally'}" aria-label="${movable ? 'Drag channel' : 'Locked workspace channel'}">⋮⋮</span>
-      ${showOwner ? `<button type="button" class="avatar-mini sidebar-channel-owner" data-avatar-user="${channel.createdBy}" title="Channel owner" aria-label="Open channel owner menu">${escapeHtml((channel.creatorUsername || '?').charAt(0).toUpperCase())}</button>` : ''}
-      <input class="sidebar-channel-name" data-channel-name="${channel.id}" value="${escapeHtml(state.sidebarChannelNameDraft[channel.id] || channel.name)}" aria-label="Channel name">
+      ${showOwner ? '' : `<span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channels are managed centrally'}" aria-label="${movable ? 'Drag channel' : 'Locked workspace channel'}">⋮⋮</span>`}
+      ${showOwner ? `<button type="button" class="avatar-mini sidebar-channel-owner" data-avatar-user="${channel.createdBy}" data-user-id="${channel.createdBy}" data-organizer-owner="${channel.id}" title="${escapeHtml(creatorName(channel))}" aria-label="Open ${escapeHtml(creatorName(channel))}'s menu" style="background:${escapeHtml(channel.creatorAvatarColor || '#64748b')}">${escapeHtml(creatorName(channel).charAt(0).toUpperCase())}</button>` : ''}
+      ${canRenameChannel(channel, showOwner)
+    ? `<input class="sidebar-channel-name" data-channel-name="${channel.id}" value="${escapeHtml(state.sidebarChannelNameDraft[channel.id] || channel.name)}" aria-label="Channel name">`
+    : `<span class="sidebar-channel-name sidebar-channel-name-readonly">${escapeHtml(channel.name)}</span>`}
       ${state.user?.isSuperadmin && !showOwner ? `<label class="sidebar-available-all"><input type="checkbox" data-channel-available-all="${channel.id}"${state.sidebarAvailabilityDraft[channel.id] ? ' checked' : ''}> Visible to all</label>` : ''}
-      <button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>
+      ${canDeleteOrganizerChannel(channel, showOwner) ? `<button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>` : ''}
     </div>`;
   const sectionChannels = (section, movable) => section.channelIds
     .map((id) => channelById.get(Number(id))).filter(Boolean).map((channel) => channelCard(channel, movable)).join('');
 
   const workspaceEditor = document.getElementById('workspace-sidebar-editor');
-  workspaceEditor.hidden = false;
   workspaceEditor.classList.toggle('read-only', !canManageWorkspace);
   document.getElementById('btn-add-workspace-sidebar-section').hidden = !canManageWorkspace;
+  document.getElementById('workspace-sidebar-readonly-note').hidden = canManageWorkspace;
   document.getElementById('workspace-sidebar-sections').innerHTML = workspaceDraft.sections.length
     ? workspaceDraft.sections.map((section, index) => `
       <div class="sidebar-section-card workspace" data-workspace-section-index="${index}">
         <div class="sidebar-section-card-head">
           <span class="sidebar-drag-handle" ${canManageWorkspace ? 'draggable="true"' : ''} title="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}" aria-label="${canManageWorkspace ? 'Drag to reorder' : 'Workspace section'}">⋮⋮</span>
-          <input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-workspace-section-name aria-label="Workspace section name"${canManageWorkspace ? '' : ' readonly'}>
+          ${canManageWorkspace
+    ? `<input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-workspace-section-name aria-label="Workspace section name">`
+    : `<span class="sidebar-section-name-readonly">${escapeHtml(section.name)}</span>`}
           ${canManageWorkspace ? '<button class="icon-btn" type="button" data-add-channel-to-section title="Add a channel to this section" aria-label="Add channel">+</button><button class="btn danger-text" type="button" data-workspace-section-delete>Delete</button>' : '<span class="sidebar-section-badge">Workspace</span>'}
         </div>
         <div class="sidebar-section-dropzone" data-drop-scope="workspace" data-drop-section-id="${escapeHtml(section.id)}">
@@ -293,7 +307,7 @@ function renderSidebarModal() {
         <div class="sidebar-section-card-head">
           <span class="sidebar-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">⋮⋮</span>
           <input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-section-name aria-label="Section name">
-          <button class="icon-btn" type="button" data-add-channel-to-section title="Add a channel to this section" aria-label="Add channel">+</button><button class="btn danger-text" type="button" data-section-delete>Delete</button>
+          <button class="icon-btn" type="button" data-add-channel-to-section title="Add a channel to this section" aria-label="Add channel">+</button><button class="icon-btn sidebar-section-delete" type="button" data-section-delete title="Delete section" aria-label="Delete section">&times;</button>
         </div>
         <div class="sidebar-section-dropzone" data-drop-scope="personal" data-drop-section-id="${escapeHtml(section.id)}">
           ${sectionChannels(section, true) || '<p class="sidebar-drop-hint">Drop channels here</p>'}
@@ -307,11 +321,31 @@ function renderSidebarModal() {
   document.getElementById('sidebar-channels').innerHTML = `
     <div class="sidebar-unassigned-dropzone" data-drop-unassigned>
       ${unassigned.map((channel) => channelCard(channel, true)).join('') || '<p class="sidebar-drop-hint">All channels are organized</p>'}
-    </div>
-    <details class="sidebar-other-personal"><summary>Personal (Others) <span>${otherPersonal.length}</span></summary>
-      <div class="sidebar-unassigned-dropzone">${otherPersonal.map((channel) => channelCard(channel, true, true)).join('') || '<p class="sidebar-drop-hint">No personal channels from other owners</p>'}</div>
-    </details>`;
+    </div>`;
+  document.getElementById('sidebar-other-channels').innerHTML = `
+    <div class="sidebar-unassigned-dropzone sidebar-other-personal-list">
+      ${otherPersonal.map((channel) => channelCard(channel, false, true)).join('') || '<p class="sidebar-drop-hint">No personal channels from other owners</p>'}
+    </div>`;
   if (typeof paintAvatarsIn === 'function') paintAvatarsIn(document.getElementById('modal-sidebar'));
+  document.querySelectorAll('#modal-sidebar [data-organizer-owner]').forEach((avatar) => {
+    const channel = channelById.get(Number(avatar.dataset.organizerOwner));
+    if (!channel || typeof paintAvatar !== 'function') return;
+    paintAvatar(avatar, { id: channel.createdBy, photoVersion: channel.creatorPhotoVersion }, creatorName(channel).charAt(0).toUpperCase());
+  });
+  setSidebarOrganizerTab(state.sidebarOrganizerTab);
+}
+
+function setSidebarOrganizerTab(tab) {
+  const selected = ['workspace', 'mine', 'unassigned', 'others'].includes(tab) ? tab : 'workspace';
+  state.sidebarOrganizerTab = selected;
+  document.querySelectorAll('#modal-sidebar [data-sidebar-tab]').forEach((button) => {
+    const active = button.dataset.sidebarTab === selected;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  document.querySelectorAll('#modal-sidebar [data-sidebar-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.sidebarPanel !== selected;
+  });
 }
 
 // Copies what is typed in the dialog back into the draft before re-rendering.
@@ -324,7 +358,8 @@ function syncSidebarDraft() {
   });
   document.querySelectorAll('#workspace-sidebar-sections [data-workspace-section-index]').forEach((row) => {
     const section = workspaceDraft.sections[Number(row.dataset.workspaceSectionIndex)];
-    if (section) section.name = row.querySelector('[data-workspace-section-name]').value;
+    const input = row.querySelector('[data-workspace-section-name]');
+    if (section && input) section.name = input.value;
   });
   document.querySelectorAll('#modal-sidebar [data-channel-available-all]').forEach((input) => {
     state.sidebarAvailabilityDraft[input.dataset.channelAvailableAll] = input.checked;
@@ -407,6 +442,8 @@ function clearSidebarDragState() {
 
 function handleSidebarModalClick(event) {
   const draft = state.sidebarDraft;
+  const tab = event.target.closest('[data-sidebar-tab]');
+  if (tab) { setSidebarOrganizerTab(tab.dataset.sidebarTab); return; }
   const addToSection = event.target.closest('[data-add-channel-to-section]');
   if (addToSection) {
     syncSidebarDraft();
