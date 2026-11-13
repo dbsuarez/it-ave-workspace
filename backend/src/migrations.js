@@ -18,6 +18,7 @@ module.exports = [
   'ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS available_to_all BOOLEAN NOT NULL DEFAULT FALSE',
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT FALSE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS command_scope VARCHAR(50)',
   `INSERT INTO channels (name, topic, is_private, available_to_all, command_scope)
    VALUES ('hr-inquiry', 'Ask HR questions or use private self-service commands. Ordinary messages remain visible to channel members.', FALSE, TRUE, 'hr-inquiry')

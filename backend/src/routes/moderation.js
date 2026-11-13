@@ -63,6 +63,31 @@ router.get('/access', async (req, res) => {
   }
 });
 
+// Owners may audit that personal channels exist, but never receive membership or content access.
+router.get('/personal-channels', async (req, res) => {
+  try {
+    await requireWorkspacePermission(req.user.userId, 'manage_channels');
+    const result = await query(
+      `SELECT c.id, c.name, c.created_at, u.id AS owner_id, u.username,
+              u.first_name, u.middle_name, u.last_name
+       FROM channels c
+       JOIN users u ON u.id = c.created_by
+       WHERE c.is_personal = TRUE
+       ORDER BY c.created_at DESC`
+    );
+    res.json({ channels: result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      createdAt: row.created_at,
+      ownerId: row.owner_id,
+      ownerUsername: row.username,
+      ownerName: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ') || row.username,
+    })) });
+  } catch (err) {
+    sendError(res, err, 'Get personal channel inventory error');
+  }
+});
+
 router.get('/audit', async (req, res) => {
   try {
     const channelId = req.query.channelId === undefined ? null : parseId(req.query.channelId);
@@ -571,11 +596,12 @@ router.delete('/channels/:channelId', async (req, res) => {
   try {
     const channelId = parseId(req.params.channelId);
     if (!channelId) return res.status(400).json({ error: 'A valid channel ID is required' });
-    const channel = (await query('SELECT id, name, created_by FROM channels WHERE id = $1', [channelId])).rows[0];
+    const channel = (await query('SELECT id, name, created_by, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
-    const allowed = Boolean(actor && actor.is_superadmin) || Number(channel.created_by) === Number(req.user.userId)
-      || await can(query, req.user.userId, 'manage_channels');
+    const allowed = Number(channel.created_by) === Number(req.user.userId)
+      || (!channel.is_personal && (Boolean(actor && actor.is_superadmin)
+        || await can(query, req.user.userId, 'manage_channels')));
     if (!allowed) return res.status(403).json({ error: 'Only the Superadmin or the person who created the channel can delete it' });
 
     const members = (await query('SELECT user_id FROM channel_members WHERE channel_id = $1', [channelId])).rows.map((r) => r.user_id);

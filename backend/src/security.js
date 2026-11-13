@@ -89,10 +89,10 @@ async function ensureChannelMembership(query, userId, channelId) {
     `SELECT 1, ${needsCheckSql('view_channel', '$1')} AS needs_check FROM channels c
      CROSS JOIN users u
      WHERE c.id = $1 AND u.id = $2
-       AND (u.is_superadmin = TRUE OR EXISTS (
+       AND ((c.is_personal = TRUE AND c.created_by = u.id) OR (c.is_personal = FALSE AND (u.is_superadmin = TRUE OR EXISTS (
          SELECT 1 FROM channel_members cm
          WHERE cm.channel_id = $1 AND cm.user_id = u.id
-       ))`,
+       ))))`,
     [channelId, userId]
   );
 
@@ -130,15 +130,18 @@ async function ensureChannelModerator(query, userId, channelId) {
   const result = await query(
     `SELECT 1
      FROM users u
-     WHERE u.id = $2 AND EXISTS (SELECT 1 FROM channels WHERE id = $1) AND (
-       u.is_superadmin = TRUE OR EXISTS (
+     JOIN channels c ON c.id = $1
+     WHERE u.id = $2 AND (
+       (c.is_personal = TRUE AND c.created_by = u.id) OR (c.is_personal = FALSE AND (u.is_superadmin = TRUE OR EXISTS (
          SELECT 1 FROM channel_members cm
          WHERE cm.channel_id = $1 AND cm.user_id = u.id AND cm.role = 'moderator'
-       )
+       )))
      )`,
     [channelId, userId]
   );
-  if (result.rows.length === 0 && (await can(query, userId, 'manage_messages', { channelId }))) return; // a role grants it
+  const channel = await query('SELECT is_personal FROM channels WHERE id = $1', [channelId]);
+  if (result.rows.length === 0 && !channel.rows[0]?.is_personal
+      && (await can(query, userId, 'manage_messages', { channelId }))) return; // a role grants it
   if (result.rows.length === 0) {
     const err = new Error('Channel moderator access required');
     err.status = 403;

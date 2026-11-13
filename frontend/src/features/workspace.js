@@ -128,7 +128,7 @@ async function loadSidebarLayout() {
     const layout = state.sidebarLayout;
     const placed = new Set([...(layout.workspaceSections || []), ...(layout.sections || [])]
       .flatMap((section) => (section.channelIds || []).map(Number)));
-    const ownUnplaced = (state.channels || []).filter((channel) => Number(channel.createdBy) === Number(state.user?.id)
+    const ownUnplaced = (state.channels || []).filter((channel) => !channel.isPersonal && Number(channel.createdBy) === Number(state.user?.id)
       && !placed.has(Number(channel.id))).map((channel) => Number(channel.id));
     if (ownUnplaced.length) {
       if (!layout.sections.length) layout.sections.push({ id: 'my-channels', name: 'My channels', channelIds: [], collapsed: false });
@@ -174,7 +174,10 @@ function renderChannelNav() {
   const workspaceSections = (layout.workspaceSections || [])
     .filter((section) => Array.isArray(section.channelIds))
     .map((section) => ({ ...section, collapsed: collapsedWorkspace.has(section.id), workspace: true }));
-  const sections = [...workspaceSections, ...layout.sections.filter((section) => Array.isArray(section.channelIds))];
+  const personalChannels = state.channels.filter((channel) => isPersonalChannel(channel, state.user?.id));
+  const personalIds = new Set(personalChannels.map((channel) => Number(channel.id)));
+  const sections = [...workspaceSections, ...layout.sections.filter((section) => Array.isArray(section.channelIds))]
+    .map((section) => ({ ...section, channelIds: section.channelIds.filter((id) => !personalIds.has(Number(id))) }));
   const placed = new Set();
   const paneHome = document.getElementById('pane-home');
   paneHome?.classList.toggle('has-sections', sections.length > 0);
@@ -204,9 +207,7 @@ function renderChannelNav() {
     }
   });
 
-  // What is left is split in two built-in groups: Channels, and Personal channels (yours, and nobody else is in them yet)
-  const rest = state.channels.filter((channel) => !placed.has(Number(channel.id)));
-  const { shared, personal } = splitPersonalChannels(rest, state.user && state.user.id);
+  const shared = state.channels.filter((channel) => !channel.isPersonal && !placed.has(Number(channel.id)));
   if (sections.length && shared.length) {
     const label = document.createElement('h4');
     label.className = 'nav-label';
@@ -214,13 +215,13 @@ function renderChannelNav() {
     list.appendChild(label);
   }
   shared.forEach((channel) => list.appendChild(channelNavItem(channel)));
-  if (personal.length) {
+  if (personalChannels.length) {
     const label = document.createElement('h4');
     label.className = 'nav-label nav-personal-label';
     label.textContent = 'Personal channels';
-    label.title = 'Channels you created that nobody else is in yet. They move up to Channels when someone joins.';
+    label.title = 'Only you can find and open these channels.';
     list.appendChild(label);
-    personal.forEach((channel) => list.appendChild(channelNavItem(channel)));
+    personalChannels.forEach((channel) => list.appendChild(channelNavItem(channel)));
   }
 }
 
@@ -268,7 +269,6 @@ function renderSidebarModal() {
   const channelById = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
   const workspaceChannelIds = new Set(workspaceDraft.sections.flatMap((section) => section.channelIds.map(Number)));
   const assignedChannelIds = new Set([...workspaceDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
-  const canSeeOtherPersonal = Boolean(state.user?.isSuperadmin || state.moderation?.canManageChannels);
   const canRenameChannel = (channel, readOnly) => !readOnly && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
@@ -276,7 +276,7 @@ function renderSidebarModal() {
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
   const creatorName = (channel) => [channel.creatorFirstName, channel.creatorMiddleName, channel.creatorLastName]
-    .filter(Boolean).join(' ') || channel.creatorUsername || 'Unknown owner';
+    .filter(Boolean).join(' ') || channel.creatorUsername || 'Built-in';
   const sectionTarget = (channelId) => {
     const workspace = workspaceDraft.sections.find((section) => section.channelIds.some((id) => Number(id) === Number(channelId)));
     if (workspace) return `workspace:${workspace.id}`;
@@ -288,7 +288,7 @@ function renderSidebarModal() {
     const workspaceOptions = workspaceDraft.sections.filter((section) => canManageWorkspace || selected === `workspace:${section.id}`)
       .map((section) => `<option value="workspace:${escapeHtml(section.id)}"${selected === `workspace:${section.id}` ? ' selected' : ''}>${escapeHtml(section.name)}</option>`).join('');
     const personalOptions = draft.sections.map((section) => `<option value="personal:${escapeHtml(section.id)}"${selected === `personal:${section.id}` ? ' selected' : ''}>${escapeHtml(section.name)}</option>`).join('');
-    return `<option value=""${selected ? '' : ' selected'}>Unassigned</option>${workspaceOptions ? `<optgroup label="Workspace sections">${workspaceOptions}</optgroup>` : ''}${personalOptions ? `<optgroup label="My sections">${personalOptions}</optgroup>` : ''}`;
+    return `<option value=""${selected ? '' : ' selected'}>Unassigned</option>${workspaceOptions ? `<optgroup label="Workspace sections">${workspaceOptions}</optgroup>` : ''}${personalOptions ? `<optgroup label="Configurable sections">${personalOptions}</optgroup>` : ''}`;
   };
   const channelCard = (channel, movable = true, showOwner = false) => `
     <div class="sidebar-channel-card${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
@@ -302,8 +302,7 @@ function renderSidebarModal() {
       ${canDeleteOrganizerChannel(channel, showOwner) ? `<button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>` : ''}
     </div>`;
   const sectionChannelCard = (channel, movable) => {
-    const showOwner = canSeeOtherPersonal && Number(channel.memberCount || 0) <= 1
-      && Number(channel.createdBy) !== Number(state.user?.id);
+    const showOwner = false;
     return `<div class="sidebar-section-channel${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
       <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">&#8942;&#8942;</span>
       ${showOwner ? `<button type="button" class="avatar-mini sidebar-channel-owner" data-avatar-user="${channel.createdBy}" data-user-id="${channel.createdBy}" data-organizer-owner="${channel.id}" title="${escapeHtml(creatorName(channel))}" aria-label="Open ${escapeHtml(creatorName(channel))}'s menu" style="background:${escapeHtml(channel.creatorAvatarColor || '#64748b')}">${escapeHtml(creatorName(channel).charAt(0).toUpperCase())}</button>` : ''}
@@ -345,29 +344,35 @@ function renderSidebarModal() {
           ${sectionChannels(section, true) || '<p class="sidebar-drop-hint">Drop channels here</p>'}
         </div>
       </div>`).join('')
-    : '<p class="form-note">No personal sections yet.</p>';
+    : '<p class="form-note">No configurable sections yet.</p>';
+
+  const personalChannels = state.channels.filter((channel) => isPersonalChannel(channel, state.user?.id));
+  document.getElementById('personal-channel-count').textContent = `${personalChannels.length} / 5`;
+  const addPersonal = document.getElementById('btn-add-personal-channel');
+  addPersonal.disabled = personalChannels.length >= 5;
+  addPersonal.title = personalChannels.length >= 5 ? 'Personal channel limit reached' : 'Create a personal channel';
+  document.getElementById('sidebar-personal-channels').innerHTML = personalChannels.length
+    ? personalChannels.map((channel) => `<div class="sidebar-section-channel locked"><span>#${escapeHtml(channel.name)}</span><span class="sidebar-section-badge">Private</span></div>`).join('')
+    : '<p class="form-note">No personal channels yet.</p>';
 
   let filter = state.sidebarOrganizerFilter || 'all';
-  if (filter === 'others' && !canSeeOtherPersonal) filter = 'all';
   state.sidebarOrganizerFilter = filter;
   const query = String(state.sidebarOrganizerQuery || '').trim().toLowerCase();
   const poolChannels = state.channels.filter((channel) => {
-    const otherPersonal = Number(channel.memberCount || 0) <= 1 && Number(channel.createdBy) !== Number(state.user?.id);
-    const matchesFilter = (filter === 'all' && !otherPersonal)
+    if (channel.isPersonal) return false;
+    const matchesFilter = filter === 'all'
       || (filter === 'workspace' && (workspaceChannelIds.has(Number(channel.id)) || Boolean(channel.availableToAll)))
-      || (filter === 'mine' && Number(channel.createdBy) === Number(state.user?.id))
-      || (filter === 'others' && otherPersonal);
+      || (filter === 'mine' && Number(channel.createdBy) === Number(state.user?.id));
     const matchesAssignment = state.sidebarOrganizerShowAssigned || !assignedChannelIds.has(Number(channel.id));
     return matchesAssignment && matchesFilter && (!query || [channel.name, creatorName(channel)].some((value) => String(value).toLowerCase().includes(query)));
   });
   const filterControl = document.getElementById('sidebar-channel-filter');
   filterControl.value = filter;
-  filterControl.querySelector('option[value="others"]').hidden = !canSeeOtherPersonal;
   document.getElementById('sidebar-channel-search').value = state.sidebarOrganizerQuery || '';
   document.getElementById('sidebar-show-assigned').checked = Boolean(state.sidebarOrganizerShowAssigned);
   document.getElementById('sidebar-channels').innerHTML = `
     <div class="sidebar-unassigned-dropzone" data-drop-unassigned>
-      ${poolChannels.map((channel) => channelCard(channel, canManageWorkspace || !workspaceChannelIds.has(Number(channel.id)), filter === 'others' && Number(channel.createdBy) !== Number(state.user?.id))).join('') || '<p class="sidebar-drop-hint">No channels match this search.</p>'}
+      ${poolChannels.map((channel) => channelCard(channel, canManageWorkspace || !workspaceChannelIds.has(Number(channel.id)))).join('') || '<p class="sidebar-drop-hint">No channels match this search.</p>'}
     </div>`;
   if (typeof paintAvatarsIn === 'function') paintAvatarsIn(document.getElementById('modal-sidebar'));
 }
@@ -402,6 +407,7 @@ function moveSidebarDraftItem(kind, fromIndex, toIndex) {
 }
 
 function assignSidebarDraftChannel(channelId, target) {
+  if (state.channels.find((channel) => Number(channel.id) === Number(channelId))?.isPersonal) return;
   [...state.sidebarDraft.sections, ...state.workspaceSidebarDraft.sections].forEach((section) => {
     section.channelIds = section.channelIds.filter((id) => Number(id) !== Number(channelId));
   });
@@ -466,6 +472,12 @@ function clearSidebarDragState() {
 
 function handleSidebarModalClick(event) {
   const draft = state.sidebarDraft;
+  if (event.target.closest('#btn-add-personal-channel')) {
+    if (state.channels.filter((channel) => isPersonalChannel(channel, state.user?.id)).length >= 5) return;
+    state.channelCreationSectionTarget = null;
+    openCreateChannelModal({ personal: true });
+    return;
+  }
   const addToSection = event.target.closest('[data-add-channel-to-section]');
   if (addToSection) {
     syncSidebarDraft();

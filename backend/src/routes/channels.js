@@ -10,7 +10,7 @@ const { ensureNotGuest } = require('../guests');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.available_to_all, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.available_to_all, c.created_at, c.created_by,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
              creator.avatar_color AS creator_avatar_color,
@@ -19,12 +19,12 @@ router.get('/', authenticateToken, async (req, res) => {
       FROM channels c
       LEFT JOIN users creator ON creator.id = c.created_by
       LEFT JOIN channel_members cm ON c.id = cm.channel_id
-      WHERE (c.is_private = FALSE AND NOT EXISTS (
+      WHERE (c.is_personal = TRUE AND c.created_by = $1) OR (c.is_personal = FALSE AND ((c.is_private = FALSE AND NOT EXISTS (
         SELECT 1 FROM users g WHERE g.id = $1 AND g.account_type = 'guest'
       )) OR EXISTS (
         SELECT 1 FROM channel_members mine
         WHERE mine.channel_id = c.id AND mine.user_id = $1
-      ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)
+      ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)))
       GROUP BY c.id, creator.id
       ORDER BY c.name
     `, [req.user.userId]);
@@ -35,6 +35,7 @@ router.get('/', authenticateToken, async (req, res) => {
         name: ch.name,
         topic: ch.topic,
         isPrivate: ch.is_private,
+        isPersonal: ch.is_personal,
         availableToAll: ch.available_to_all,
         memberCount: ch.member_count,
         createdAt: ch.created_at,
@@ -57,7 +58,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/my', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.available_to_all, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.available_to_all, c.created_at, c.created_by,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
              creator.avatar_color AS creator_avatar_color,
@@ -76,9 +77,9 @@ router.get('/my', authenticateToken, async (req, res) => {
              '-infinity'::timestamptz
            )
        AND m.user_id != $1
-      WHERE cm.user_id = $1 OR c.available_to_all = TRUE OR EXISTS (
+      WHERE (c.is_personal = TRUE AND c.created_by = $1) OR (c.is_personal = FALSE AND (cm.user_id = $1 OR c.available_to_all = TRUE OR EXISTS (
         SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE
-      )
+      )))
       GROUP BY c.id, creator.id
       ORDER BY c.name
     `, [req.user.userId]);
@@ -89,6 +90,7 @@ router.get('/my', authenticateToken, async (req, res) => {
         name: ch.name,
         topic: ch.topic,
         isPrivate: ch.is_private,
+        isPersonal: ch.is_personal,
         availableToAll: ch.available_to_all,
         memberCount: ch.member_count,
         createdAt: ch.created_at,
@@ -187,9 +189,10 @@ router.patch('/:channelId/name', authenticateToken, async (req, res) => {
     }
     const permission = await query(
       `SELECT 1 FROM channels c JOIN users u ON u.id = $2
-       WHERE c.id = $1 AND (u.is_superadmin = TRUE OR c.created_by = u.id)`, [channelId, req.user.userId]
+       WHERE c.id = $1 AND (c.created_by = u.id OR (c.is_personal = FALSE AND u.is_superadmin = TRUE))`, [channelId, req.user.userId]
     );
-    if (!permission.rows.length && !(await can(query, req.user.userId, 'manage_channels'))) {
+    const personal = await query('SELECT is_personal FROM channels WHERE id = $1', [channelId]);
+    if (!permission.rows.length && (personal.rows[0]?.is_personal || !(await can(query, req.user.userId, 'manage_channels')))) {
       return res.status(403).json({ error: 'You cannot rename this channel' });
     }
     const result = await query('UPDATE channels SET name = $1 WHERE id = $2 RETURNING id, name', [name, channelId]);
@@ -215,11 +218,11 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
       return res.status(403).json({ error: 'Manage workspace permission is required to change channel availability' });
     }
     const result = await query(
-      `UPDATE channels SET available_to_all = $1 WHERE id = $2
+      `UPDATE channels SET available_to_all = $1 WHERE id = $2 AND is_personal = FALSE
        RETURNING id, available_to_all`,
       [availableToAll, channelId]
     );
-    if (!result.rows.length) return res.status(404).json({ error: 'Channel not found' });
+    if (!result.rows.length) return res.status(400).json({ error: 'Personal channels cannot be made available to others' });
     if (availableToAll) {
       await query(
         `INSERT INTO channel_members (channel_id, user_id)
@@ -239,7 +242,7 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
 // Create a new channel
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, topic, isPrivate, availableToAll } = req.body;
+    const { name, topic, isPrivate, availableToAll, isPersonal } = req.body;
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
     if (!(await can(query, req.user.userId, 'create_channels'))) {
       return res.status(403).json({ error: 'Create channels permission is required' });
@@ -250,6 +253,18 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     if (availableToAll && isPrivate) {
       return res.status(400).json({ error: 'A private channel cannot be available to all' });
+    }
+    if (isPersonal && availableToAll) {
+      return res.status(400).json({ error: 'A personal channel cannot be available to all' });
+    }
+    if (isPersonal) {
+      const personalCount = await query(
+        'SELECT COUNT(*)::integer AS count FROM channels WHERE created_by = $1 AND is_personal = TRUE',
+        [req.user.userId]
+      );
+      if (Number(personalCount.rows[0]?.count || 0) >= 5) {
+        return res.status(400).json({ error: 'You can have at most 5 personal channels' });
+      }
     }
 
     if (!name) {
@@ -265,10 +280,10 @@ router.post('/', authenticateToken, async (req, res) => {
     const policy = await query('SELECT default_slowmode_seconds FROM moderation_settings WHERE id = 1');
     const slowmode = policy.rows[0] && Number.isInteger(policy.rows[0].default_slowmode_seconds) ? policy.rows[0].default_slowmode_seconds : 5;
     const result = await query(
-      `INSERT INTO channels (name, topic, is_private, available_to_all, created_by, slowmode_seconds)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, topic, is_private, available_to_all, created_at`,
-      [name, topic || '', isPrivate || false, Boolean(availableToAll), req.user.userId, slowmode]
+      `INSERT INTO channels (name, topic, is_private, is_personal, available_to_all, created_by, slowmode_seconds)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, topic, is_private, is_personal, available_to_all, created_at`,
+      [name, topic || '', Boolean(isPersonal || isPrivate), Boolean(isPersonal), Boolean(availableToAll), req.user.userId, slowmode]
     );
 
     const channel = result.rows[0];
@@ -297,6 +312,7 @@ router.post('/', authenticateToken, async (req, res) => {
         name: channel.name,
         topic: channel.topic,
         isPrivate: channel.is_private,
+        isPersonal: channel.is_personal,
         availableToAll: channel.available_to_all,
         createdAt: channel.created_at,
       },
@@ -319,7 +335,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
     await ensureChannelMembership(query, req.user.userId, channelId);
 
     const result = await query(
-      `SELECT c.id, c.name, c.topic, c.is_private, c.created_at,
+      `SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.created_at,
              COUNT(cm.user_id)::int AS member_count
       FROM channels c
       LEFT JOIN channel_members cm ON c.id = cm.channel_id
@@ -339,6 +355,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
         name: channel.name,
         topic: channel.topic,
         isPrivate: channel.is_private,
+        isPersonal: channel.is_personal,
         memberCount: channel.member_count,
         createdAt: channel.created_at,
       },

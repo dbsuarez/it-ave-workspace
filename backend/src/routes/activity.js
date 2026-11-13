@@ -90,10 +90,13 @@ function feedSql(types) {
   return `
     SELECT e.* FROM (${union}) e
     WHERE EXISTS (
-      SELECT 1 FROM users me
-      WHERE me.id = $1 AND (me.is_superadmin = TRUE OR EXISTS (
-        SELECT 1 FROM channel_members cm WHERE cm.channel_id = e.channel_id AND cm.user_id = $1
-      ))
+      SELECT 1 FROM users me JOIN channels visible ON visible.id = e.channel_id
+      WHERE me.id = $1 AND (
+        (visible.is_personal = TRUE AND visible.created_by = me.id)
+        OR (visible.is_personal = FALSE AND (me.is_superadmin = TRUE OR EXISTS (
+          SELECT 1 FROM channel_members cm WHERE cm.channel_id = e.channel_id AND cm.user_id = me.id
+        )))
+      )
     )`;
 }
 

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS channels (
   name VARCHAR(50) UNIQUE NOT NULL,
   topic TEXT DEFAULT '',
   is_private BOOLEAN DEFAULT FALSE,
+  is_personal BOOLEAN NOT NULL DEFAULT FALSE,
   available_to_all BOOLEAN NOT NULL DEFAULT FALSE,
   command_scope VARCHAR(50),
   created_by INTEGER REFERENCES users(id),

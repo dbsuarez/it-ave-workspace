@@ -28,9 +28,10 @@ function sendError(res, err, label) {
 }
 
 async function requireChannelManager(userId, channelId) {
-  const channel = (await query('SELECT id, name, created_by FROM channels WHERE id = $1', [channelId])).rows[0];
+  const channel = (await query('SELECT id, name, created_by, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
   if (!channel) throw fail(404, 'Channel not found');
-  const allowed = Number(channel.created_by) === Number(userId) || await can(query, userId, 'manage_channels');
+  const allowed = Number(channel.created_by) === Number(userId)
+    || (!channel.is_personal && await can(query, userId, 'manage_channels'));
   if (!allowed) throw fail(403, 'Only the channel creator or someone who manages channels can change its permissions');
   return channel;
 }

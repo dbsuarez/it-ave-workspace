@@ -174,8 +174,11 @@ function normalizeWorkspaceSidebarLayout(input) {
   return { sections: normalized.sections.map(({ id, name, channelIds }) => ({ id, name, channelIds })) };
 }
 
-function withoutLockedChannels(layout, workspaceLayout) {
-  const locked = new Set((workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number));
+function withoutLockedChannels(layout, workspaceLayout, personalChannelIds = []) {
+  const locked = new Set([
+    ...(workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number),
+    ...personalChannelIds.map(Number),
+  ]);
   return {
     sections: (layout.sections || []).map((section) => ({
       ...section,
@@ -187,16 +190,18 @@ function withoutLockedChannels(layout, workspaceLayout) {
 
 router.get('/sidebar', async (req, res) => {
   try {
-    const [userResult, workspaceResult, canManageWorkspaceSections] = await Promise.all([
+    const [userResult, workspaceResult, personalResult, canManageWorkspaceSections] = await Promise.all([
       query('SELECT sidebar_layout FROM users WHERE id = $1', [req.user.userId]),
       query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1'),
+      query('SELECT id FROM channels WHERE created_by = $1 AND is_personal = TRUE', [req.user.userId]),
       can(query, req.user.userId, 'manage_workspace'),
     ]);
     const stored = userResult.rows[0]?.sidebar_layout;
     const workspaceLayout = workspaceResult.rows[0]?.workspace_sidebar_layout || { sections: [] };
     const personal = withoutLockedChannels(
       stored && Array.isArray(stored.sections) ? { sections: stored.sections, workspaceCollapsed: stored.workspaceCollapsed || [] } : { sections: [], workspaceCollapsed: [] },
-      workspaceLayout
+      workspaceLayout,
+      personalResult.rows.map((row) => row.id)
     );
     res.json({ layout: { ...personal, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections } });
   } catch (err) {
@@ -210,8 +215,12 @@ router.put('/sidebar', async (req, res) => {
     const layout = normalizeSidebarLayout(req.body?.layout);
     const workspaceLayout = (await query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1')).rows[0]?.workspace_sidebar_layout || { sections: [] };
     const locked = new Set((workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number));
+    const personal = new Set((await query('SELECT id FROM channels WHERE created_by = $1 AND is_personal = TRUE', [req.user.userId])).rows.map((row) => Number(row.id)));
     if (layout.sections.some((section) => section.channelIds.some((id) => locked.has(Number(id))))) {
       return res.status(400).json({ error: 'Workspace section channels cannot be moved into personal sections' });
+    }
+    if (layout.sections.some((section) => section.channelIds.some((id) => personal.has(Number(id))))) {
+      return res.status(400).json({ error: 'Personal channels stay in Personal Channels' });
     }
     await query('UPDATE users SET sidebar_layout = $1 WHERE id = $2', [JSON.stringify(layout), req.user.userId]);
     res.json({ layout: { ...layout, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections: await can(query, req.user.userId, 'manage_workspace') } });
@@ -226,6 +235,11 @@ router.put('/sidebar/workspace', async (req, res) => {
   try {
     await requirePermission(query, req.user.userId, 'manage_workspace');
     const layout = normalizeWorkspaceSidebarLayout(req.body?.layout);
+    const ids = layout.sections.flatMap((section) => section.channelIds);
+    if (ids.length) {
+      const personal = await query('SELECT 1 FROM channels WHERE id = ANY($1::int[]) AND is_personal = TRUE LIMIT 1', [ids]);
+      if (personal.rows.length) return res.status(400).json({ error: 'Personal channels cannot be placed in workspace sections' });
+    }
     await query(
       'UPDATE moderation_settings SET workspace_sidebar_layout = $1, updated_by = $2, updated_at = NOW() WHERE id = 1',
       [JSON.stringify(layout), req.user.userId]

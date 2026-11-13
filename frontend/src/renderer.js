@@ -2856,6 +2856,7 @@ async function loadModerationView() {
     <div id="moderation-launch" data-admin-control-panel="launch"></div>
     <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>`) : ''}
     ${channels.length ? '<div id="moderation-channel-data" class="moderation-channel-data" data-mod-tab="channels"><div class="loading-state">Loading channel moderation…</div></div>' : ''}
+    ${state.moderation.canManageChannels ? '<div id="moderation-personal-channel-inventory" data-mod-tab="channels"></div>' : ''}
     ${canRoles ? adminConfiguratorHtml('roles', 'Roles', [['definitions', 'Role definitions'], ['assignments', 'Assignments'], ['access', 'Access check']], '<div id="moderation-roles"></div>') : ''}`;
   ['people', 'signup', 'roles', 'rules'].forEach(syncAdminConfigurator);
   if (canRoles && state.moderation.tab === 'roles') loadRolesPanel();
@@ -2886,8 +2887,30 @@ async function loadModerationView() {
     }
   }
   if (selectedId) await loadModerationChannel(selectedId);
+  if (state.moderation.canManageChannels) await loadPersonalChannelInventory();
   if (state.moderation.isSuperadmin) await loadModerationAudit();
   if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
+}
+
+async function loadPersonalChannelInventory() {
+  const host = document.getElementById('moderation-personal-channel-inventory');
+  if (!host) return;
+  try {
+    const response = await api('/api/moderation/personal-channels');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load personal channel inventory');
+    const channels = data.channels || [];
+    host.innerHTML = `<section class="moderation-card personal-channel-inventory">
+      <div><h2>Personal channel inventory</h2><p class="admin-help">${channels.length} personal channel${channels.length === 1 ? '' : 's'} exist. This is metadata only; administrators cannot open their content.</p></div>
+      <div class="moderation-list">${channels.map((channel) => `<div class="moderation-list-row">
+        <span><strong>#${escapeHtml(channel.name)}</strong><small>${escapeHtml(channel.ownerName || channel.ownerUsername || 'Built-in')}</small></span>
+        <time>${escapeHtml(new Date(channel.createdAt).toLocaleDateString())}</time>
+      </div>`).join('') || '<p>No personal channels have been created.</p>'}</div>
+    </section>`;
+  } catch (err) {
+    host.innerHTML = '<section class="moderation-card"><h2>Personal channel inventory</h2><p>Could not load the inventory.</p></section>';
+    console.error('Load personal channel inventory error:', err);
+  }
 }
 
 const moderationAuditQuery = { page: 1, pageSize: 50, action: '', search: '' };
@@ -5248,13 +5271,20 @@ function renderMarkdown(markdown) {
 // ============================================================
 // Channel Creation Modal
 // ============================================================
-function openCreateChannelModal() {
+function openCreateChannelModal({ personal = false } = {}) {
   if (!state.moderation.canCreateChannels) {
     showToast('You do not have permission to create channels.', 'error');
     return;
   }
-  document.getElementById('new-channel-available-row').hidden = !state.moderation.canManageWorkspace;
+  const personalInput = document.getElementById('new-channel-personal');
+  state.channelCreationFromOrganizer = document.getElementById('modal-sidebar')?.classList.contains('open') || false;
+  personalInput.checked = personal;
+  document.getElementById('new-channel-available-row').hidden = personal || !state.moderation.canManageWorkspace;
   document.getElementById('new-channel-available-all').checked = false;
+  personalInput.onchange = () => {
+    document.getElementById('new-channel-available-row').hidden = personalInput.checked || !state.moderation.canManageWorkspace;
+    if (personalInput.checked) document.getElementById('new-channel-available-all').checked = false;
+  };
   document.getElementById('modal-create-channel').classList.add('open');
   document.getElementById('modal-overlay').classList.add('open');
 }
@@ -5267,25 +5297,25 @@ function closeModalCreateChannel() {
 async function saveCreateChannel() {
   const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const topic = document.getElementById('new-channel-topic').value.trim();
-  const availableToAll = Boolean(state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
+  const isPersonal = document.getElementById('new-channel-personal').checked;
+  const availableToAll = Boolean(!isPersonal && state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
 
   if (!name) return;
 
   try {
     const res = await api('/api/channels', {
       method: 'POST',
-      body: JSON.stringify({ name, topic, availableToAll }),
+      body: JSON.stringify({ name, topic, availableToAll, isPersonal }),
     });
 
-    if (!res.ok) throw new Error('Failed to create channel');
-
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to create channel');
     closeModalCreateChannel();
     document.getElementById('new-channel-name').value = '';
     document.getElementById('new-channel-topic').value = '';
 
     await loadChannels();
-    if (state.channelCreationSectionTarget && state.sidebarDraft) {
+    if (!isPersonal && state.channelCreationSectionTarget && state.sidebarDraft) {
       const target = state.channelCreationSectionTarget.kind === 'workspace'
         ? state.workspaceSidebarDraft.sections.find((section) => section.id === state.channelCreationSectionTarget.id)
         : state.sidebarDraft.sections.find((section) => section.id === state.channelCreationSectionTarget.id);
@@ -5294,12 +5324,16 @@ async function saveCreateChannel() {
       state.sidebarAvailabilityDraft[data.channel.id] = Boolean(data.channel.availableToAll);
       state.sidebarChannelNameDraft[data.channel.id] = data.channel.name;
       renderSidebarModal();
+    } else if (state.channelCreationFromOrganizer && state.sidebarDraft) {
+      state.channelCreationSectionTarget = null;
+      renderSidebarModal();
     } else {
       openChannel(data.channel.id);
     }
+    state.channelCreationFromOrganizer = false;
   } catch (err) {
     console.error('Create channel error:', err);
-    showToast('Failed to create channel.', 'error');
+    showToast(err.message || 'Failed to create channel.', 'error');
   }
 }
 

@@ -1,10 +1,9 @@
 // IT Avenue Workspace - the sidebar's built-in "Personal channels" group (pure; covered by test/channel-groups.test.js).
 //
-// A channel you created that nobody else is in yet is personal: it shows under "Personal channels" instead of
-// "Channels". The moment someone else joins or is added, it moves up to "Channels" by itself.
+// Personal channels are explicitly marked by the server and remain private to their creator.
 
 function isPersonalChannel(channel, myId) {
-  return Number(channel.createdBy) === Number(myId) && Number(channel.memberCount || 0) <= 1;
+  return Boolean(channel.isPersonal) && Number(channel.createdBy) === Number(myId);
 }
 
 // { shared, personal } with the order kept.

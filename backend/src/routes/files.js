@@ -126,6 +126,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     const file = result.rows[0];
+    if (file.channel_id) await ensureChannelMembership(client.query.bind(client), req.user.userId, file.channel_id);
     const isUploader = Number(file.uploaded_by) === Number(req.user.userId);
     let moderationReason = null;
     if (!isUploader) {

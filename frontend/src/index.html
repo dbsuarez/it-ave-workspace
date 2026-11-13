@@ -643,6 +643,10 @@
           <input type="checkbox" id="new-channel-available-all">
           <span><strong>Visible to all</strong><small>Keep this channel in every current and future employee's sidebar.</small></span>
         </label>
+        <label class="admin-inline-check" id="new-channel-personal-row">
+          <input type="checkbox" id="new-channel-personal">
+          <span><strong>Personal channel</strong><small>Only you can find and open it. You can create up to five.</small></span>
+        </label>
       </div>
       <div class="modal-footer">
         <button class="btn" id="btn-cancel-create">Cancel</button>
@@ -783,7 +787,10 @@
                 <p class="form-note" id="workspace-sidebar-readonly-note" hidden>Workspace sections are read-only for your role.</p>
                 <div id="workspace-sidebar-sections"></div>
               </div>
-              <div class="sidebar-section-title-row"><h4 class="modal-section-title">My sections</h4><button class="btn" type="button" id="btn-add-sidebar-section">+ Add</button></div>
+              <div class="sidebar-section-title-row"><h4 class="modal-section-title">Personal channels</h4><button class="btn" type="button" id="btn-add-personal-channel">+ Add</button></div>
+              <p class="form-note">Private to you and kept outside configurable sections. <span id="personal-channel-count"></span></p>
+              <div id="sidebar-personal-channels"></div>
+              <div class="sidebar-section-title-row"><h4 class="modal-section-title">Configurable sections</h4><button class="btn" type="button" id="btn-add-sidebar-section">+ Add</button></div>
               <div id="sidebar-sections"></div>
             </section>
             <section class="sidebar-channel-pool" aria-label="Channel pool">
@@ -795,8 +802,7 @@
                 <select id="sidebar-channel-filter" aria-label="Filter channels">
                   <option value="all">All channels</option>
                   <option value="workspace">Workspace channels</option>
-                  <option value="mine">My channels</option>
-                  <option value="others">Personal (Others)</option>
+                  <option value="mine">Created by me</option>
                 </select>
                 <label class="sidebar-show-assigned"><input id="sidebar-show-assigned" type="checkbox"> Show assigned</label>
               </div>
