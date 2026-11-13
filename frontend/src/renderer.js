@@ -2841,7 +2841,7 @@ function buildChannelConfigurator(host, channelName) {
     danger: ['Danger zone', 'Destructive actions that cannot be undone.'],
   };
   const existingSections = Array.from(host.querySelectorAll(':scope > [data-channel-config-section]'));
-  const available = ['overview', 'permissions', 'members', 'integrations', 'audit'];
+  const available = ['overview', 'permissions', 'members', 'integrations'];
   if (existingSections.some((element) => element.dataset.channelConfigSection === 'danger')) available.push('danger');
   if (!available.includes(state.moderation.channelSettingsTab)) state.moderation.channelSettingsTab = 'overview';
 
@@ -2861,6 +2861,12 @@ function buildChannelConfigurator(host, channelName) {
     panel.hidden = state.moderation.channelSettingsTab !== key;
     panel.innerHTML = `<header class="channel-config-panel-heading${key === 'danger' ? ' danger' : ''}"><h2>${labels[key][0]}</h2><p>${labels[key][1]}</p></header>`;
     existingSections.filter((element) => element.dataset.channelConfigSection === key).forEach((element) => panel.appendChild(element));
+    if (key === 'overview' && state.moderation.isSuperadmin) {
+      const auditLink = document.createElement('div');
+      auditLink.className = 'channel-audit-link';
+      auditLink.innerHTML = `<span><strong>Channel history</strong><small>Open the main audit log filtered to #${escapeHtml(channelName)}.</small></span><button class="btn" type="button" data-action="open-channel-audit" data-channel-name="${escapeHtml(channelName)}">View channel audit history</button>`;
+      panel.appendChild(auditLink);
+    }
     if (key === 'integrations') {
       const webhooks = document.createElement('div');
       webhooks.className = 'moderation-card';
@@ -2870,6 +2876,7 @@ function buildChannelConfigurator(host, channelName) {
     content.appendChild(panel);
   });
   configurator.append(nav, content);
+  existingSections.filter((element) => element.dataset.channelConfigSection === 'audit').forEach((element) => element.remove());
   host.appendChild(configurator);
 }
 
@@ -2972,6 +2979,17 @@ async function handleModerationClick(event) {
     if (action === 'audit-page') {
       moderationAuditQuery.page = Number(button.dataset.page);
       await loadModerationAudit();
+      return;
+    }
+    if (action === 'open-channel-audit') {
+      moderationAuditQuery.search = button.dataset.channelName || '';
+      moderationAuditQuery.action = '';
+      moderationAuditQuery.page = 1;
+      state.moderation.tab = 'rules';
+      await loadModerationView();
+      const auditTarget = document.getElementById('moderation-workspace-audit');
+      const moderationHost = document.getElementById('moderation-content');
+      if (auditTarget && moderationHost) moderationHost.scrollTop = Math.max(0, auditTarget.offsetTop - 16);
       return;
     }
     if (action === 'view-audit-details') {
