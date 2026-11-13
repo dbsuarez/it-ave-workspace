@@ -301,10 +301,15 @@ function renderSidebarModal() {
       <select class="sidebar-channel-move" data-channel-move="${channel.id}" aria-label="Move #${escapeHtml(channel.name)} to section"${movable ? '' : ' disabled'}>${moveOptions(channel)}</select>
       ${canDeleteOrganizerChannel(channel, showOwner) ? `<button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>` : ''}
     </div>`;
-  const sectionChannelCard = (channel, movable) => `<div class="sidebar-section-channel${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
-    <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">&#8942;&#8942;</span>
-    <span>#${escapeHtml(channel.name)}</span>
-  </div>`;
+  const sectionChannelCard = (channel, movable) => {
+    const showOwner = canSeeOtherPersonal && Number(channel.memberCount || 0) <= 1
+      && Number(channel.createdBy) !== Number(state.user?.id);
+    return `<div class="sidebar-section-channel${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
+      <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">&#8942;&#8942;</span>
+      ${showOwner ? `<button type="button" class="avatar-mini sidebar-channel-owner" data-avatar-user="${channel.createdBy}" data-user-id="${channel.createdBy}" data-organizer-owner="${channel.id}" title="${escapeHtml(creatorName(channel))}" aria-label="Open ${escapeHtml(creatorName(channel))}'s menu" style="background:${escapeHtml(channel.creatorAvatarColor || '#64748b')}">${escapeHtml(creatorName(channel).charAt(0).toUpperCase())}</button>` : ''}
+      <span>#${escapeHtml(channel.name)}</span>
+    </div>`;
+  };
   const sectionChannels = (section, movable) => section.channelIds
     .map((id) => channelById.get(Number(id))).filter(Boolean).map((channel) => sectionChannelCard(channel, movable)).join('');
 
