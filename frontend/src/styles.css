@@ -7503,6 +7503,12 @@ h4.cv-h { font-size: 15px; }
 }
 .channel-audit-link span { display: grid; gap: 3px; }
 .channel-audit-link small { color: var(--text-muted); }
+.channel-audit-link > .btn {
+  flex: 0 0 208px;
+  width: 208px;
+  justify-content: center;
+  white-space: nowrap;
+}
 
 @media (max-width: 820px) {
   .channel-configurator { grid-template-columns: 1fr; }
@@ -7512,6 +7518,7 @@ h4.cv-h { font-size: 15px; }
   .channel-config-nav-item.danger { margin-top: 0; margin-left: auto; }
   .channel-config-content { padding: 16px; }
   .channel-audit-link { align-items: flex-start; flex-direction: column; }
+  .channel-audit-link > .btn { flex-basis: auto; width: 100%; }
 }
 
 .admin-pending { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; overflow-x: auto; }
