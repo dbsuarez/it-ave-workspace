@@ -35,7 +35,43 @@
   src: url('vendor/fonts/lato-latin-400-italic.woff2') format('woff2');
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 58%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: content-box;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 58%, transparent);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
 :root {
   --purple: #5F2D82;
@@ -825,12 +861,19 @@ body.iav-dev .demo-banner {
 }
 
 .moderation-content {
-  flex: 1;
+  flex: 1 1 0;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 14px;
   padding: 18px 24px 32px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 #view-moderation .moderation-content {
@@ -4453,7 +4496,7 @@ body.account-guest [data-create="channel"] {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-muted) 52%, transparent) transparent;
+  scrollbar-color: transparent transparent;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -4461,15 +4504,22 @@ body.account-guest [data-create="channel"] {
 }
 
 .sidebar-organizer-destinations::-webkit-scrollbar,
-.sidebar-channel-pool::-webkit-scrollbar { width: 8px; }
+.sidebar-channel-pool::-webkit-scrollbar { width: 6px; }
 .sidebar-organizer-destinations::-webkit-scrollbar-track,
 .sidebar-channel-pool::-webkit-scrollbar-track { background: transparent; }
 .sidebar-organizer-destinations::-webkit-scrollbar-thumb,
 .sidebar-channel-pool::-webkit-scrollbar-thumb {
-  min-height: 36px;
+  min-height: 28px;
   border: 2px solid transparent;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text-muted) 52%, transparent);
+  background: transparent;
+  background-clip: content-box;
+}
+.sidebar-organizer-destinations:hover,
+.sidebar-channel-pool:hover { scrollbar-color: color-mix(in srgb, var(--text-muted) 58%, transparent) transparent; }
+.sidebar-organizer-destinations:hover::-webkit-scrollbar-thumb,
+.sidebar-channel-pool:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 58%, transparent);
   background-clip: content-box;
 }
 .sidebar-organizer-destinations::-webkit-scrollbar-thumb:hover,
@@ -6796,8 +6846,8 @@ h4.cv-h { font-size: 15px; }
 .cw-scroll::-webkit-scrollbar,
 .cw-editor .ProseMirror .tableWrapper::-webkit-scrollbar,
 .cw-editor .ProseMirror pre::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 .cw-scroll::-webkit-scrollbar-track,
@@ -6811,7 +6861,14 @@ h4.cv-h { font-size: 15px; }
 .cw-editor .ProseMirror pre::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 8px;
-  background: var(--border);
+  background: transparent;
+  background-clip: content-box;
+}
+
+.cw-scroll:hover::-webkit-scrollbar-thumb,
+.cw-editor .ProseMirror .tableWrapper:hover::-webkit-scrollbar-thumb,
+.cw-editor .ProseMirror pre:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 58%, transparent);
   background-clip: content-box;
 }
 
@@ -7589,6 +7646,7 @@ h4.cv-h { font-size: 15px; }
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   min-height: 520px;
+  height: max-content;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -7673,6 +7731,7 @@ h4.cv-h { font-size: 15px; }
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   min-height: 560px;
+  height: max-content;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 14px;
