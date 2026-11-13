@@ -2792,13 +2792,26 @@ async function loadModerationView() {
     ? Number(state.moderation.channel.id) : Number(channels[0].id);
   const canRoles = Boolean(state.moderation.isSuperadmin || state.moderation.canManageRoles);
   // Moderation is split into tabs for the Superadmin; a channel moderator only has Channels.
-  const tabs = state.moderation.isSuperadmin
-    ? [['channels', 'Channels'], ['people', 'People and groups'], ['signup', 'Sign-up and invitations'], ['roles', 'Roles'], ['rules', 'Rules and audit log']]
-    : [...(channels.length ? [['channels', 'Channels']] : []), ...(canRoles ? [['roles', 'Roles']] : [])];
+  const tabDefinitions = {
+    channels: ['Channels', 'Configure channels, permissions, moderation, integrations, and channel access.'],
+    people: ['People and groups', 'Manage workspace accounts, groups, roles, and channel access from one directory.'],
+    signup: ['Sign-up and invitations', 'Control account registration, invitations, and pre-launch access.'],
+    roles: ['Roles', 'Define workspace roles and review the permissions assigned to people.'],
+    rules: ['Rules and audit log', 'Set workspace-wide chat rules and review administrative activity.'],
+  };
+  const tabKeys = state.moderation.isSuperadmin
+    ? ['channels', 'people', 'signup', 'roles', 'rules']
+    : [...(channels.length ? ['channels'] : []), ...(canRoles ? ['roles'] : [])];
+  const tabs = tabKeys.map((key) => [key, ...tabDefinitions[key]]);
   if (!tabs.some(([key]) => key === state.moderation.tab)) state.moderation.tab = tabs.length ? tabs[0][0] : 'channels';
   container.dataset.tab = state.moderation.tab;
+  const activeTab = tabs.find(([key]) => key === state.moderation.tab) || tabs[0];
   container.innerHTML = `
-    ${tabs.length > 1 ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" role="tab">${label}</button>`).join('')}</div>` : ''}
+    ${tabs.length > 1 ? `<div class="lv-tabs mod-tabs" role="tablist">${tabs.map(([key, label, description]) => `<button type="button" class="lv-tab${state.moderation.tab === key ? ' active' : ''}" data-mod-tab-button="${key}" data-tab-title="${escapeHtml(label)}" data-tab-description="${escapeHtml(description)}" role="tab" aria-selected="${state.moderation.tab === key}">${escapeHtml(label)}</button>`).join('')}</div>` : ''}
+    <header class="admin-page-heading">
+      <h2 data-admin-page-title>${escapeHtml(activeTab?.[1] || 'Administration')}</h2>
+      <p data-admin-page-description>${escapeHtml(activeTab?.[2] || '')}</p>
+    </header>
     ${channels.length ? `<div class="moderation-toolbar" data-mod-tab="channels">
       <label for="moderation-channel-select">Channel</label>
       <input type="search" id="moderation-channel-select" list="moderation-channel-options" value="#${escapeHtml(channels.find((channel) => Number(channel.id) === selectedId)?.name || '')}" data-channel-id="${selectedId}" placeholder="Type to find a channel…" aria-label="Search and select channel" autocomplete="off">
@@ -3139,7 +3152,15 @@ async function handleModerationClick(event) {
     state.moderation.peopleChannelId = null;
     const host = document.getElementById('moderation-content');
     if (host) host.dataset.tab = state.moderation.tab;
-    host?.querySelectorAll('[data-mod-tab-button]').forEach((b) => b.classList.toggle('active', b === tabButton));
+    host?.querySelectorAll('[data-mod-tab-button]').forEach((b) => {
+      const active = b === tabButton;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', String(active));
+    });
+    const title = host?.querySelector('[data-admin-page-title]');
+    const description = host?.querySelector('[data-admin-page-description]');
+    if (title) title.textContent = tabButton.dataset.tabTitle || tabButton.textContent.trim();
+    if (description) description.textContent = tabButton.dataset.tabDescription || '';
     if (state.moderation.tab === 'roles') loadRolesPanel();
     return;
   }
@@ -3155,7 +3176,16 @@ async function handleModerationClick(event) {
       await loadWorkspaceAdmin();
       const host = document.getElementById('moderation-content');
       if (host) host.dataset.tab = 'people';
-      host?.querySelectorAll('[data-mod-tab-button]').forEach((item) => item.classList.toggle('active', item.dataset.modTabButton === 'people'));
+      host?.querySelectorAll('[data-mod-tab-button]').forEach((item) => {
+        const active = item.dataset.modTabButton === 'people';
+        item.classList.toggle('active', active);
+        item.setAttribute('aria-selected', String(active));
+      });
+      const peopleTab = host?.querySelector('[data-mod-tab-button="people"]');
+      const title = host?.querySelector('[data-admin-page-title]');
+      const description = host?.querySelector('[data-admin-page-description]');
+      if (title && peopleTab) title.textContent = peopleTab.dataset.tabTitle || 'People and groups';
+      if (description && peopleTab) description.textContent = peopleTab.dataset.tabDescription || '';
       document.querySelector('[data-workspace-member-list]')?.closest('.moderation-card')?.scrollIntoView({ block: 'start' });
       return;
     }

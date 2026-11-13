@@ -7378,13 +7378,29 @@ h4.cv-h { font-size: 15px; }
 
 .moderation-card.prelaunch-on { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18); }
 
-/* Moderation tabs: only the blocks of the open tab show */
-.mod-tabs { margin-bottom: 16px; }
+/* Administration tabs stay available while long settings panels scroll. */
+.mod-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  margin: -18px -24px 0;
+  padding: 10px 24px 0;
+  background: var(--muted-bg);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+.admin-page-heading { padding: 2px 0 6px; border-bottom: 1px solid var(--border); }
+.admin-page-heading h2 { margin: 0; font-size: 20px; }
+.admin-page-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
 #moderation-content:not([data-tab="channels"]) [data-mod-tab="channels"],
 #moderation-content:not([data-tab="people"]) [data-mod-tab="people"],
 #moderation-content:not([data-tab="signup"]) [data-mod-tab="signup"],
 #moderation-content:not([data-tab="roles"]) [data-mod-tab="roles"],
 #moderation-content:not([data-tab="rules"]) [data-mod-tab="rules"] { display: none; }
+
+@media (max-width: 900px) {
+  .mod-tabs { margin-inline: -24px; overflow-x: auto; }
+}
 
 .nav-personal-label { margin-top: 14px; }
 
