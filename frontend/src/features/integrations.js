@@ -148,14 +148,14 @@ async function handleUserGroupSubmit(event) {
 // Incoming webhooks (channel moderators)
 // ============================================================
 async function loadChannelWebhooks(channelId, newPath = null) {
-  const host = document.getElementById('moderation-channel-data');
+  const host = document.querySelector('[data-channel-panel="integrations"]') || document.getElementById('moderation-channel-data');
   if (!host) return;
   let card = document.getElementById('channel-webhooks');
   if (!card) {
     card = document.createElement('div');
     card.className = 'moderation-card';
     card.id = 'channel-webhooks';
-    host.insertBefore(card, document.getElementById('channel-danger-zone'));
+    host.appendChild(card);
   }
   card.dataset.channelId = String(channelId);
   try {

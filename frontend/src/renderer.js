@@ -143,7 +143,7 @@ let state = {
     statusType: '',
   },
   files: [],
-  moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, canManageWorkspace: false, canCreateChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels' },
+  moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, canManageWorkspace: false, canCreateChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels', channelSettingsTab: 'overview' },
   notes: [],
   lists: [],
   listMembers: [],
@@ -2831,6 +2831,48 @@ function showAuditDetails(detailsText) {
   modal.querySelector('[data-audit-close]')?.focus();
 }
 
+function buildChannelConfigurator(host, channelName) {
+  const labels = {
+    overview: ['Overview', 'General channel settings and ownership.'],
+    permissions: ['Permissions', 'Control what roles and individual people can do in this channel.'],
+    members: ['Members', 'Manage explicit access, moderators, timeouts and reports.'],
+    integrations: ['Integrations', 'Connect external systems that post into this channel.'],
+    audit: ['Audit log', 'Review recent moderation and configuration changes.'],
+    danger: ['Danger zone', 'Destructive actions that cannot be undone.'],
+  };
+  const existingSections = Array.from(host.querySelectorAll(':scope > [data-channel-config-section]'));
+  const available = ['overview', 'permissions', 'members', 'integrations', 'audit'];
+  if (existingSections.some((element) => element.dataset.channelConfigSection === 'danger')) available.push('danger');
+  if (!available.includes(state.moderation.channelSettingsTab)) state.moderation.channelSettingsTab = 'overview';
+
+  const configurator = document.createElement('div');
+  configurator.className = 'channel-configurator';
+  const nav = document.createElement('nav');
+  nav.className = 'channel-config-nav';
+  nav.setAttribute('aria-label', `Settings for #${channelName}`);
+  nav.innerHTML = `<div class="channel-config-name"><span>#</span><strong>${escapeHtml(channelName)}</strong></div>${available.map((key) => `<button type="button" class="channel-config-nav-item${state.moderation.channelSettingsTab === key ? ' active' : ''}${key === 'danger' ? ' danger' : ''}" data-channel-settings-tab="${key}">${labels[key][0]}</button>`).join('')}`;
+  const content = document.createElement('div');
+  content.className = 'channel-config-content';
+
+  available.forEach((key) => {
+    const panel = document.createElement('section');
+    panel.className = 'channel-config-panel';
+    panel.dataset.channelPanel = key;
+    panel.hidden = state.moderation.channelSettingsTab !== key;
+    panel.innerHTML = `<header class="channel-config-panel-heading${key === 'danger' ? ' danger' : ''}"><h2>${labels[key][0]}</h2><p>${labels[key][1]}</p></header>`;
+    existingSections.filter((element) => element.dataset.channelConfigSection === key).forEach((element) => panel.appendChild(element));
+    if (key === 'integrations') {
+      const webhooks = document.createElement('div');
+      webhooks.className = 'moderation-card';
+      webhooks.id = 'channel-webhooks';
+      panel.appendChild(webhooks);
+    }
+    content.appendChild(panel);
+  });
+  configurator.append(nav, content);
+  host.appendChild(configurator);
+}
+
 async function loadModerationChannel(channelId) {
   const dataContainer = document.getElementById('moderation-channel-data');
   if (!dataContainer) return;
@@ -2857,14 +2899,14 @@ async function loadModerationChannel(channelId) {
       ? ([selectedChannel.creatorFirstName, selectedChannel.creatorMiddleName, selectedChannel.creatorLastName].filter(Boolean).join(' ') || selectedChannel.creatorUsername || 'Unknown owner')
       : 'Unknown owner';
     dataContainer.innerHTML = `
-      ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card moderation-channel-owner"><h2>Channel ownership</h2><div class="moderation-owner-row"><button type="button" class="avatar-mini" data-user-id="${selectedChannel.createdBy}" data-moderation-owner style="background:${escapeHtml(selectedChannel.creatorAvatarColor || '#64748b')}" title="${escapeHtml(ownerName)}" aria-label="Open ${escapeHtml(ownerName)}'s menu">${escapeHtml(ownerName.charAt(0).toUpperCase())}</button><span><strong>${escapeHtml(ownerName)}</strong><small>Owner of #${escapeHtml(selectedChannel.name)}</small></span></div></div>` : ''}
-      <div class="moderation-card">
+      ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card moderation-channel-owner" data-channel-config-section="overview"><h2>Channel ownership</h2><div class="moderation-owner-row"><button type="button" class="avatar-mini" data-user-id="${selectedChannel.createdBy}" data-moderation-owner style="background:${escapeHtml(selectedChannel.creatorAvatarColor || '#64748b')}" title="${escapeHtml(ownerName)}" aria-label="Open ${escapeHtml(ownerName)}'s menu">${escapeHtml(ownerName.charAt(0).toUpperCase())}</button><span><strong>${escapeHtml(ownerName)}</strong><small>Owner of #${escapeHtml(selectedChannel.name)}</small></span></div></div>` : ''}
+      <div class="moderation-card" data-channel-config-section="overview">
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
       </div>
-      <div id="moderation-channel-permissions"></div>
+      <div id="moderation-channel-permissions" data-channel-config-section="permissions"></div>
       ${state.moderation.canManageChannels ? `
-        <form class="moderation-card moderation-inline" data-moderation-form="add-member">
+        <form class="moderation-card moderation-inline" data-moderation-form="add-member" data-channel-config-section="members">
           <h2>Add channel access</h2>
           <select name="userId" required aria-label="Choose a user">${addableUsers.length
             ? addableUsers.map((user) => `<option value="${user.id}">${escapeHtml(user.username)}</option>`).join('')
@@ -2872,17 +2914,18 @@ async function loadModerationChannel(channelId) {
           <select name="role" aria-label="Choose a channel role"><option value="member">Member</option><option value="moderator">Moderator</option></select>
           <button class="btn primary" type="submit" ${addableUsers.length ? '' : 'disabled'}>Add user</button>
         </form>` : ''}
-      <div class="moderation-card"><h2>Channel members</h2><p class="admin-help">Search this channel's explicit members. Workspace roles and channel permission rules can grant access without adding every employee one by one.</p><input type="search" id="moderation-member-filter" placeholder="Search members…" aria-label="Filter channel members"><div class="moderation-list" id="moderation-member-list">${memberRows || '<p>No channel members.</p>'}</div></div>
-      <div class="moderation-card"><h2>Active timeouts</h2><div class="moderation-list">${(data.timeouts || []).map((timeout) => `
+      <div class="moderation-card" data-channel-config-section="members"><h2>Channel members</h2><p class="admin-help">Search this channel's explicit members. Workspace roles and channel permission rules can grant access without adding every employee one by one.</p><input type="search" id="moderation-member-filter" placeholder="Search members…" aria-label="Filter channel members"><div class="moderation-list" id="moderation-member-list">${memberRows || '<p>No channel members.</p>'}</div></div>
+      <div class="moderation-card" data-channel-config-section="members"><h2>Active timeouts</h2><div class="moderation-list">${(data.timeouts || []).map((timeout) => `
         <div class="moderation-row"><span>${escapeHtml(timeout.username)} · until ${escapeHtml(new Date(timeout.expiresAt).toLocaleString())}${timeout.reason ? ` · ${escapeHtml(timeout.reason)}` : ''}</span><button class="btn" data-action="remove-timeout" data-member-id="${timeout.userId}">Remove timeout</button></div>
       `).join('') || '<p>No active timeouts.</p>'}</div></div>
-      <div class="moderation-card"><h2>Open reports</h2><div class="moderation-list">${(data.reports || []).map((report) => `
+      <div class="moderation-card" data-channel-config-section="members"><h2>Open reports</h2><div class="moderation-list">${(data.reports || []).map((report) => `
         <div class="moderation-row moderation-report"><span>Message #${report.messageId} · reported by ${escapeHtml(report.reporterUsername || 'former user')} · ${escapeHtml(report.targetUsername)}: ${escapeHtml(report.reason)}</span><div class="moderation-row-actions"><button class="btn" data-action="resolve-report" data-report-id="${report.id}">Resolve</button><button class="btn" data-action="dismiss-report" data-report-id="${report.id}">Dismiss</button></div></div>
       `).join('') || '<p>No open reports.</p>'}</div></div>
-      <div class="moderation-card"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
+      <div class="moderation-card" data-channel-config-section="audit"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
         ${renderAuditEntry({ ...entry, channelName: data.channel.name })}
       `).join('') || '<p>No moderation actions yet.</p>'}</div></div>
-      ${canDeleteChannel(channelId) ? `<div class="moderation-card moderation-danger" id="channel-danger-zone"><h2>Danger zone</h2><p class="admin-help"><strong>Delete #${escapeHtml(data.channel.name)}</strong><br>Deletes this channel for everyone, including its messages, files, canvas, lists and links. This cannot be undone. The audit log keeps a record that it happened.</p><button class="btn danger" type="button" data-action="delete-channel">Delete channel…</button></div>` : ''}`;
+      ${canDeleteChannel(channelId) ? `<div class="moderation-card moderation-danger" id="channel-danger-zone" data-channel-config-section="danger"><h2>Danger zone</h2><p class="admin-help"><strong>Delete #${escapeHtml(data.channel.name)}</strong><br>Deletes this channel for everyone, including its messages, files, canvas, lists and links. This cannot be undone. The audit log keeps a record that it happened.</p><button class="btn danger" type="button" data-action="delete-channel">Delete channel…</button></div>` : ''}`;
+    buildChannelConfigurator(dataContainer, data.channel.name);
     const ownerAvatar = dataContainer.querySelector('[data-moderation-owner]');
     if (ownerAvatar && typeof paintAvatar === 'function') {
       paintAvatar(ownerAvatar, { id: selectedChannel.createdBy, photoVersion: selectedChannel.creatorPhotoVersion }, ownerName.charAt(0).toUpperCase());
@@ -2903,6 +2946,14 @@ function canDeleteChannel(channelId) {
 }
 
 async function handleModerationClick(event) {
+  const channelSettingsButton = event.target.closest('[data-channel-settings-tab]');
+  if (channelSettingsButton) {
+    state.moderation.channelSettingsTab = channelSettingsButton.dataset.channelSettingsTab;
+    const configurator = channelSettingsButton.closest('.channel-configurator');
+    configurator?.querySelectorAll('[data-channel-settings-tab]').forEach((button) => button.classList.toggle('active', button === channelSettingsButton));
+    configurator?.querySelectorAll('[data-channel-panel]').forEach((panel) => { panel.hidden = panel.dataset.channelPanel !== state.moderation.channelSettingsTab; });
+    return;
+  }
   const tabButton = event.target.closest('[data-mod-tab-button]');
   if (tabButton) {
     state.moderation.tab = tabButton.dataset.modTabButton;
