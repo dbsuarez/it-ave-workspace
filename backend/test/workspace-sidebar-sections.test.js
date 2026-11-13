@@ -115,11 +115,21 @@ test('workspace sections are Owner-managed, visible to everyone, and locked out 
   const layout = { sections: [{ id: 'company', name: 'Company', channelIds: [ids.channel] }] };
   const saved = await request(ids.owner, '/api/settings/sidebar/workspace', { method: 'PUT', body: JSON.stringify({ layout }) });
   assert.equal(saved.status, 200);
-  assert.deepEqual(saved.json.layout, layout);
+  // The server always prepends the built-in OFFICIAL section (holding the default channels).
+  const savedSections = saved.json.layout.sections;
+  assert.equal(savedSections.length, 2);
+  assert.equal(savedSections[0].id, 'builtin-official');
+  assert.equal(savedSections[0].builtIn, true);
+  assert.ok(Array.isArray(savedSections[0].channelIds));
+  assert.deepEqual(savedSections[1], layout.sections[0]);
 
   const memberView = await request(ids.member, '/api/settings/sidebar');
   assert.equal(memberView.status, 200);
-  assert.deepEqual(memberView.json.layout.workspaceSections, layout.sections);
+  const memberSections = memberView.json.layout.workspaceSections;
+  assert.equal(memberSections.length, 2);
+  assert.equal(memberSections[0].id, 'builtin-official');
+  assert.equal(memberSections[0].builtIn, true);
+  assert.deepEqual(memberSections[1], layout.sections[0]);
   assert.equal(memberView.json.layout.canManageWorkspaceSections, false);
 
   const forbidden = await request(ids.member, '/api/settings/sidebar/workspace', { method: 'PUT', body: JSON.stringify({ layout: { sections: [] } }) });
