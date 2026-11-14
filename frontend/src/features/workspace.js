@@ -130,7 +130,7 @@ async function loadSidebarLayout() {
       .flatMap((section) => (section.channelIds || []).map(Number)));
     const ownUnplaced = (state.channels || []).filter((channel) => !channel.isPersonal && Number(channel.createdBy) === Number(state.user?.id)
       && !placed.has(Number(channel.id))).map((channel) => Number(channel.id));
-    if (ownUnplaced.length) {
+    if (ownUnplaced.length && sidebarLayout().canManageWorkspaceSections) {
       if (!layout.sections.length) layout.sections.push({ id: 'my-channels', name: 'My channels', channelIds: [], collapsed: false });
       layout.sections[0].channelIds.push(...ownUnplaced);
       await saveSidebarLayout(layout);
@@ -179,7 +179,10 @@ function renderChannelNav() {
     .map((section) => ({ ...section, collapsed: collapsedWorkspace.has(section.id), team: true }));
   const personalChannels = state.channels.filter((channel) => isPersonalChannel(channel, state.user?.id));
   const personalIds = new Set(personalChannels.map((channel) => Number(channel.id)));
-  const sections = [...workspaceSections, ...teamSections, ...layout.sections.filter((section) => Array.isArray(section.channelIds))]
+  // Only the owner manages sections; other members see the shared workspace/team sections
+  // plus their own personal channels, and unassigned channels fall to the top-level list.
+  const canManageSections = Boolean(sidebarLayout().canManageWorkspaceSections);
+  const sections = [...workspaceSections, ...teamSections, ...(canManageSections ? layout.sections.filter((section) => Array.isArray(section.channelIds)) : [])]
     .map((section) => ({ ...section, channelIds: section.channelIds.filter((id) => !personalIds.has(Number(id))) }));
   const placed = new Set();
   const paneHome = document.getElementById('pane-home');
@@ -198,7 +201,28 @@ function renderChannelNav() {
     label.dataset.workspaceSection = section.workspace || section.team ? '1' : '0';
     label.setAttribute('aria-expanded', String(!section.collapsed));
     label.innerHTML = `<span class="nav-section-caret">${section.collapsed ? '▸' : '▾'}</span><span class="nav-section-name">${escapeHtml(section.name)}</span>${section.workspace ? '<span class="nav-section-lock" title="Workspace section" aria-label="Workspace section">◆</span>' : section.team ? '<span class="nav-section-lock" title="Team section" aria-label="Team section">&#128101;</span>' : ''}${section.collapsed && unread ? `<span class="unread-badge">${unread}</span>` : ''}`;
-    list.appendChild(label);
+    const row = document.createElement('div');
+    row.className = 'nav-section-row';
+    row.appendChild(label);
+    const canCreate = state.moderation.canCreateChannels || state.moderation.isSuperadmin;
+    const canManageSections = Boolean(sidebarLayout().canManageWorkspaceSections);
+    const canAddWorkspace = section.workspace && canManageSections && canCreate;
+    const canAddPersonal = !section.workspace && !section.team && canManageSections && canCreate;
+    const canAddTeam = section.team && section.editable;
+    if (canAddWorkspace || canAddPersonal || canAddTeam) {
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'nav-section-add';
+      add.dataset.addChannelToSection = '';
+      add.dataset.sectionKind = section.workspace ? 'workspace' : section.team ? 'team' : 'personal';
+      add.dataset.sectionId = section.id;
+      if (section.team) add.dataset.sectionTeamId = section.teamSectionId;
+      add.setAttribute('aria-label', `Add channel to ${section.name}`);
+      add.title = `Add channel to ${section.name}`;
+      add.textContent = '+';
+      row.appendChild(add);
+    }
+    list.appendChild(row);
     if (!section.collapsed) {
       if (!channels.length) {
         const empty = document.createElement('p');
@@ -274,6 +298,10 @@ function renderSidebarModal() {
   const workspaceDraft = state.workspaceSidebarDraft || { sections: [] };
   const teamDraft = state.teamSidebarDraft || { sections: [] };
   const canManageWorkspace = Boolean(draft.canManageWorkspaceSections);
+  const configurableTitleRow = document.getElementById('sidebar-configurable-title-row');
+  if (configurableTitleRow) configurableTitleRow.hidden = !canManageWorkspace;
+  const configurableSectionsHost = document.getElementById('sidebar-sections');
+  if (configurableSectionsHost) configurableSectionsHost.hidden = !canManageWorkspace;
   const channelById = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
   const workspaceChannelIds = new Set(workspaceDraft.sections.flatMap((section) => section.channelIds.map(Number)));
   const builtInWorkspaceChannelIds = new Set(workspaceDraft.sections.filter((section) => section.builtIn)
@@ -962,6 +990,22 @@ function setupWorkspaceFeatures() {
   document.getElementById('modal-sidebar')?.addEventListener('dragleave', (event) => event.target.closest('.drag-over')?.classList.remove('drag-over'));
   document.getElementById('sidebar-form')?.addEventListener('submit', saveSidebarModal);
   els.channelList?.addEventListener('click', (event) => {
+    const addButton = event.target.closest('[data-add-channel-to-section]');
+    if (addButton) {
+      event.stopPropagation();
+      const kind = addButton.dataset.sectionKind;
+      if (kind === 'team') {
+        state.channelCreationSectionTarget = { kind: 'team', id: Number(addButton.dataset.sectionTeamId) };
+        openCreateChannelModal({ team: true });
+      } else if (kind === 'workspace') {
+        state.channelCreationSectionTarget = { kind: 'workspace', id: addButton.dataset.sectionId };
+        openCreateChannelModal({});
+      } else {
+        state.channelCreationSectionTarget = { kind: 'personal', id: addButton.dataset.sectionId };
+        openCreateChannelModal({});
+      }
+      return;
+    }
     const label = event.target.closest('[data-section-id]');
     if (label) { event.stopPropagation(); toggleSidebarSection(label.dataset.sectionId); }
   });

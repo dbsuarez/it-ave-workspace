@@ -5571,6 +5571,32 @@ function closeModalCreateChannel({ restoreOrganizer = true } = {}) {
   }
 }
 
+// Append a freshly-created channel to the section the user asked for via the sidebar "+" button
+async function placeChannelInSidebarSection(channelId, target) {
+  const layout = JSON.parse(JSON.stringify(sidebarLayout()));
+  if (target.kind === 'workspace') {
+    const section = (layout.workspaceSections || []).find((s) => s.id === target.id);
+    if (!section) return false;
+    section.channelIds.push(Number(channelId));
+    const res = await api('/api/settings/sidebar/workspace', {
+      method: 'PUT',
+      body: JSON.stringify({ layout: { sections: layout.workspaceSections } }),
+    });
+    return res.ok;
+  }
+  if (target.kind === 'personal') {
+    const section = (layout.sections || []).find((s) => s.id === target.id);
+    if (!section) return false;
+    section.channelIds.push(Number(channelId));
+    const res = await api('/api/settings/sidebar', {
+      method: 'PUT',
+      body: JSON.stringify({ layout }),
+    });
+    return res.ok;
+  }
+  return false;
+}
+
 async function saveCreateChannel() {
   const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const topic = document.getElementById('new-channel-topic').value.trim();
@@ -5595,7 +5621,20 @@ async function saveCreateChannel() {
     document.getElementById('new-channel-topic').value = '';
 
     await loadChannels();
-    if (teamSectionId && state.channelCreationFromOrganizer && state.sidebarDraft) {
+    if (state.channelCreationSectionTarget && !state.channelCreationFromOrganizer) {
+      const target = state.channelCreationSectionTarget;
+      state.channelCreationSectionTarget = null;
+      if (target.kind === 'team') {
+        // The server already placed the channel in the team section; refresh so the sidebar shows it.
+        await loadSidebarLayout();
+        openChannel(data.channel.id);
+      } else {
+        const placed = await placeChannelInSidebarSection(data.channel.id, target);
+        await loadSidebarLayout();
+        if (!placed) showToast('Channel created, but it could not be added to that section.', 'error');
+        openChannel(data.channel.id);
+      }
+    } else if (teamSectionId && state.channelCreationFromOrganizer && state.sidebarDraft) {
       state.channelCreationSectionTarget = null;
       await loadSidebarLayout();
       state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
