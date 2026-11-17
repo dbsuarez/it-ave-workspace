@@ -311,7 +311,7 @@ async function leaveSettingsAction(action, row) {
       if (action === 'type-add') await leaveApi('/api/leave/types', 'POST', body);
       else if (action === 'type-save') await leaveApi(`/api/leave/types/${row.dataset.type}`, 'PUT', body);
       else if (action === 'type-delete') {
-        if (!confirm('Delete this leave type? If people have used it, it is only hidden.')) return;
+        if (!(await confirmAction({ title: 'Delete leave type', message: 'Delete this leave type? If people have used it, it is only hidden.', confirmLabel: 'Delete leave type' }))) return;
         await leaveApi(`/api/leave/types/${row.dataset.type}`, 'DELETE');
       }
     }
@@ -366,7 +366,7 @@ if (typeof document !== 'undefined') {
     }
     const cancel = t.closest('[data-leave-cancel]');
     if (cancel) {
-      if (!confirm('Cancel this leave request?')) return;
+      if (!(await confirmAction({ title: 'Cancel request', message: 'Cancel this leave request?', confirmLabel: 'Cancel request' }))) return;
       try { await leaveApi(`/api/leave/requests/${cancel.dataset.leaveCancel}/cancel`, 'POST', {}); showToast('Request cancelled.', 'success'); await loadLeave(); } catch (err) { showToast(err.message || 'Could not cancel.', 'error'); }
       return;
     }

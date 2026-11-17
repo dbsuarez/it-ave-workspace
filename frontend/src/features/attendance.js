@@ -351,7 +351,7 @@ async function scheduleAction(action, row) {
     else if (action === 'save') await attendanceApi(`/api/attendance/schedules/${id}`, 'PUT', readScheduleRow(row));
     else if (action === 'default') await attendanceApi(`/api/attendance/schedules/${id}/default`, 'PUT', {});
     else if (action === 'delete') {
-      if (!confirm('Delete this schedule? People on it follow the default schedule.')) return;
+      if (!(await confirmAction({ title: 'Delete schedule', message: 'Delete this schedule? People on it follow the default schedule.', confirmLabel: 'Delete schedule' }))) return;
       await attendanceApi(`/api/attendance/schedules/${id}`, 'DELETE');
     }
     await openSchedules();
@@ -478,7 +478,7 @@ if (typeof document !== 'undefined') {
     if (removePunch) { if (document.querySelectorAll('#att-punches .att-punch-row').length > 1) removePunch.closest('.att-punch-row').remove(); return; }
     if (t.closest('[data-att-delete]')) {
       const date = document.getElementById('attendance-form').dataset.date;
-      if (!confirm('Remove this day\'s record?')) return;
+      if (!(await confirmAction({ title: 'Remove record', message: 'Remove this day\'s record?', confirmLabel: 'Remove record' }))) return;
       try { await attendanceApi(`/api/attendance/records/${attendanceState.sheet.person.id}/${date}`, 'DELETE'); closeSettingsModal(); showToast('Record removed.', 'success'); await loadAttendance(); } catch (err) { showToast(err.message || 'Could not remove it.', 'error'); }
       return;
     }
@@ -500,7 +500,7 @@ if (typeof document !== 'undefined') {
     if (trust) { try { await attendanceApi(`/api/attendance/devices/${trust.dataset.attDeviceTrust}`, 'PUT', { trusted: true }); showToast('Device approved.', 'success'); await loadAttendance(); } catch (err) { showToast(err.message || 'Could not approve.', 'error'); } return; }
     const forget = t.closest('[data-att-device-forget]');
     if (forget) {
-      if (!confirm('Forget this device? If they use it again it is flagged again (or trusted, if it is their only device).')) return;
+      if (!(await confirmAction({ title: 'Forget device', message: 'Forget this device? If they use it again it is flagged again (or trusted, if it is their only device).', confirmLabel: 'Forget device' }))) return;
       try { await attendanceApi(`/api/attendance/devices/${forget.dataset.attDeviceForget}`, 'DELETE'); await loadAttendance(); } catch (err) { showToast(err.message || 'Could not forget it.', 'error'); }
       return;
     }

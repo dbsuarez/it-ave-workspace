@@ -240,7 +240,7 @@ function renderWorkspaceAdmin() {
     </div>
     <div class="moderation-card" id="admin-owner-private-access" data-mod-tab="superadmin">
       <h2>Owner access to private channels</h2>
-      <p class="admin-help">Off (recommended): an Owner cannot read or post in a private channel they are not a member of, like everyone else. Owners can still manage a channel (managers, archive, recovery, deletion) without reading it. Turn this on only when you must look inside private channels; every change is written to the audit log.</p>
+      <p class="admin-help">Off (recommended): an Owner cannot read or post in a private channel they are not a member of, and cannot add themselves to one, like everyone else (a channel manager can still invite them). Owners can still manage a channel (managers, archive, recovery, deletion) without reading it. Turn this on only when you must look inside private channels; every change is written to the audit log.</p>
       <p><strong>${admin.ownerPrivateAccess ? 'On: Owners can open every private channel' : 'Off: Owners need to be invited to private channels'}</strong></p>
       <div class="admin-actions">
         <button class="btn${admin.ownerPrivateAccess ? '' : ' danger'}" type="button" data-admin-action="owner-private-access" data-enabled="${admin.ownerPrivateAccess ? 'false' : 'true'}">${admin.ownerPrivateAccess ? 'Switch off' : 'Switch on'}</button>
@@ -365,7 +365,7 @@ async function handleAdminClick(event) {
       const card = button.closest('#admin-employee-role-reset');
       const input = card?.querySelector('[data-employee-reset-phrase]');
       if (!input || input.value !== 'RESET EMPLOYEE ROLES') throw new Error('Enter the exact confirmation phrase.');
-      if (!confirm('Reset roles for ALL non-Owner employees?\n\nCustom roles, HR grants, and personal action overrides will be cleared. This affects permissions and signs out active sessions.\n\nContinue only after backing up the TEST database.')) return;
+      if (!(await confirmAction({ title: 'Reset roles', message: 'Reset roles for ALL non-Owner employees?\n\nCustom roles, HR grants, and personal action overrides will be cleared. This affects permissions and signs out active sessions.\n\nContinue only after backing up the TEST database.', confirmLabel: 'Reset roles' }))) return;
       button.disabled = true;
       try {
         const result = await adminApi('/api/admin/employee-role-reset', 'POST', { confirmation: input.value });
@@ -403,12 +403,12 @@ async function handleAdminClick(event) {
       await loadWorkspaceAdmin();
       return;
     } else if (action === 'prelaunch-apply') {
-      if (!confirm('Set the shared test password for every employee now?\n\nThey are signed out and their current passwords stop working. Superadmins and guests are not changed.')) return;
+      if (!(await confirmAction({ title: 'Set test password', message: 'Set the shared test password for every employee now?\n\nThey are signed out and their current passwords stop working. Superadmins and guests are not changed.', confirmLabel: 'Set test password' }))) return;
       const data = await adminApi('/api/admin/prelaunch/apply', 'POST', {});
       showToast(`${data.changed} employee${data.changed === 1 ? '' : 's'} now use the test password.`, 'success');
       return;
     } else if (action === 'prelaunch-golive') {
-      if (!confirm('Go live?\n\nThe shared test password is switched off, and every employee must choose a new password the next time they sign in. Until they do, the test password still works for them.')) return;
+      if (!(await confirmAction({ title: 'Go live', message: 'Go live?\n\nThe shared test password is switched off, and every employee must choose a new password the next time they sign in. Until they do, the test password still works for them.', confirmLabel: 'Go live' }))) return;
       const data = await adminApi('/api/admin/prelaunch/go-live', 'POST', {});
       showToast(`Live. ${data.mustChange} employee${data.mustChange === 1 ? ' is' : 's are'} asked to choose a new password.`, 'success');
       await loadWorkspaceAdmin();
@@ -450,7 +450,7 @@ async function handleAdminClick(event) {
       const userId = Number(row.dataset.adminUser);
       const accountType = row.querySelector('[data-admin-type]').value;
       const isSuperadmin = row.querySelector('[data-admin-superadmin]').checked;
-      if (accountType === 'guest' && !confirm('Make this person a guest? They keep their current channels but lose moderator roles, cannot join or create channels, and can only message people in their channels.')) return;
+      if (accountType === 'guest' && !(await confirmAction({ title: 'Make guest', message: 'Make this person a guest? They keep their current channels but lose moderator roles, cannot join or create channels, and can only message people in their channels.', confirmLabel: 'Make guest' }))) return;
       await adminApi(`/api/admin/users/${userId}`, 'PATCH', { accountType, isSuperadmin });
       const hrBox = row.querySelector('[data-admin-hr]');
       if (hrBox && accountType === 'member') await adminApi(`/api/hr/employees/${userId}/hr-role`, 'PUT', { isHr: hrBox.checked });

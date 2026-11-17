@@ -6,6 +6,7 @@ const { can } = require('../permissions');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { ensureChannelMembership, ensureChannelModerator } = require('../security');
+const ownerChannelAccess = require('../ownerChannelAccess');
 
 const router = express.Router();
 const { DEFAULT_CHANNELS } = require('../defaultChannels');
@@ -325,6 +326,7 @@ router.put('/channels/:channelId/members/:userId', async (req, res) => {
     if (!['member', 'moderator'].includes(role)) {
       return res.status(400).json({ error: 'Role must be member or moderator' });
     }
+    await ownerChannelAccess.refuseOwnerSelfGrant(query, req.user.userId, channelId, { userIds: [userId] });
     const teamChannel = (await query(
       `SELECT c.team_section_id, ts.owner_id FROM channels c
        LEFT JOIN team_sidebar_sections ts ON ts.id = c.team_section_id WHERE c.id = $1`, [channelId]

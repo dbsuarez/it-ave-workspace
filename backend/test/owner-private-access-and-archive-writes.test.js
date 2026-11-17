@@ -40,6 +40,8 @@ test.before(async () => {
   app.use(express.json());
   app.use('/api/channels', require('../src/routes/channels'));
   app.use('/api/channels', require('../src/routes/channelLinks'));
+  app.use('/api/channels', require('../src/routes/channelAccessPolicies'));
+  app.use('/api/channels', require('../src/routes/channelPermissions'));
   app.use('/api/messages', require('../src/routes/messages'));
   app.use('/api/messages', require('../src/routes/messageEdits'));
   app.use('/api/search', require('../src/routes/search'));
@@ -110,6 +112,37 @@ test('an Owner cannot open private channels they are not in, until the switch is
   assert.equal((await request(ids.owner, `/api/messages/${ids.priv}`)).status, 403, 'off again: closed');
   const audit = await admin.query("SELECT action FROM moderation_audit_log WHERE action LIKE 'owner_private_access_%' ORDER BY id");
   assert.deepEqual(audit.rows.map((r) => r.action), ['owner_private_access_on', 'owner_private_access_off']);
+});
+
+test('while the switch is off an Owner cannot give themselves access to a private channel', async (t) => {
+  if (!scratch) return t.skip('no PostgreSQL reachable');
+  await admin.query('UPDATE moderation_settings SET owner_private_channel_access = FALSE WHERE id = 1');
+  const dept = (await admin.query("INSERT INTO departments (name) VALUES ('oa-dept') RETURNING id")).rows[0].id;
+  await admin.query('UPDATE users SET department_id = $2 WHERE id = $1', [ids.owner, dept]);
+  const target = (await admin.query("INSERT INTO channels (name, is_private, created_by) VALUES ('zz-oa-selfgrant', TRUE, $1) RETURNING id", [ids.alice])).rows[0].id;
+  await admin.query("INSERT INTO channel_members (channel_id, user_id, role) VALUES ($1, $2, 'moderator')", [target, ids.alice]);
+  const member = async () => (await admin.query('SELECT 1 FROM channel_members WHERE channel_id = $1 AND user_id = $2', [target, ids.owner])).rows.length;
+
+  assert.equal((await put(ids.owner, `/api/moderation/channels/${target}/members/${ids.owner}`, { role: 'member' })).status, 403, 'Moderation > members, self');
+  assert.equal((await put(ids.owner, `/api/channels/${target}/access-policy/invitation`, { userId: ids.owner, confirmHistoryExposure: true })).status, 403, 'direct invitation, self');
+  assert.equal((await put(ids.owner, `/api/channels/${target}/access-policy/departments`, { departmentIds: [dept], confirmHistoryExposure: true })).status, 403, 'department grant for their own department');
+  assert.equal((await put(ids.owner, `/api/channels/${target}/permissions`, { subjectType: 'department', subjectId: dept, allow: ['view_channel'], deny: [] })).status, 403, 'department view override for their own department');
+  assert.equal(await member(), 0, 'no membership was created');
+  assert.equal((await request(ids.owner, `/api/messages/${target}`)).status, 403, 'and still no access');
+
+  // administration that does not give the Owner access still works
+  const other = (await admin.query("INSERT INTO departments (name) VALUES ('oa-other') RETURNING id")).rows[0].id;
+  assert.equal((await put(ids.owner, `/api/channels/${target}/access-policy/departments`, { departmentIds: [other], confirmHistoryExposure: true })).status, 200, 'granting another department is fine');
+  // someone else inviting the Owner is allowed: that is a decision by the channel's manager
+  assert.equal((await put(ids.alice, `/api/moderation/channels/${target}/members/${ids.owner}`, { role: 'member' })).status, 403, 'managers need workspace permission to add members here');
+  assert.equal((await put(ids.alice, `/api/channels/${target}/access-policy/invitation`, { userId: ids.owner, confirmHistoryExposure: true })).status, 200, 'a channel manager invites the Owner');
+  assert.equal((await request(ids.owner, `/api/messages/${target}`)).status, 200, 'the invited Owner can read');
+  await request(ids.alice, `/api/channels/${target}/access-policy/invitation/${ids.owner}`, { method: 'DELETE' });
+
+  // with the switch on, self-grants are allowed again
+  await admin.query('UPDATE moderation_settings SET owner_private_channel_access = TRUE WHERE id = 1');
+  assert.equal((await put(ids.owner, `/api/moderation/channels/${target}/members/${ids.owner}`, { role: 'member' })).status, 200, 'switch on: allowed');
+  await admin.query('UPDATE moderation_settings SET owner_private_channel_access = FALSE WHERE id = 1');
 });
 
 test('an archived channel refuses message edits and deletes, topic changes, links and scheduling', async (t) => {

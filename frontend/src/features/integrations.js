@@ -107,7 +107,7 @@ async function handleWebhookClick(event) {
     return;
   }
   const remove = event.target.closest('[data-webhook-delete]');
-  if (!remove || !confirm('Delete this webhook? Its address will stop working.')) return;
+  if (!remove || !(await confirmAction({ title: 'Delete webhook', message: 'Delete this webhook? Its address will stop working.', confirmLabel: 'Delete webhook' }))) return;
   try {
     await adminApi(`/api/webhooks/${remove.dataset.webhookDelete}`, 'DELETE');
     await loadChannelWebhooks(channelId);

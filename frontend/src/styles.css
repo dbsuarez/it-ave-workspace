@@ -2192,6 +2192,7 @@ textarea:focus {
 
 .confirm-message {
   margin: 0;
+  white-space: pre-line; /* the messages use line breaks */
   font-size: 13px;
   line-height: 1.55;
   color: var(--text);

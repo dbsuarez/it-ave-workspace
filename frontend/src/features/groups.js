@@ -256,7 +256,7 @@ async function renameCurrentGroup() {
 
 async function leaveCurrentGroup() {
   const groupId = state.currentGroupId;
-  if (!groupId || !confirm('Leave this group? You will stop receiving its messages.')) return;
+  if (!groupId || !(await confirmAction({ title: 'Leave group', message: 'Leave this group? You will stop receiving its messages.', confirmLabel: 'Leave group' }))) return;
   try {
     const res = await api(`/api/conversations/${groupId}/members/${state.user.id}`, { method: 'DELETE' });
     const data = await res.json();

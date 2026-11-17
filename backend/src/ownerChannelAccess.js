@@ -17,4 +17,23 @@ async function isEnabled(query) {
   return Boolean(result.rows[0] && result.rows[0].owner_private_channel_access);
 }
 
-module.exports = { SETTING_SQL, superadminMaySee, isEnabled };
+// While the switch is off an Owner may not grant THEMSELVES access to a private channel through administration
+// either: not as a member, not by invitation, and not through a department they belong to. A channel manager (or
+// another Owner) inviting them is a decision by someone else and stays allowed. Throws a 403 to stop the request.
+async function refuseOwnerSelfGrant(query, actorId, channelId, { userIds = [], departmentIds = [] } = {}) {
+  const channel = (await query('SELECT is_private, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
+  if (!channel || !channel.is_private || channel.is_personal) return;
+  const actor = (await query('SELECT is_superadmin, department_id FROM users WHERE id = $1', [actorId])).rows[0];
+  if (!actor || !actor.is_superadmin || await isEnabled(query)) return;
+  let self = userIds.map(Number).includes(Number(actorId));
+  if (!self && departmentIds.length) {
+    const own = (await query('SELECT department_id FROM user_departments WHERE user_id = $1', [actorId])).rows.map((r) => Number(r.department_id));
+    if (actor.department_id) own.push(Number(actor.department_id));
+    self = departmentIds.map(Number).some((id) => own.includes(id));
+  }
+  if (self) {
+    throw Object.assign(new Error('Owners cannot give themselves access to a private channel while "Owner access to private channels" is off. Ask a channel manager to invite you, or turn the switch on (Moderation > Superadmin).'), { status: 403 });
+  }
+}
+
+module.exports = { SETTING_SQL, superadminMaySee, isEnabled, refuseOwnerSelfGrant };

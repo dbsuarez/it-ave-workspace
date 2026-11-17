@@ -26,8 +26,13 @@ for (const file of scripts) {
   if (file.startsWith('src/') && /\b(?:const|let|var|function|class)\s+electronAPI\b/.test(code)) {
     problems.push(`${file}: must not declare "electronAPI" (the preload already defines it)`);
   }
-  if (file.startsWith('src/') && /(^|[^.\w])prompt\s*\(/.test(code)) {
-    problems.push(`${file}: window.prompt() is not supported in Electron; use askText()`);
+  // Native dialogs are not allowed anywhere: use the in-app ones from src/features/dialogs.js.
+  if (file.startsWith('src/') && file !== 'src/features/dialogs.js') {
+    const native = code.match(/(?:^|[^.\w])(?:window\.)?(confirm|alert|prompt)\s*\(/m);
+    if (native) {
+      const replacement = { confirm: 'await confirmAction({ title, message, confirmLabel })', alert: 'await showMessage(message)', prompt: 'await askText(message)' }[native[1]];
+      problems.push(`${file}: native ${native[1]}() is not allowed (Electron does not support prompt(), and native boxes break the app's look); use ${replacement} from features/dialogs.js`);
+    }
   }
 }
 

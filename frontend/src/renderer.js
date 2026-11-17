@@ -2378,7 +2378,7 @@ async function executeSlashCommand(commandText) {
   }
 }
 
-function handleCommandResponseClick(event) {
+async function handleCommandResponseClick(event) {
   if (event.target.closest('.command-dismiss')) {
     event.target.closest('.command-private-card')?.remove();
     return;
@@ -2393,7 +2393,7 @@ function handleCommandResponseClick(event) {
   }
   const cancel = event.target.closest('[data-command-cancel-leave]');
   if (cancel) {
-    if (!confirm('Cancel this leave request?')) return;
+    if (!(await confirmAction({ title: 'Cancel request', message: 'Cancel this leave request?', confirmLabel: 'Cancel request' }))) return;
     const card = cancel.closest('.command-private-card');
     leaveApi(`/api/leave/requests/${Number(cancel.dataset.commandCancelLeave)}/cancel`, 'POST', {})
       .then(() => { card?.remove(); showToast('Leave request cancelled.', 'success'); if (typeof loadLeave === 'function') loadLeave(); })
@@ -3666,95 +3666,6 @@ async function handleModerationMessageClick(event) {
       showToast(err.message || 'Could not remove this message.', 'error');
     }
   }
-}
-
-// Reusable confirmation dialog (replaces native window.confirm).
-// Resolves with true if the user confirms, false on cancel / Escape / backdrop click.
-function confirmAction({ title = '', message = '', confirmLabel = 'Delete', cancelLabel = 'Cancel', danger = true } = {}) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay open';
-    const modal = document.createElement('div');
-    modal.className = 'modal confirm-modal open';
-    modal.setAttribute('role', 'alertdialog');
-    modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-label', title || message || 'Confirm action');
-    modal.innerHTML = `
-      <div class="modal-body">
-        ${title ? `<h3 class="confirm-title">${escapeHtml(title)}</h3>` : ''}
-        ${message ? `<p class="confirm-message">${escapeHtml(message)}</p>` : ''}
-      </div>
-      <div class="modal-footer">
-        <button class="btn" type="button" data-confirm-cancel>${escapeHtml(cancelLabel)}</button>
-        <button class="btn ${danger ? 'danger' : 'primary'}" type="button" data-confirm-ok>${escapeHtml(confirmLabel)}</button>
-      </div>`;
-    const finish = (value) => {
-      document.removeEventListener('keydown', onKeydown, true);
-      overlay.remove();
-      modal.remove();
-      resolve(value);
-    };
-    const onKeydown = (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      finish(false);
-    };
-    modal.querySelector('[data-confirm-ok]').addEventListener('click', () => finish(true));
-    modal.querySelectorAll('[data-confirm-cancel]').forEach((btn) => btn.addEventListener('click', () => finish(false)));
-    overlay.addEventListener('click', () => finish(false));
-    document.addEventListener('keydown', onKeydown, true);
-    document.body.append(overlay, modal);
-    // Focus the Cancel button so Enter does not accidentally confirm a destructive action
-    modal.querySelector('[data-confirm-cancel]')?.focus();
-  });
-}
-
-// Electron does not implement window.prompt(), so text input uses an in-app dialog.
-// Resolves with the entered text, or null when the dialog is cancelled.
-function askText(message, { placeholder = '', maxLength = 500, required = false } = {}) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay open';
-    const modal = document.createElement('form');
-    modal.className = 'modal open';
-    modal.setAttribute('role', 'dialog');
-    modal.setAttribute('aria-modal', 'true');
-    modal.innerHTML = `
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="ask-text-input">${escapeHtml(message)}</label>
-          <input id="ask-text-input" type="text" autocomplete="off" maxlength="${Number(maxLength)}" placeholder="${escapeHtml(placeholder)}"${required ? ' required' : ''}>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" type="button" data-ask-cancel>Cancel</button>
-        <button class="btn primary" type="submit">OK</button>
-      </div>`;
-    const input = modal.querySelector('input');
-    const finish = (value) => {
-      document.removeEventListener('keydown', onKeydown, true);
-      overlay.remove();
-      modal.remove();
-      resolve(value);
-    };
-    const onKeydown = (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      finish(null);
-    };
-    modal.addEventListener('submit', (event) => {
-      event.preventDefault();
-      if (required && !input.value.trim()) return;
-      finish(input.value);
-    });
-    modal.querySelector('[data-ask-cancel]').addEventListener('click', () => finish(null));
-    overlay.addEventListener('click', () => finish(null));
-    document.addEventListener('keydown', onKeydown, true);
-    document.body.append(overlay, modal);
-    input.focus();
-  });
 }
 
 async function checkedApi(url, method, body) {

@@ -6,6 +6,7 @@ const auth = require('../middleware/auth');
 const { can } = require('../permissions');
 const { positiveId } = require('../channelAccessPhase2');
 const { reconcileChannelRoom } = require('../channelRoomReconcile');
+const { refuseOwnerSelfGrant } = require('../ownerChannelAccess');
 const { idList, membershipInput, inviteInput, banInput } = require('../channelPolicyValidation');
 const router = express.Router();
 router.use(auth);
@@ -57,6 +58,8 @@ router.put('/:channelId/access-policy/departments', async (req, res) => {
     const ids = idList(req.body?.departmentIds);
     await allowedManager(channelId, req.user.userId);
     if (req.body?.confirmHistoryExposure !== true) throw fail(400, 'Confirm that new members receive full retained history');
+    const already = (await query('SELECT department_id FROM channel_department_grants WHERE channel_id = $1', [channelId])).rows.map((r) => Number(r.department_id));
+    await refuseOwnerSelfGrant(query, req.user.userId, channelId, { departmentIds: ids.filter((id) => !already.includes(Number(id))) });
     await transaction(async client => {
       if (ids.length) {
         const found = (await client.query('SELECT id FROM departments WHERE id = ANY($1::integer[])', [ids])).rows;
@@ -76,6 +79,7 @@ router.put('/:channelId/access-policy/invitation', async (req, res) => {
     const input = inviteInput(req.body);
     await allowedManager(channelId, req.user.userId);
     if (req.body?.confirmHistoryExposure !== true) throw fail(400, 'Confirm full history exposure');
+    await refuseOwnerSelfGrant(query, req.user.userId, channelId, { userIds: [input.userId] });
     await transaction(async client => {
       await verifyEmployees(client, [input.userId]);
       await client.query(`INSERT INTO channel_direct_grants(channel_id,user_id,granted_by,expires_at) VALUES($1,$2,$3,$4)

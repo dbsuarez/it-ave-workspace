@@ -12,7 +12,7 @@ test('employee role reset appears within Superadmin workspace administration', (
 });
 test('employee role reset requires an exact phrase and second confirmation', () => {
   assert.match(ui, /input\.value !== 'RESET EMPLOYEE ROLES'/);
-  assert.match(ui, /if \(!confirm\('Reset roles for ALL non-Owner employees/);
+  assert.match(ui, /await confirmAction\(\{ title: 'Reset roles', message: 'Reset roles for ALL non-Owner employees/);
   assert.match(ui, /confirmButton\.disabled = event\.target\.value !== 'RESET EMPLOYEE ROLES'/);
   assert.match(ui, /data-admin-action="employee-role-reset-cancel"/);
 });

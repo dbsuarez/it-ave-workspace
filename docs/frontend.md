@@ -22,6 +22,7 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 │   ├── login.html       # Login/register screen with its own title bar
 │   ├── renderer.js      # Main UI logic + Socket.io client
 │   ├── features/        # Feature scripts loaded before renderer.js (functions only)
+│   │   ├── dialogs.js       # The only dialogs: confirmAction, askText, showMessage (also used by the login page; native confirm/alert/prompt fail the build check)
 │   │   ├── format.js        # Safe rich text for messages (tested in test/format.test.js)
 │   │   ├── activity.js      # @mentions and the Activity feed
 │   │   ├── notifications.js # Notification preferences, Do Not Disturb, status, unread counts

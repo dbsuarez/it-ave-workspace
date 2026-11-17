@@ -80,7 +80,7 @@ if (typeof document !== 'undefined') document.addEventListener('click', async (e
     const departmentIds = [...document.querySelectorAll('#emp-multi-departments [data-emp-extra-dept]:checked')].map(n => Number(n.dataset.empExtraDept));
     const primary = document.getElementById('emp-primary-department')?.value;
     if ((primary && !departmentIds.includes(Number(primary))) || (!primary && departmentIds.length)) { showToast('Choose a primary department from the checked memberships.', 'error'); return; }
-    if (!confirm('Change this employee’s department-based channel access? This may expose full retained channel history or revoke existing access.')) return;
+    if (!(await confirmAction({ title: 'Change access', message: 'Change this employee’s department-based channel access? This may expose full retained channel history or revoke existing access.', confirmLabel: 'Change access' }))) return;
     await channelAccessMutate(() => channelAccessRequest(`/api/organization/users/${id}/departments`, 'PUT', { departmentIds, primaryDepartmentId: primary ? Number(primary) : null, confirmAccessChanges: true }));
     await loadEmployeeDepartments(id);
     return;
@@ -90,25 +90,25 @@ if (typeof document !== 'undefined') document.addEventListener('click', async (e
   if (node.hasAttribute('data-access-refresh')) { await loadChannelAccessCard(id); return; }
   if (node.hasAttribute('data-access-save-depts')) {
     const departmentIds = [...document.querySelectorAll('#moderation-channel-access [data-access-dept]:checked')].map(n => Number(n.dataset.accessDept));
-    if (!confirm('Change channel department access? Newly authorized employees can read full retained history.')) return;
+    if (!(await confirmAction({ title: 'Change access', message: 'Change channel department access? Newly authorized employees can read full retained history.', confirmLabel: 'Change access' }))) return;
     await channelAccessMutate(() => channelAccessRequest(`/api/channels/${id}/access-policy/departments`, 'PUT', { departmentIds, confirmHistoryExposure:true }));
   } else if (node.hasAttribute('data-access-invite')) {
     const userId = Number(document.getElementById('access-invite-user')?.value);
     const raw = document.getElementById('access-invite-expiry')?.value;
     if (!userId) return;
-    if (!confirm('Invite this employee? They may read all retained channel history.')) return;
+    if (!(await confirmAction({ title: 'Invite', message: 'Invite this employee? They may read all retained channel history.', confirmLabel: 'Invite', danger: false }))) return;
     await channelAccessMutate(() => channelAccessRequest(`/api/channels/${id}/access-policy/invitation`, 'PUT', { userId, expiresAt:raw ? new Date(raw).toISOString() : null, confirmHistoryExposure:true }));
   } else if (node.hasAttribute('data-access-revoke')) {
-    if (!confirm('Revoke this direct invitation? Other grants may still allow access.')) return;
+    if (!(await confirmAction({ title: 'Revoke', message: 'Revoke this direct invitation? Other grants may still allow access.', confirmLabel: 'Revoke' }))) return;
     await channelAccessMutate(() => channelAccessRequest(`/api/channels/${id}/access-policy/invitation/${Number(node.dataset.accessRevoke)}`, 'DELETE'));
   } else if (node.hasAttribute('data-access-ban')) {
     const userId = Number(document.getElementById('access-ban-user')?.value);
     const reason = document.getElementById('access-ban-reason')?.value.trim();
     if (!userId || !reason) { showToast('Select an employee and enter a reason.', 'error'); return; }
-    if (!confirm('Ban this employee from the channel, overriding every access grant?')) return;
+    if (!(await confirmAction({ title: 'Ban', message: 'Ban this employee from the channel, overriding every access grant?', confirmLabel: 'Ban' }))) return;
     await channelAccessMutate(() => channelAccessRequest(`/api/channels/${id}/access-policy/ban`, 'PUT', {userId, reason}));
   } else if (node.hasAttribute('data-access-unban')) {
-    if (!confirm('Remove this channel ban? Other access grants may become effective again.')) return;
+    if (!(await confirmAction({ title: 'Remove ban', message: 'Remove this channel ban? Other access grants may become effective again.', confirmLabel: 'Remove ban' }))) return;
     await channelAccessMutate(() => channelAccessRequest(`/api/channels/${id}/access-policy/ban/${Number(node.dataset.accessUnban)}`, 'DELETE'));
   }
 });
@@ -155,7 +155,7 @@ if (typeof document !== 'undefined') document.addEventListener('click', async (e
   } else {
     path=`/api/moderation/channels/${channelId}`;method='DELETE';body={confirmation:'PERMANENTLY DELETE CHANNEL'};
   }
-  if (!confirm(`Confirm ${method === 'DELETE' ? 'PERMANENT deletion of this channel and all its content' : 'this channel management change'}?`)) return;
+  if (!(await confirmAction({ title: method === 'DELETE' ? 'Delete channel' : 'Confirm', message: `Confirm ${method === 'DELETE' ? 'PERMANENT deletion of this channel and all its content' : 'this channel management change'}?`, confirmLabel: method === 'DELETE' ? 'Delete channel' : 'Confirm' }))) return;
   control.disabled=true;
   try { await channelAccessRequest(path,method,body); showToast('Channel management updated.', 'success'); if(method==='DELETE') { control.closest('#channel-lifecycle-controls')?.remove(); } else { await loadChannelAccessCard(channelId); } }
   catch(err){ showToast(err.message || 'Could not update channel', 'error'); }

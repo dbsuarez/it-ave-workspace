@@ -322,7 +322,7 @@ async function changeTasks(id, fn) {
 
 async function resetEmployeePassword(id) {
   const e = employeeState.list.find((item) => item.id === id);
-  if (!e || !confirm(`Reset ${employeeFullName(e)}'s password? They are signed out now and must choose a new one when they sign in with the temporary password.`)) return;
+  if (!e || !(await confirmAction({ title: 'Reset password', message: `Reset ${employeeFullName(e)}'s password? They are signed out now and must choose a new one when they sign in with the temporary password.`, confirmLabel: 'Reset password' }))) return;
   try {
     const data = await hrApi(`/api/hr/employees/${id}/reset-password`, 'POST', {});
     document.getElementById('emp-account-note').innerHTML = `<p class="admin-help">Temporary password for <strong>${escapeText(data.username)}</strong> (shown only now):</p><p><code class="emp-password">${escapeText(data.password)}</code> <button type="button" class="btn" data-emp-copy="${escapeText(data.password)}">Copy</button></p>`;
@@ -333,7 +333,7 @@ async function resetEmployeePassword(id) {
 
 async function deactivateEmployee(id) {
   const e = employeeState.list.find((item) => item.id === id);
-  if (!e || !confirm(`Deactivate ${employeeFullName(e)}?\n\nThey are signed out now and cannot sign in. Their messages and files stay. People who report to them move up to their manager.`)) return;
+  if (!e || !(await confirmAction({ title: 'Deactivate', message: `Deactivate ${employeeFullName(e)}?\n\nThey are signed out now and cannot sign in. Their messages and files stay. People who report to them move up to their manager.`, confirmLabel: 'Deactivate' }))) return;
   try {
     const lastDay = (document.getElementById('emp-lastday') || {}).value || null;
     const data = await hrApi(`/api/hr/employees/${id}/deactivate`, 'POST', lastDay ? { lastDay } : {});
@@ -418,7 +418,7 @@ async function departmentAction(row, action) {
     if (action === 'add') await hrApi('/api/hr/departments', 'POST', { name, headId });
     else if (action === 'save') await hrApi(`/api/hr/departments/${row.dataset.dept}`, 'PUT', { name, headId });
     else if (action === 'delete') {
-      if (!confirm('Delete this department? People in it stay, with no department.')) return;
+      if (!(await confirmAction({ title: 'Delete department', message: 'Delete this department? People in it stay, with no department.', confirmLabel: 'Delete department' }))) return;
       await hrApi(`/api/hr/departments/${row.dataset.dept}`, 'DELETE');
     }
     await loadEmployeeManagement();

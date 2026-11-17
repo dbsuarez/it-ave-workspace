@@ -62,7 +62,10 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
    only, audited as `owner_private_access_on/off`), off by default. With it off an Owner needs a membership, department
    grant or invitation like anyone else, can no longer self-join a private channel, and does not get its search results,
    Activity, saved items or sidebar placement. Public channels, personal channels and channel administration (managers,
-   archive, recovery, deletion) are unchanged. An Owner can still add themselves through Moderation > members (audited).
+   archive, recovery, deletion) are unchanged. While the switch is off an Owner also cannot give themselves access through administration: adding themselves
+   as a member, a direct invitation to themselves, or a grant (or view override) for a department they belong to are
+   refused (403). A channel manager inviting the Owner is still allowed. Not covered: an Owner changing their own
+   department membership in People management.
    See `backend/src/ownerChannelAccess.js`; tests in `owner-private-access-and-archive-writes.test.js`.
 2. **Department-only readers cannot be promoted to manager** until they hold a channel membership row (409 "Assign a
    channel membership before promoting this employee"). Add them as members first.

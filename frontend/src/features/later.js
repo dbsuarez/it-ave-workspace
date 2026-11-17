@@ -123,7 +123,7 @@ function openInfoModal(title, html) {
 
 // ---- Delete own ----
 async function deleteOwnMessage(messageId) {
-  if (!confirm('Delete this message for everyone? This cannot be undone.')) return;
+  if (!(await confirmAction({ title: 'Delete message', message: 'Delete this message for everyone? This cannot be undone.', confirmLabel: 'Delete message' }))) return;
   try {
     const res = await api(`/api/messages/${messageId}`, { method: 'DELETE' });
     const data = await res.json();

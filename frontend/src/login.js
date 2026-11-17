@@ -177,7 +177,7 @@
         return;
       }
       if (!checked.reachable
-        && !window.confirm(`Could not reach a server at ${checked.url}.\n\nSave this address anyway?`)) {
+        && !(await confirmAction({ title: 'Save anyway', message: `Could not reach a server at ${checked.url}.\n\nSave this address anyway?`, confirmLabel: 'Save anyway', danger: false }))) {
         setServerNote('Not saved.', true);
         return;
       }

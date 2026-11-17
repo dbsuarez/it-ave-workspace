@@ -26,6 +26,7 @@ require.cache[dbPath] = {
       queries.push({ sql, params });
       if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
       if (sql.includes('SELECT is_superadmin FROM users')) return { rows: [{ is_superadmin: superadmin }] };
+      if (sql.includes('SELECT is_private, is_personal FROM channels')) return { rows: [{ is_private: false, is_personal: false }] }; // the Owner self-grant check
       if (sql.includes('SELECT c.team_section_id, ts.owner_id FROM channels c')) return { rows: [{ team_section_id: null, owner_id: null }] };
       if (sql.includes('SELECT is_personal FROM channels WHERE id')) return { rows: [{ is_personal: false }] };
       if (sql.includes('SELECT is_superadmin, account_type, department_id FROM users') || sql.includes('SELECT is_superadmin, is_hr, account_type FROM users')) return { rows: [{ is_superadmin: superadmin, is_hr: false, account_type: 'member' }] };
