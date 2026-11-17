@@ -1,0 +1,65 @@
+# Phase 5 verification results (API level)
+
+**Run:** 2026-11-17, against the development stack on commit `d2a4f48` (backend 463/463 automated tests passing).
+**Method:** each test in `IT_AVE_PHASE5_STEP_BY_STEP_VERIFICATION.md` was driven through the real HTTP API and Socket.IO
+using the existing `p5*` fixture accounts (SA = `admin`, LEAD = `p5lead`, A = `p5a`, B = `p5b`, C = `p5c`, D = `p5d`,
+G = `p5g`) plus two throwaway accounts that were deleted afterwards. All test channels were named `p5run-*` and were
+removed through the app's own archive-then-delete workflow; the database ended with the same user, channel and message
+counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git-ignored).
+
+**What this does not cover:** the Electron UI itself (labels, buttons, what the user actually sees) and P5-RELEASE-01
+(final smoke test and sign-off), which need a person.
+
+## Results
+
+| Test | Result | Notes |
+|---|---|---|
+| P5-ACCESS-01 Department visibility | PASS | A and B (grandchild) open the channel; C gets 403 on channel, history and list. Department grants give no management rights (policy edit and archive both 403). |
+| P5-ACCESS-02 Invitation and expiry | PASS | Access works while valid, stops on expiry (fetch, history, live messages); revoke removes it. |
+| P5-ACCESS-03 Ban overrides all paths | PASS | With department + direct grant and two live sessions, a ban stops fetch, history, list entry, posting and live delivery on both sessions; unban restores. |
+| P5-SECTIONS-01 Nested team section | PASS | LEAD, A, B see the channel inside the section and not floating; C sees nothing and cannot open it. |
+| P5-SECTIONS-02 SA / personal sidebar | PASS | A's personal section is not visible to B, SA or LEAD. See observation 1 about SA content access. |
+| P5-ROLES-01 Access is not permission | PASS | Per-person deny of `send_messages` stops B posting while B can still read; an explicit allow does not help once access is removed. |
+| P5-MANAGER-01 Two equal managers | PASS | A and B both manage; B (not creator, not Superadmin) archives and A restores; audit names each actor. See observation 2. |
+| P5-MANAGER-02 Promotion / last manager | PASS | C (no access) and banned D cannot be promoted and no membership is created; an empty roster is refused; banning the last manager returns 409; non-managers get 403. |
+| P5-ARCHIVE-01 Archive is read-only | **FAIL** | Everything in the guide's table is blocked except the old **Wiki canvases** (see findings 2 and 3). |
+| P5-ARCHIVE-02 Restore and resume | PASS | Posting, reactions, pins, list and canvas edits resume; earlier content intact. |
+| P5-RECOVERY-01 Last-manager recovery | PASS | Reproduced by deactivating the sole manager through the HR API. Recovery refused for a non-member, a banned user, a deactivated user, a non-admin actor and a missing confirmation; works for an existing member; audit names actor and target; the channel administrator (not a Superadmin) still cannot read the channel and is not added as a member. |
+| P5-DELETE-01 Permanent deletion | PASS | Member denied (403); active channel refused (409); archived without the phrase or with a wrong phrase refused (409); exact phrase deletes; connected member notified; old links fail; audit entry written; other channels untouched. |
+| P5-REALTIME-01 Live session revocation | PASS | After revocation neither of D's sessions receives message, canvas or list events; fetch, search and old file URL all denied; reconnect plus `join_channel` restores nothing. |
+| P5-GUEST-01 Guest boundaries | PASS | G reads only the guest channel, gets 403 on the directory, group conversations, lists and canvas edits; search shows nothing private; G only sees people who share a channel. |
+| P5-NOTIFY-01 Mentions and identity | PASS | Live and Activity-feed canvas notifications use the full name; an account with no name falls back to the username; a removed member receives no new mention or content. |
+| P5-DATA-01 Migration repeatability | PASS | Database restored into a new database, a second backend started on it (migrations ran) and restarted (migrations ran again): row counts and content fingerprint unchanged, clean start log. |
+| P5-DATA-02 Restore rehearsal | PASS | Backup of database and uploads restored into a separate database and uploads folder: messages, manager roster, archive state, lists, canvas and team sections identical through the API, and all 16 files download with byte-identical content. |
+| P5-RELEASE-01 Final smoke test | NOT RUN | Needs a person in Electron. |
+
+## Findings that need a decision or a fix
+
+1. **Deleting a team section permanently deletes its channels and their messages.** `channels.team_section_id` is
+   `ON DELETE CASCADE` (`database/init.sql`, `backend/src/migrations.js`) and `DELETE /api/settings/sidebar/team/:id`
+   removes the section directly. A team leader can therefore destroy channels and history in one call, bypassing the
+   archive-first and exact-phrase protection that Phase 4 put on channel deletion. Suggested fix: `ON DELETE SET NULL`
+   (channels return to the ordinary list) or refuse to delete a non-empty section.
+2. **Wiki canvases ignore the archive.** `PUT` and `DELETE /api/canvases/:id` succeed in an archived channel
+   (`backend/src/routes/canvases.js` has no `ensureChannelNotArchived`; `routes/canvas.js` does). Comments and images on
+   Wiki canvases were not exercised and probably have the same gap.
+3. **Other write paths accepted in an archived channel** (not in the guide's table; confirm whether read-only should
+   cover them): editing and deleting your own message (`routes/messageEdits.js`), editing the channel topic
+   (`PATCH /api/channels/:id`), adding a channel link, and creating a scheduled message (delivery is correctly refused
+   later). Blocked correctly: new messages and replies, reactions, pins, lists and items, channel canvas and comments,
+   file deletion, incoming webhooks, slash commands, moderator message deletion.
+
+## Observations (design points to confirm)
+
+1. **Superadmins bypass private-channel access by design** (`backend/src/security.js`, `is_superadmin` checks). The
+   Superadmin account can read history, search and post in private channels it is not a member of. A non-Superadmin
+   channel administrator (`manage_channels` only) cannot, before or after recovery. The guide's "SA cannot read private
+   content" expectations only hold for the second kind of account.
+2. **Department-only readers cannot be promoted to manager** until they hold a channel membership row (409 "Assign a
+   channel membership before promoting this employee"). Add them as members first.
+3. Department visibility does not remove default posting rights: users who can read through a department can post
+   unless a channel permission denies it (that denial works, see P5-ROLES-01).
+4. The access-policy endpoints still answer `enforced: false` and the file header says enforcement is not complete,
+   although enforcement is live. The wording is stale and misleading.
+5. Starting a backend on a restored copy gives accounts inserted outside the app the default-channel memberships a
+   normal sign-up creates. Expected, and unrelated to the restore itself.
