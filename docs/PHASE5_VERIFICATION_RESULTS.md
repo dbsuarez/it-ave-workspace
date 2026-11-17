@@ -22,7 +22,7 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
 | P5-ROLES-01 Access is not permission | PASS | Per-person deny of `send_messages` stops B posting while B can still read; an explicit allow does not help once access is removed. |
 | P5-MANAGER-01 Two equal managers | PASS | A and B both manage; B (not creator, not Superadmin) archives and A restores; audit names each actor. See observation 2. |
 | P5-MANAGER-02 Promotion / last manager | PASS | C (no access) and banned D cannot be promoted and no membership is created; an empty roster is refused; banning the last manager returns 409; non-managers get 403. |
-| P5-ARCHIVE-01 Archive is read-only | FAIL when run, **fixed afterwards** | Everything in the guide's table was blocked except the old **Wiki canvases** (finding 2) and the extra paths in finding 3. Both are fixed and unit tested; re-run this check after the backend is rebuilt. |
+| P5-ARCHIVE-01 Archive is read-only | FAIL when run, **fixed and re-verified live** | Everything in the guide's table was blocked except the old **Wiki canvases** (finding 2) and the extra paths in finding 3. Both are fixed, unit tested, and re-checked on the rebuilt live backend (see below). |
 | P5-ARCHIVE-02 Restore and resume | PASS | Posting, reactions, pins, list and canvas edits resume; earlier content intact. |
 | P5-RECOVERY-01 Last-manager recovery | PASS | Reproduced by deactivating the sole manager through the HR API. Recovery refused for a non-member, a banned user, a deactivated user, a non-admin actor and a missing confirmation; works for an existing member; audit names actor and target; the channel administrator (not a Superadmin) still cannot read the channel and is not added as a member. |
 | P5-DELETE-01 Permanent deletion | PASS | Member denied (403); active channel refused (409); archived without the phrase or with a wrong phrase refused (409); exact phrase deletes; connected member notified; old links fail; audit entry written; other channels untouched. |
@@ -75,3 +75,15 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
    although enforcement is live. The wording is stale and misleading.
 5. Starting a backend on a restored copy gives accounts inserted outside the app the default-channel memberships a
    normal sign-up creates. Expected, and unrelated to the restore itself.
+
+## Live re-verification after the fixes (2026-11-17)
+
+Re-run against the rebuilt backend and the real database with throwaway `p5run-rv-*` channels (all removed afterwards;
+counts identical before and after, Owner switch left off). The whole run took under a minute.
+
+| Check | Result |
+|---|---|
+| Team section delete keeps channels | PASS: the live constraint is `SET NULL`; a non-leader gets 403; a non-empty section returns 409 and its channel and message survive; an emptied section deletes (200) |
+| Wiki canvas in an archived channel | PASS: reading 200; creating, editing and deleting 409; content untouched; works again after restore |
+| Four extra write paths | PASS: edit and delete own message, topic, add and remove link, schedule message all 409 while archived; reading and listing links still allowed; editing works after restore |
+| Owner switch and self-grant block | PASS: with the switch off the Owner gets 403 on metadata, history, search, channel list, join, adding themselves, inviting themselves, and posting, and no membership is created; managers listing still works; with it on, history, search and self-add work; a normal member cannot flip it (403); the original state was restored |
