@@ -267,7 +267,7 @@ including on channel-room joins, message sends, replies, channel timeouts, and s
 | Scheduled messages | `GET|POST /api/scheduled`, `DELETE /api/scheduled/:id` |
 | Administration (Superadmin) | `GET /api/admin/users`, `PATCH /api/admin/users/:id`, `GET|POST /api/admin/invitations`, `DELETE /api/admin/invitations/:id`, `PUT /api/admin/registration` |
 | Public sign-up helpers | `GET /api/admin/registration`, `GET /api/admin/invitations/lookup?code=` |
-| User groups | `GET /api/user-groups` (everyone); `POST`, `DELETE /:id`, `PUT|DELETE /:id/members/:userId` (Superadmin) |
+| Departments (for `@department` mentions) | `GET /api/hr/departments` (any member). User groups were folded into roles: a former group is now a zero-permission role |
 | Webhooks | `GET|POST /api/webhooks`, `DELETE /api/webhooks/:id` (channel moderators); `POST /api/hooks/:token` (public, `{"text": "..."}`, 30 per minute) |
 
 `POST /api/auth/register` accepts an optional `inviteCode`, required when sign-up is
@@ -280,7 +280,7 @@ messages with people who share a channel.
 New socket events, server to client: `activity`, `channel_activity`, `message_updated`,
 `message_reactions_updated`, `new_group_message`, `conversation_updated`, `conversation_removed`,
 `user_status_updated`, `reminder_due`, `scheduled_message_sent`, `scheduled_message_failed`,
-`channel_links_updated`, `user_groups_updated`, `account_updated`, `huddle:media-state`.
+`channel_links_updated`, `account_updated`, `huddle:media-state`.
 Client to server: `send_group_message`, `huddle:media-state`.
 
 Two background runners start with the server and check every 15 seconds: reminders

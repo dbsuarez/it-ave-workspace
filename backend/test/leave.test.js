@@ -25,6 +25,15 @@ function monday(weeksAhead) {
   return addDays(d, ((8 - d.getUTCDay()) % 7 || 7) + 7 * weeksAhead);
 }
 
+// Like monday(), but moved to the first Monday of next year when the ~7 weeks the test uses would
+// cross New Year: leave balances are per calendar year, so a request spanning two years is not capped.
+function mondayWithinOneYear(weeksAhead) {
+  const m = monday(weeksAhead);
+  if (addDays(m, 50).getUTCFullYear() === m.getUTCFullYear()) return m;
+  const jan1 = new Date(Date.UTC(m.getUTCFullYear() + 1, 0, 1));
+  return addDays(jan1, (8 - jan1.getUTCDay()) % 7);
+}
+
 test.before(async () => {
   scratch = await createScratchDatabase();
   if (!scratch) return;
@@ -96,7 +105,7 @@ test('the standard leave types exist, members read them, only HR changes them', 
 test('a request counts working days, skips holidays, and is checked against the balance', async (t) => {
   if (skip(t)) return;
   const vacation = await typeId('Vacation Leave');
-  const mon = monday(2);
+  const mon = mondayWithinOneYear(2);
   const holiday = addDays(mon, 2); // the Wednesday
   assert.equal((await call(ids.ann, 'POST', '/holidays', { day: iso(holiday), name: 'Founders Day' })).status, 403);
   assert.equal((await call(ids.hr, 'POST', '/holidays', { day: iso(holiday), name: 'Founders Day' })).status, 201);

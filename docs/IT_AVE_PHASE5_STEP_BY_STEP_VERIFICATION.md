@@ -1,7 +1,7 @@
 # IT Avenue Workspace — Phase 5 Step-by-Step Verification Guide
 
-**Baseline:** Cumulative Patch 33 (Phase 4 implementation)  
-**Last reported backend result:** 461 passed, 0 failed, 0 skipped  
+**Baseline:** Cumulative Patch 36 (Phase 4 implementation), git commit `736a351`  
+**Last reported backend result:** 463 tests, 463 passed, 0 failed, 0 skipped (2026-11-15)  
 **Environment:** Windows development PC, Electron desktop client, Node.js/Express + Socket.IO backend, PostgreSQL 15  
 **Purpose:** Verify actual user workflows, authorization, data integrity, and release readiness. This guide is a **manual test plan**, not evidence that the manual checks have passed.
 
@@ -22,7 +22,7 @@ Result legend: **PASS** / **FAIL** / **BLOCKED** / **NOT RUN**. Each test has an
 
 ### 1.1 Confirm code and environment
 
-1. Confirm **Patch 33** has been extracted over the same working repository you tested.
+1. Confirm the working repository is at git commit `736a351` or later (Patch 36 is already committed; nothing needs extracting).
 2. Open PowerShell and confirm the backend directory exists:
    ```powershell
    Test-Path 'D:\Development\itavenue-workspace\backend\package.json'
@@ -34,7 +34,7 @@ Result legend: **PASS** / **FAIL** / **BLOCKED** / **NOT RUN**. Each test has an
    cd D:\Development\itavenue-workspace\backend
    npm test 2>&1 | Tee-Object -FilePath ..\phase5-baseline-tests.txt
    ```
-6. Target: **461 passing, zero failures, zero skipped**, unless additional tests have been added. If tests skip unexpectedly, investigate PostgreSQL or other dependencies before proceeding.
+6. Target: **463 passing, zero failures, zero skipped**, unless additional tests have been added. If tests skip unexpectedly, investigate PostgreSQL or other dependencies before proceeding.
 
 - [ ] **P5-SETUP-01** Electron, backend, and database all connected to the intended test environment.
 - [ ] **P5-SETUP-02** Automated tests fully pass.
@@ -368,7 +368,7 @@ Notes: __________
 
 Do **not** mark Phase 5 release-ready merely because the backend suite passes. Before sign-off:
 
-- [ ] Full backend suite: all current tests pass, **zero skipped** (Patch 33 baseline: 461/461).
+- [ ] Full backend suite: all current tests pass, **zero skipped** (Patch 36 baseline: 463/463).
 - [ ] Access, department, invitation, bans, and live-session revocation tests pass.
 - [ ] Team and Superadmin shared Section placement tests pass.
 - [ ] Manager assignment/authority/last-manager protection tests pass.
@@ -386,4 +386,4 @@ Do **not** mark Phase 5 release-ready merely because the backend suite passes. B
 
 ---
 
-**Important distinction:** The 461/461 result establishes backend regression success for Patch 33; the checks above establish whether the Electron experience, security boundaries, and backup/recovery workflows work end-to-end. They are intentionally separate.
+**Important distinction:** The 463/463 result establishes backend regression success for Patch 36; the checks above establish whether the Electron experience, security boundaries, and backup/recovery workflows work end-to-end. They are intentionally separate.

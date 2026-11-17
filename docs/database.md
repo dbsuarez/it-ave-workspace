@@ -37,7 +37,7 @@ The `init.sql` file creates:
 - **scheduled_messages** - Messages waiting to be sent to a channel or a person
 - **invitations** - Single-use sign-up codes (stored as hashes) with account type and channels
 - **channel_links** - Shared web links shown in a channel's Links tab
-- **user_groups**, **user_group_members** - Mentionable groups of people
+- ~~user_groups, user_group_members~~ - removed; the migration turned each group into a zero-permission role (members carried into `user_roles`). Departments are mentionable via `users.department_id`
 - **webhooks** - Incoming webhook addresses (stored as hashes) and their bot accounts
 
 Added columns: `users.account_type` (`member`, `guest`, or `bot`), `users.notification_prefs`,

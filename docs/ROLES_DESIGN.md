@@ -50,7 +50,7 @@ everywhere" or "only HR sees #hr-private" without code changes; a stale check in
   member counts, who holds each role.
 - Person page (Employees record): role chips with add/remove, limited by your rank.
 - Channel settings > **Permissions**: roles/people rows with allow/deny/inherit toggles; "Make private" becomes a preset.
-- Role color on names and a role badge in the member list; `@Role` mentions reuse the existing @groups, gated by
+- Role color on names and a role badge in the member list; `@Role` mentions (and `@department`, which uses `users.department_id`) replaced the old user groups, gated by
   `mention_everyone`-style permission.
 - Audit log entries for every role, assignment and override change.
 

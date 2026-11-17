@@ -205,7 +205,7 @@ accounts and data were removed afterwards. Backend tests: 61 pass. Desktop forma
   that open in the system browser.
 - **Sidebar sections**: personal, named, ordered, collapsible sections for channels.
 - **Channel tabs**: Messages, Pins, Files, Canvases, Lists, and shared Links.
-- **User groups**: `@handle` groups managed by Superadmins.
+- **Mentionable groups**: `@role` and `@department` mentions. The old user groups were folded into roles (roles = permissions, departments = belonging).
 - **Incoming webhooks**: a secret address per channel that posts `{"text": "..."}` as a named app.
 - **Huddle**: camera video and screen sharing (primary screen), alongside audio.
 - **Chat layout**: bubbles, with your own messages on the right; message actions are a hover

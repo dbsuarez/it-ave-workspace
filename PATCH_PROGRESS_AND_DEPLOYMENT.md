@@ -1,4 +1,8 @@
-# IT Avenue Workspace — Phase 4 completion candidate — Cumulative Patch 33
+# IT Avenue Workspace — Cumulative Patches 27–36 (latest: Patch 36)
+
+> **Status note (2026-11-17):** the sections below were written patch by patch and the newest one, Patch 33, is the last with its own write-up. Patches 34–36 were applied and tested (Patch 36 log, 2026-11-15: 463 tests, 463 pass) but were not written up here; their changed-file list is `PATCH_MANIFEST.txt` in git history (Patch 35). The whole series was reconciled into git as commit `736a351`. Current backend result: 463 tests, 462 pass; the one failure was a date-dependent leave test, since fixed. Manual verification (`docs/IT_AVE_PHASE5_STEP_BY_STEP_VERIFICATION.md`) has not been run.
+
+# Phase 4 completion candidate — Cumulative Patch 33
 
 **Baseline:** Patch 32, user confirmed 458/458 backend tests passed.
 

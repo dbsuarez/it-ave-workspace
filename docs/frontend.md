@@ -30,7 +30,7 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 │   │   ├── admin.js         # Guests, invitations, workspace member administration
 │   │   ├── workspace.js     # Scheduled messages, sidebar sections, channel tabs
 │   │   ├── huddleVideo.js   # Camera and screen sharing in Huddle
-│   │   └── integrations.js  # User groups and incoming webhooks
+│   │   └── integrations.js  # Incoming webhooks
 │   ├── vendor/          # socket.io client and Lato fonts (npm run vendor refreshes them)
 │   ├── login.js         # Login/register logic + window controls
 │   ├── styles.css       # Theme, rail, pane, menus, responsive rules

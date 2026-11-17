@@ -40,7 +40,7 @@ self-hosted project.
 | Medium | **Rich message formatting** | Message text is rendered escaped as plain text; Canvas has Markdown separately | Add a safe composer/renderer for common formatting such as bold, lists, and quotes. |
 | Medium | **Custom sidebar sections** | Sidebar contains fixed channel, DM, and unread lists | Let users organize conversations into personal sections and reorder them. |
 | Medium | **Conversation tabs and shared resources** | Pins, Files, and Canvas are separate views; channels do not have configurable resource tabs | Allow channel/DM headers to surface shared links, files, canvases, and other resources as configurable tabs or folders. |
-| Medium | **User groups** | No user-group management or group-mention support was found | Create named groups of users and mention a group in a channel. |
+| Done | **User groups** | Replaced by `@role` and `@department` mentions; the separate user-groups feature was removed | Create named groups of users and mention a group in a channel. |
 | Medium | **Workspace invitations and member onboarding** | Users can register directly; no invitation workflow was found | Add admin-issued invitations, expiration/revocation, and an onboarding path for invited users. |
 | Medium | **Manual status and pause notifications** | Presence is primarily automatic (online/away/offline); no user-set status message or DND control was found | Add a user-controlled status and a notification pause/snooze control. |
 | Medium | **Video and screen sharing in calls** | Huddle is an audio-only WebRTC MVP, limited to six participants; validation and TURN support remain outstanding | Decide whether to add video and screen sharing, and improve call reliability before expanding call scope. |
@@ -63,7 +63,7 @@ self-hosted project.
 | Rich message formatting | Done (typed Markdown-style syntax; no toolbar) |
 | Custom sidebar sections | Done |
 | Conversation tabs and shared resources | Done for channels with fixed tabs; not configurable and not for direct messages |
-| User groups | Done |
+| User groups | Done (as roles and departments) |
 | Workspace invitations and member onboarding | Done (invitation codes, invitation-only sign-up) |
 | Manual status and pause notifications | Done |
 | Video and screen sharing in calls | Done (camera, and the primary screen); six-person mesh unchanged |
