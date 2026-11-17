@@ -45,7 +45,7 @@ async function loadWorkspaceAdmin() {
     host.appendChild(section);
   }
   section.hidden = false;
-  document.querySelectorAll('[data-admin-tab-content="people"] > [data-admin-control-panel], [data-admin-tab-content="signup"] > [data-admin-control-panel]').forEach((panel) => panel.remove());
+  document.querySelectorAll('[data-admin-tab-content="people"] > [data-admin-control-panel], [data-admin-tab-content="signup"] > [data-admin-control-panel], [data-admin-tab-content="superadmin"] > #admin-owner-private-access').forEach((panel) => panel.remove());
   section.innerHTML = '<div class="loading-state">Loading workspace administration…</div>';
   const admin = adminState();
   try {
@@ -238,7 +238,7 @@ function renderWorkspaceAdmin() {
     : '<button class="btn" type="button" data-admin-action="prelaunch-on">Switch on</button>'}
       </div>
     </div>
-    <div class="moderation-card" id="admin-owner-private-access" data-mod-tab="signup">
+    <div class="moderation-card" id="admin-owner-private-access" data-mod-tab="superadmin">
       <h2>Owner access to private channels</h2>
       <p class="admin-help">Off (recommended): an Owner cannot read or post in a private channel they are not a member of, like everyone else. Owners can still manage a channel (managers, archive, recovery, deletion) without reading it. Turn this on only when you must look inside private channels; every change is written to the audit log.</p>
       <p><strong>${admin.ownerPrivateAccess ? 'On: Owners can open every private channel' : 'Off: Owners need to be invited to private channels'}</strong></p>
@@ -318,6 +318,7 @@ function renderWorkspaceAdmin() {
     'admin-employee-role-reset': 'members',
     'admin-workspace-groups': 'groups',
     'admin-prelaunch-access': 'prelaunch',
+    'admin-owner-private-access': 'access',
     'admin-registration': 'registration',
     'admin-invite-form': 'invite',
     'admin-invitations': 'invitations',
@@ -332,6 +333,7 @@ function renderWorkspaceAdmin() {
   });
   syncAdminConfigurator('people');
   syncAdminConfigurator('signup');
+  syncAdminConfigurator('superadmin');
   section.hidden = true;
 }
 

@@ -2926,7 +2926,7 @@ async function loadModerationView() {
       <div class="moderation-inline"><label>Set every existing channel to (seconds)<input id="slowmode-all" type="number" min="0" max="3600" value="5"></label><button class="btn" type="button" data-action="apply-slowmode-all">Apply to all channels</button></div>
     </div>
     <div id="moderation-workspace-audit" data-admin-control-panel="audit"></div>`) : ''}
-    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('superadmin', 'Superadmin', [['recovery', 'Backup and restore'], ['reset', 'Workspace reset'], ['launch', 'Launch mode']], `
+    ${state.moderation.isSuperadmin ? adminConfiguratorHtml('superadmin', 'Superadmin', [['recovery', 'Backup and restore'], ['reset', 'Workspace reset'], ['launch', 'Launch mode'], ['access', 'Private channel access']], `
       <div id="moderation-recovery" data-admin-control-panel="recovery"></div>
       <div id="moderation-workspace-reset" data-admin-control-panel="reset"></div>
       <div id="moderation-launch" data-admin-control-panel="launch"></div>`) : ''}

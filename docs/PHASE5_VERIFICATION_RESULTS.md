@@ -58,7 +58,7 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
 
 1. **CHANGED (same day): Superadmins no longer bypass private-channel access by default.** They used to read history,
    search and post in private channels they were not a member of (`is_superadmin` checks in `security.js` and several
-   queries). That is now a workspace switch, **Owner access to private channels** (the admin screen next to the shared-test-password switch, Owner
+   queries). That is now a workspace switch, **Owner access to private channels** (Moderation > Superadmin tab > Private channel access, Owner
    only, audited as `owner_private_access_on/off`), off by default. With it off an Owner needs a membership, department
    grant or invitation like anyone else, can no longer self-join a private channel, and does not get its search results,
    Activity, saved items or sidebar placement. Public channels, personal channels and channel administration (managers,
