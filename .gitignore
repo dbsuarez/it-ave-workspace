@@ -18,3 +18,7 @@ deploy/certs/
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+.mcp.json
+
+# Quarantined suspicious downloads - never commit or open
+security-quarantine/
