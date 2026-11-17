@@ -1,6 +1,6 @@
 // IT Avenue Workspace - roles and permissions: the one place that answers "may this person do this?".
 // Design: docs/ROLES_DESIGN.md. Phase 1: the engine, built-in roles and the migration of today's flags
-// (users.is_superadmin = Owner, users.is_hr = HR); the flags stay the source of truth for those two roles for now.
+// Owner remains flag-derived; the former built-in HR role is now an explicit custom role.
 //
 // Order of evaluation (Discord's, simplified):
 //   1. An Owner may do everything.
@@ -49,9 +49,13 @@ function resolvePermission({ isOwner, grants, overrides, channelModerator }, per
     const roles = overrides.roles || [];
     for (const entry of roles) for (const key of entry.deny || []) set.delete(key);
     for (const entry of roles) for (const key of entry.allow || []) set.add(key);
+    // Phase 3: departments control channel entry only. Historical department
+    // action overrides are ignored rather than replicated onto employee roles.
     const departments = overrides.departments || [];
-    for (const entry of departments) for (const key of entry.deny || []) set.delete(key);
-    for (const entry of departments) for (const key of entry.allow || []) set.add(key);
+    if (permission === 'view_channel') {
+      for (const entry of departments) if ((entry.deny || []).includes(permission)) set.delete(permission);
+      for (const entry of departments) if ((entry.allow || []).includes(permission)) set.add(permission);
+    }
     apply(overrides.user);
   }
   if (channelModerator && (permission === 'manage_messages' || permission === 'timeout_members')) {
@@ -65,7 +69,7 @@ function resolvePermission({ isOwner, grants, overrides, channelModerator }, per
 // Everything the database knows about one person's access, in two small queries.
 async function loadAccess(query, userId, channelId) {
   const account = await query(
-    'SELECT is_superadmin, is_hr, account_type, department_id FROM users WHERE id = $1 AND deactivated_at IS NULL', [userId]
+    'SELECT is_superadmin, account_type, department_id FROM users WHERE id = $1 AND deactivated_at IS NULL', [userId]
   );
   const row = account.rows[0];
   if (!row) return null;
@@ -74,9 +78,8 @@ async function loadAccess(query, userId, channelId) {
      FROM roles r
      WHERE r.builtin_key = 'everyone'
         OR r.id IN (SELECT role_id FROM user_roles WHERE user_id = $1)
-        OR ($2::boolean AND r.builtin_key = 'hr')
-        OR ($3::boolean AND r.builtin_key = 'owner')`,
-    [userId, Boolean(row.is_hr), Boolean(row.is_superadmin)]
+        OR ($2::boolean AND r.builtin_key = 'owner')`,
+    [userId, Boolean(row.is_superadmin)]
   );
   const roles = rolesResult.rows;
   const isOwner = Boolean(row.is_superadmin) || roles.some((r) => r.builtin_key === 'owner');
@@ -137,8 +140,10 @@ function explainPermission({ isOwner, grants, overrides, channelModerator }, per
     const departments = overrides.departments || [];
     const departmentDeny = departments.filter((entry) => (entry.deny || []).includes(permission));
     const departmentAllow = departments.filter((entry) => (entry.allow || []).includes(permission));
-    if (departmentDeny.length) { allowed = false; reason = `Denied in this channel for ${names(departmentDeny)}`; }
-    if (departmentAllow.length) { allowed = true; reason = `Allowed in this channel for ${names(departmentAllow)}`; }
+    if (permission === 'view_channel') {
+      if (departmentDeny.length) { allowed = false; reason = `Denied in this channel for ${names(departmentDeny)}`; }
+      if (departmentAllow.length) { allowed = true; reason = `Allowed in this channel for ${names(departmentAllow)}`; }
+    }
     step(overrides.user, 'this person');
   }
   if (channelModerator && (permission === 'manage_messages' || permission === 'timeout_members')) {

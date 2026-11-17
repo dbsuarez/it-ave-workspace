@@ -32,6 +32,8 @@ test.before(async () => {
   )).rows[0].id;
   ids.boss = await user('boss', { superadmin: true });
   ids.hr = await user('hana', { hr: true });
+  // HR is now a normal explicitly assigned role; the legacy is_hr flag grants nothing.
+  await admin.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE legacy_hr = true", [ids.hr]);
   ids.ann = await user('ann');
   ids.bob = await user('bob');
   ids.guest = await user('visitor', { type: 'guest' });

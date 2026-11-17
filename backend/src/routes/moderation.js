@@ -33,6 +33,22 @@ async function requireWorkspacePermission(userId, permission = 'manage_workspace
   }
 }
 
+// A channel manager can administer their own channel only while they retain
+// content authorization. Workspace administrators use metadata-only recovery.
+async function requireChannelManagerOrWorkspace(userId, channelId) {
+  if (await can(query, userId, 'manage_channels')) return;
+  await ensureChannelMembership(query, userId, channelId);
+  const manager = await query(`SELECT 1 FROM channel_members cm
+    JOIN users u ON u.id = cm.user_id
+    WHERE cm.channel_id = $1 AND cm.user_id = $2 AND cm.role = 'moderator'
+      AND u.deactivated_at IS NULL`, [channelId, userId]);
+  if (!manager.rows.length) {
+    const error = new Error('Channel manager authority required');
+    error.status = 403;
+    throw error;
+  }
+}
+
 async function audit(channelId, actorId, action, targetUserId = null, details = {}) {
   await query(
     `INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details)
@@ -638,6 +654,130 @@ router.post('/slowmode-all', async (req, res) => {
   }
 });
 
+
+// Phase 4: manager roster is channel metadata; reading it never grants content access.
+router.get('/channels/:channelId/managers', async (req, res) => {
+  try {
+    const channelId = parseId(req.params.channelId);
+    if (!channelId) return res.status(400).json({ error: 'Invalid channel ID' });
+    await requireChannelManagerOrWorkspace(req.user.userId, channelId);
+    const channel = (await query('SELECT id, name, is_personal, archived_at FROM channels WHERE id = $1', [channelId])).rows[0];
+    if (!channel || channel.is_personal) return res.status(404).json({ error: 'Shared channel not found' });
+    const result = await query(`SELECT u.id, u.username, u.first_name, u.last_name
+      FROM channel_members cm JOIN users u ON u.id = cm.user_id
+      WHERE cm.channel_id = $1 AND cm.role = 'moderator' AND u.deactivated_at IS NULL
+      ORDER BY u.id`, [channelId]);
+    res.json({ channelId, managers: result.rows, archivedAt: channel.archived_at });
+  } catch (err) { sendError(res, err, 'Get channel managers error'); }
+});
+
+// Explicit full roster replacement; transactional lock ensures there is always one active manager.
+router.put('/channels/:channelId/managers', async (req, res) => {
+  const { pool } = require('../db');
+  let client;
+  try {
+    const channelId = parseId(req.params.channelId);
+    if (!channelId) return res.status(400).json({ error: 'Invalid channel ID' });
+    await requireChannelManagerOrWorkspace(req.user.userId, channelId);
+    const ids = req.body?.managerIds;
+    if (!Array.isArray(ids) || !ids.length || ids.length > 50 || ids.some((id) => !parseId(id))
+      || new Set(ids.map(Number)).size !== ids.length || req.body?.confirmation !== 'UPDATE CHANNEL MANAGERS') {
+      return res.status(400).json({ error: 'Supply unique manager IDs and confirmation UPDATE CHANNEL MANAGERS' });
+    }
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const channel = (await client.query('SELECT id, name, is_personal FROM channels WHERE id = $1 FOR UPDATE', [channelId])).rows[0];
+    if (!channel || channel.is_personal) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Shared channel not found' }); }
+    const eligible = await client.query(`SELECT u.id FROM users u WHERE u.id = ANY($1::int[])
+      AND u.deactivated_at IS NULL AND u.account_type = 'member'
+      AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = $2 AND b.user_id = u.id)`, [ids.map(Number),channelId]);
+    if (eligible.rows.length !== ids.length) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Every manager must be an active, unbanned employee' }); }
+    // Management never grants content access: new managers must already have
+    // membership or another valid grant, independent of their management role.
+    for (const id of ids.map(Number)) {
+      await ensureChannelMembership(client.query.bind(client), id, channelId);
+      const updated = await client.query(`UPDATE channel_members SET role = 'moderator'
+        WHERE channel_id = $1 AND user_id = $2 RETURNING user_id`, [channelId,id]);
+      if (!updated.rows.length) {
+        const error = new Error('Assign a channel membership before promoting this employee');
+        error.status = 409;
+        throw error;
+      }
+    }
+    await client.query(`UPDATE channel_members SET role = 'member' WHERE channel_id = $1
+      AND role = 'moderator' AND NOT (user_id = ANY($2::int[]))`, [channelId,ids.map(Number)]);
+    await client.query(`INSERT INTO moderation_audit_log (channel_id,actor_id,action,details)
+      VALUES ($1,$2,'channel_managers_replaced',$3)`, [channelId,req.user.userId,JSON.stringify({managerIds:ids.map(Number)})]);
+    await client.query('COMMIT');
+    res.json({ ok:true, channelId, managerIds:ids.map(Number) });
+  } catch(err) { if(client) await client.query('ROLLBACK').catch(()=>{}); sendError(res,err,'Update channel managers error'); }
+  finally { client?.release(); }
+});
+
+// Recovery is available only to workspace administrators. It cannot insert
+// memberships or grant private content: candidate must already be authorized.
+router.post('/channels/:channelId/recover-manager', async (req, res) => {
+  const { pool } = require('../db');
+  let client;
+  try {
+    const channelId = parseId(req.params.channelId);
+    const replacementId = parseId(req.body?.managerId);
+    if (!channelId || !replacementId) return res.status(400).json({ error: 'Valid channel and manager IDs required' });
+    await requireWorkspacePermission(req.user.userId, 'manage_channels');
+    if (req.body?.confirmation !== 'RECOVER CHANNEL MANAGER') return res.status(400).json({ error: 'Confirmation RECOVER CHANNEL MANAGER required' });
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const channel = (await client.query('SELECT id, is_personal FROM channels WHERE id = $1 FOR UPDATE', [channelId])).rows[0];
+    if (!channel || channel.is_personal) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Shared channel not found' }); }
+    const active = await client.query(`SELECT 1 FROM channel_members cm JOIN users u ON u.id = cm.user_id
+      WHERE cm.channel_id = $1 AND cm.role = 'moderator' AND u.deactivated_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = cm.channel_id AND b.user_id = u.id)
+      LIMIT 1`, [channelId]);
+    if (active.rows.length) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Channel already has an active manager' }); }
+    const replacement = await client.query(`SELECT 1 FROM channel_members cm JOIN users u ON u.id = cm.user_id
+      WHERE cm.channel_id = $1 AND cm.user_id = $2 AND u.account_type = 'member' AND u.deactivated_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = cm.channel_id AND b.user_id = u.id)`, [channelId,replacementId]);
+    if (!replacement.rows.length) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Recovery requires an existing active, unbanned channel member' }); }
+    await ensureChannelMembership(client.query.bind(client), replacementId, channelId);
+    await client.query("UPDATE channel_members SET role = 'moderator' WHERE channel_id = $1 AND user_id = $2", [channelId,replacementId]);
+    await client.query(`INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details)
+      VALUES ($1,$2,$3,'channel_manager_recovered',$4)`, [channelId,req.user.userId,replacementId,JSON.stringify({metadataOnly:true})]);
+    await client.query('COMMIT');
+    res.json({ok:true,channelId,managerId:replacementId});
+  } catch(err) { if(client) await client.query('ROLLBACK').catch(()=>{}); sendError(res,err,'Recover channel manager error'); }
+  finally { client?.release(); }
+});
+
+// Archive first; preserve all messages, files, lists, canvases, and memberships.
+router.post('/channels/:channelId/archive', async (req,res) => {
+  try {
+    const channelId = parseId(req.params.channelId);
+    if (!channelId) return res.status(400).json({ error: 'Invalid channel ID' });
+    await requireChannelManagerOrWorkspace(req.user.userId, channelId);
+    if (req.body?.confirmation !== 'ARCHIVE CHANNEL') return res.status(400).json({ error: 'Confirmation ARCHIVE CHANNEL required' });
+    const channel = (await query('SELECT name, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
+    if (!channel || channel.is_personal) return res.status(404).json({ error: 'Shared channel not found' });
+    if (DEFAULT_CHANNEL_NAMES.includes(channel.name)) return res.status(409).json({ error: 'Built-in channels cannot be archived' });
+    const result = await query('UPDATE channels SET archived_at = COALESCE(archived_at,NOW()), archived_by = COALESCE(archived_by,$2) WHERE id = $1 RETURNING archived_at', [channelId,req.user.userId]);
+    await audit(channelId,req.user.userId,'channel_archived');
+    req.io?.to(`channel_${channelId}`).emit('channel_archived',{channelId});
+    res.json({ok:true,channelId,archivedAt:result.rows[0]?.archived_at});
+  } catch(err) { sendError(res,err,'Archive channel error'); }
+});
+router.post('/channels/:channelId/restore', async (req,res) => {
+  try {
+    const channelId = parseId(req.params.channelId);
+    if (!channelId) return res.status(400).json({error:'Invalid channel ID'});
+    await requireChannelManagerOrWorkspace(req.user.userId,channelId);
+    if(req.body?.confirmation !== 'RESTORE CHANNEL') return res.status(400).json({error:'Confirmation RESTORE CHANNEL required'});
+    const result = await query('UPDATE channels SET archived_at = NULL, archived_by = NULL WHERE id = $1 AND is_personal = FALSE RETURNING id', [channelId]);
+    if (!result.rows.length) return res.status(404).json({error:'Shared channel not found'});
+    await audit(channelId,req.user.userId,'channel_restored');
+    req.io?.to(`channel_${channelId}`).emit('channel_restored',{channelId});
+    res.json({ok:true,channelId});
+  } catch(err) { sendError(res,err,'Restore channel error'); }
+});
+
 // ---- removing a channel ----
 
 // DELETE /api/moderation/channels/:channelId - the Superadmin, or the person who created the channel, deletes it.
@@ -649,12 +789,22 @@ router.delete('/channels/:channelId', async (req, res) => {
     const channel = (await query('SELECT id, name, created_by, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     if (DEFAULT_CHANNEL_NAMES.includes(channel.name)) return res.status(409).json({ error: 'Built-in channels cannot be deleted' });
+    // Authenticate/authorize before exposing lifecycle state: unauthorized callers get 403,
+    // not a 409 that reveals whether this private channel is archived.
     const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
-    const allowed = Number(channel.created_by) === Number(req.user.userId)
-      || (channel.is_personal
-        ? await can(query, req.user.userId, 'manage_personal_channels')
-        : (Boolean(actor && actor.is_superadmin) || await can(query, req.user.userId, 'manage_channels')));
-    if (!allowed) return res.status(403).json({ error: 'Only the Superadmin or the person who created the channel can delete it' });
+    const allowed = channel.is_personal
+      ? Number(channel.created_by) === Number(req.user.userId)
+        || await can(query, req.user.userId, 'manage_personal_channels')
+      : Boolean(actor?.is_superadmin) || await can(query, req.user.userId, 'manage_channels');
+    if (!allowed) return res.status(403).json({ error: 'Channel deletion requires appropriate administration permission' });
+    if (!channel.is_personal) {
+      // Permanent shared-channel deletion is separate from channel creation/management.
+      await requireWorkspacePermission(req.user.userId, 'manage_channels');
+      const archive = (await query('SELECT archived_at FROM channels WHERE id = $1', [channelId])).rows[0];
+      if (!archive?.archived_at || req.body?.confirmation !== 'PERMANENTLY DELETE CHANNEL') {
+        return res.status(409).json({ error: 'Archive the channel first and confirm PERMANENTLY DELETE CHANNEL' });
+      }
+    }
 
     const members = (await query('SELECT user_id FROM channel_members WHERE channel_id = $1', [channelId])).rows.map((r) => r.user_id);
     const files = (await query(

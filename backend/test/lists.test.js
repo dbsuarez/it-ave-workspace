@@ -403,3 +403,22 @@ test('rows are paged with a cursor and nothing is skipped or repeated', async (t
   const exact = await call(ids.alice, 'GET', `/${list.id}?limit=7`);
   assert.equal(exact.json.nextCursor, null, 'no next page when the last one is full');
 });
+
+
+test('archived channel lists stay readable and reject creation, edits, copies, and row changes', async (t) => {
+  if (skipIfNoDb(t)) return;
+  const created = await call(ids.alice, 'POST', '', { channelId: ids.team, title: 'Archive control' });
+  assert.equal(created.status, 201);
+  const id = created.json.list.id;
+  await admin.query('UPDATE channels SET archived_at = NOW() WHERE id = $1', [ids.team]);
+  try {
+    assert.equal((await call(ids.alice, 'GET', `/${id}`)).status, 200);
+    assert.equal((await call(ids.alice, 'POST', '', { channelId: ids.team, title: 'Nope' })).status, 409);
+    assert.equal((await call(ids.alice, 'PATCH', `/${id}`, { title: 'Nope' })).status, 409);
+    assert.equal((await call(ids.alice, 'POST', `/${id}/rows`, { cells: {} })).status, 409);
+    assert.equal((await call(ids.alice, 'POST', `/${id}/copy`, { title: 'Nope' })).status, 409);
+    assert.equal((await call(ids.alice, 'DELETE', `/${id}`)).status, 409);
+  } finally {
+    await admin.query('UPDATE channels SET archived_at = NULL WHERE id = $1', [ids.team]);
+  }
+});

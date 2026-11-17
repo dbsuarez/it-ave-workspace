@@ -1,6 +1,6 @@
 // Roles: GET /api/roles (list), POST (create), PUT /:id (edit), DELETE /:id, PUT /:id/move {direction},
 // PUT /users/:userId {roleIds} (the custom roles someone holds), GET /permissions (the catalog).
-// Owner and HR are built in: they are given and taken away with the Superadmin and HR switches on the person's record.
+// Owner is built in; the former HR role uses ordinary explicit user_roles assignments.
 // Rules (hierarchy, what you may grant) live in src/roles.js; every change is written to the audit log.
 const express = require('express');
 const { query } = require('../db');
@@ -31,18 +31,18 @@ async function audit(actorId, action, targetUserId, details) {
 // The caller, who must hold manage_roles, with their rank and permissions.
 async function requireRoleManager(userId) {
   if (!(await can(query, userId, 'manage_roles'))) throw fail(403, 'You cannot manage roles');
-  const account = (await query('SELECT is_superadmin, is_hr FROM users WHERE id = $1', [userId])).rows[0];
+  const account = (await query('SELECT is_superadmin FROM users WHERE id = $1', [userId])).rows[0];
   const roles = (await query(
     `SELECT id, name, position, permissions, builtin_key FROM roles
      WHERE builtin_key = 'everyone' OR id IN (SELECT role_id FROM user_roles WHERE user_id = $1)
-        OR ($2::boolean AND builtin_key = 'hr') OR ($3::boolean AND builtin_key = 'owner')`,
-    [userId, Boolean(account.is_hr), Boolean(account.is_superadmin)]
+        OR ($2::boolean AND builtin_key = 'owner')`,
+    [userId, Boolean(account.is_superadmin)]
   )).rows;
   return { id: userId, ...actorProfile({ isOwner: Boolean(account.is_superadmin) || roles.some((r) => r.builtin_key === 'owner'), roles }) };
 }
 
 async function roleById(id) {
-  return (await query('SELECT id, name, color, position, permissions, builtin_key FROM roles WHERE id = $1', [id])).rows[0];
+  return (await query('SELECT id, name, color, position, permissions, builtin_key, legacy_hr FROM roles WHERE id = $1', [id])).rows[0];
 }
 
 const mapRole = (row, actor) => ({
@@ -58,7 +58,6 @@ router.get('/mentionable', async (req, res) => {
       `SELECT r.id, r.name, r.color,
               CASE r.builtin_key
                 WHEN 'owner' THEN (SELECT COUNT(*) FROM users WHERE is_superadmin AND deactivated_at IS NULL)
-                WHEN 'hr' THEN (SELECT COUNT(*) FROM users WHERE is_hr AND deactivated_at IS NULL)
                 ELSE (SELECT COUNT(*) FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_id = r.id AND u.deactivated_at IS NULL)
               END AS member_count
        FROM roles r WHERE r.builtin_key IS DISTINCT FROM 'everyone' AND r.builtin_key IS DISTINCT FROM 'owner' ORDER BY r.position, r.id`
@@ -179,7 +178,6 @@ router.get('/', async (req, res) => {
       `SELECT r.id, r.name, r.color, r.position, r.permissions, r.builtin_key,
               CASE r.builtin_key
                 WHEN 'owner' THEN (SELECT COUNT(*) FROM users WHERE is_superadmin AND deactivated_at IS NULL)
-                WHEN 'hr' THEN (SELECT COUNT(*) FROM users WHERE is_hr AND deactivated_at IS NULL)
                 WHEN 'everyone' THEN (SELECT COUNT(*) FROM users WHERE account_type = 'member' AND deactivated_at IS NULL)
                 ELSE (SELECT COUNT(*) FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_id = r.id AND u.deactivated_at IS NULL)
               END AS member_count
@@ -199,7 +197,7 @@ router.post('/', async (req, res) => {
     const count = (await query('SELECT COUNT(*)::int AS n FROM roles WHERE builtin_key IS NULL')).rows[0].n;
     if (count >= MAX_CUSTOM_ROLES) throw fail(400, `A workspace can have up to ${MAX_CUSTOM_ROLES} custom roles`);
     if ((await query('SELECT 1 FROM roles WHERE LOWER(name) = LOWER($1)', [clean.name])).rows.length) throw fail(409, 'A role with that name already exists');
-    // a new role ranks just below the person making it (never above HR for an Owner)
+    // a new role ranks below the person creating it
     const position = Math.max(20, Number.isFinite(actor.rank) ? actor.rank + 1 : 20);
     const bottom = (await query("SELECT COALESCE(MAX(position), 0) AS p FROM roles WHERE builtin_key IS NULL AND position >= $1", [position])).rows[0].p;
     const placed = Math.min(900, Math.max(position, Number(bottom) + 10));
@@ -239,7 +237,7 @@ router.delete('/:id', async (req, res) => {
     const actor = await requireRoleManager(req.user.userId);
     const role = await roleById(parseId(req.params.id));
     if (!role) throw fail(404, 'Role not found');
-    if (role.builtin_key) throw fail(400, 'Built-in roles cannot be deleted');
+    if (role.builtin_key || role.legacy_hr) throw fail(400, 'System-linked roles cannot be deleted until their compatibility migration is complete');
     if (!canManageRole(actor, role)) throw fail(403, 'You cannot delete a role at or above your own');
     await query('DELETE FROM roles WHERE id = $1', [role.id]); // assignments and channel overrides for it go with it
     await query("DELETE FROM channel_overrides WHERE subject_type = 'role' AND subject_id = $1", [role.id]);
@@ -273,6 +271,7 @@ router.put('/:id/move', async (req, res) => {
 });
 
 // Replace the custom roles someone holds. Roles you may not manage stay as they were.
+// The former HR role is a custom assignment; its legacy UI flag is kept in sync.
 router.put('/users/:userId', async (req, res) => {
   try {
     const actor = await requireRoleManager(req.user.userId);
@@ -281,7 +280,7 @@ router.put('/users/:userId', async (req, res) => {
     if (!userId || !Array.isArray(wanted) || wanted.some((id) => !Number.isInteger(id))) throw fail(400, 'roleIds must be a list of role ids');
     const person = (await query("SELECT id, account_type FROM users WHERE id = $1 AND deactivated_at IS NULL", [userId])).rows[0];
     if (!person || person.account_type !== 'member') throw fail(404, 'Person not found');
-    const custom = (await query('SELECT id, position, builtin_key FROM roles WHERE builtin_key IS NULL')).rows;
+    const custom = (await query('SELECT id, position, builtin_key, legacy_hr FROM roles WHERE builtin_key IS NULL')).rows;
     const byId = new Map(custom.map((r) => [r.id, r]));
     if (wanted.some((id) => !byId.has(id))) throw fail(400, 'Unknown role');
     const held = new Set((await query('SELECT role_id FROM user_roles WHERE user_id = $1', [userId])).rows.map((r) => r.role_id));
@@ -293,6 +292,9 @@ router.put('/users/:userId', async (req, res) => {
     }
     for (const id of toAdd) await query('INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, id, req.user.userId]);
     for (const id of toRemove) await query('DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2', [userId, id]);
+    // Legacy HR checkbox remains a presentation field only, synchronized from the normal role assignment.
+    const hrRole = custom.find((r) => r.legacy_hr);
+    if (hrRole) await query('UPDATE users SET is_hr = $1 WHERE id = $2', [want.has(hrRole.id), userId]);
     if (toAdd.length || toRemove.length) await audit(req.user.userId, 'roles_assigned', userId, { added: toAdd, removed: toRemove });
     if (req.io) req.io.emit('permissions_updated', { userId, byUserId: req.user.userId });
     res.json({ roleIds: [...want] });

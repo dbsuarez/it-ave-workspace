@@ -7,7 +7,7 @@ const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const {
-  ensureChannelMembership, ensureDirectMessageAccess, ensureCanvasAccess, getCanvasById,
+  ensureChannelMembership, ensureChannelNotArchived, ensureDirectMessageAccess, ensureCanvasAccess, getCanvasById,
   canvasOwnerId, getStandaloneCanvasRole,
 } = require('../security');
 const { ensureNotGuest } = require('../guests');
@@ -15,6 +15,7 @@ const { describeSections, applyOperation } = require('../canvasSections');
 const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
 const canvasMentions = require('../canvasMentions');
+const { channelVisibleToUser } = require('../channelVisibilitySql');
 
 // Images inside a canvas: pictures only (SVG is left out: it can carry script), a cap per canvas.
 const CANVAS_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
@@ -37,6 +38,25 @@ const imageUpload = multer({
     }
     cb(null, true);
   },
+});
+
+// Archived channel canvases are read-only, including comments, images and revisions.
+router.use(authenticateToken, async (req, res, next) => {
+  if (!['POST','PUT','PATCH','DELETE'].includes(req.method)) return next();
+  try {
+    const channelRoute = /^\/channel\/(\d+)(?:\/|$)/.exec(req.path);
+    let channelId = channelRoute ? Number(channelRoute[1]) : null;
+    const canvasRoute = /^\/(\d+)(?:\/|$)/.exec(req.path);
+    if (!channelId && canvasRoute) {
+      const found = await query('SELECT channel_id FROM canvases WHERE id = $1', [Number(canvasRoute[1])]);
+      channelId = found.rows[0]?.channel_id;
+    }
+    if (!channelId && req.method === 'POST' && req.path === '/' && req.body?.channelId) {
+      channelId = Number(req.body.channelId);
+    }
+    if (channelId) await ensureChannelNotArchived(query, channelId);
+    return next();
+  } catch (err) { return res.status(err.status || 500).json({ error: err.status ? err.message : 'Server error' }); }
 });
 
 const MAX_CONTENT_LENGTH = 100000;
@@ -263,8 +283,8 @@ router.get('/standalone', authenticateToken, async (req, res) => {
          AND (COALESCE(c.owner_id, c.created_by) = $1
               OR EXISTS (SELECT 1 FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1)
               OR EXISTS (SELECT 1 FROM canvas_channel_grants g
-                         JOIN channel_members cm ON cm.channel_id = g.channel_id
-                         WHERE g.canvas_id = c.id AND cm.user_id = $1))
+                         WHERE g.canvas_id = c.id
+                           AND ${channelVisibleToUser('g.channel_id')}))
        ORDER BY c.updated_at DESC, c.id DESC`,
       [userId]
     );

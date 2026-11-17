@@ -1,4 +1,4 @@
-// Who may manage employees: the Superadmin, and anyone the Superadmin has given the HR role.
+// Who may manage employees: the Owner and anyone with the manage_people role capability.
 // HR can keep employee records, departments, reporting lines and names, and create member accounts.
 // Only the Superadmin gives out roles (HR, Superadmin, guest) and moderates.
 const crypto = require('crypto');
@@ -19,14 +19,13 @@ async function hrActor(userId) {
 
 // Someone whose role grants manage_people is treated as HR everywhere the old is_hr flag is read.
 async function withRoleAccess(row) {
-  if (row.account_type === 'member' && !row.is_hr && !row.is_superadmin && await can(query, row.id, 'manage_people')) {
-    return { ...row, is_hr: true };
-  }
-  return row;
+  if (row.account_type !== 'member') return row;
+  // The legacy flag is never an authorization source. Evaluate actual role permissions.
+  return { ...row, is_hr: await can(query, row.id, 'manage_people') };
 }
 
-// SQL for "this user is HR-like" over the users table (alias-free): the flags, or a role granting manage_people.
-const HR_LIKE_SQL = `(is_hr OR is_superadmin OR id IN (
+// HR-like users are owners or members with an explicit manage_people role assignment.
+const HR_LIKE_SQL = `(is_superadmin OR id IN (
   SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE 'manage_people' = ANY(r.permissions)))`;
 
 const canManageEmployees = (actor) => Boolean(actor && actor.account_type === 'member' && (actor.is_superadmin || actor.is_hr));

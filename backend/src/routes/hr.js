@@ -1,7 +1,7 @@
 // Employee management: records (employee number, hire date, status, type, department), departments, the HR
 // role, and a CSV export. Open to the Superadmin and to HR; departments can be read by every member.
 const express = require('express');
-const { query } = require('../db');
+const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 const prelaunch = require('../prelaunch');
@@ -179,7 +179,9 @@ router.put('/employees/:id', async (req, res) => {
     for (const [field, column, label] of [['lastName', 'last_name', 'Last name'], ['firstName', 'first_name', 'First name'], ['middleName', 'middle_name', 'Middle name'], ['jobTitle', 'job_title', 'Job title'], ['location', 'location', 'Location']]) {
       if (body[field] !== undefined) set(column, text(body[field], 100, label));
     }
-    if (body.departmentId !== undefined) {
+    const departmentChanged = body.departmentId !== undefined;
+    let requestedPrimaryDepartmentId = null;
+    if (departmentChanged) {
       if (body.departmentId === null) {
         set('department_id', null);
         set('department', '');
@@ -187,6 +189,7 @@ router.put('/employees/:id', async (req, res) => {
         const deptId = parseId(body.departmentId);
         const dept = deptId ? (await query('SELECT id, name FROM departments WHERE id = $1', [deptId])).rows[0] : null;
         if (!dept) throw fail(404, 'That department was not found');
+        requestedPrimaryDepartmentId = dept.id;
         set('department_id', dept.id);
         set('department', dept.name);
       }
@@ -194,21 +197,46 @@ router.put('/employees/:id', async (req, res) => {
     if (!sets.length) throw fail(400, 'Nothing to change');
     values.push(id);
     const before = body.username !== undefined || body.email !== undefined ? (await query('SELECT username, email FROM users WHERE id = $1', [id])).rows[0] : null;
-    const updated = await query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} AND account_type = 'member' RETURNING id`, values);
-    if (!updated.rows.length) throw fail(404, 'Person not found');
-    if (before && body.email !== undefined && before.email.toLowerCase() !== String(body.email).trim().toLowerCase()) {
-      await query(
-        "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'email_changed', $3)",
-        [actor.id, id, JSON.stringify({ from: before.email, to: String(body.email).trim().toLowerCase() })]
-      );
+    // Primary department is a legacy employee field and an organization membership. Keep both
+    // representations consistent in one transaction, without removing secondary memberships.
+    const client = departmentChanged ? await pool.connect() : null;
+    const run = client ? client.query.bind(client) : query;
+    let row;
+    try {
+      if (client) await run('BEGIN');
+      const updated = await run(`UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} AND account_type = 'member' RETURNING id`, values);
+      if (!updated.rows.length) throw fail(404, 'Person not found');
+      if (departmentChanged) {
+        // Serialize concurrent changes to this employee using the UPDATE row lock above.
+        // Clearing primary changes the existing row(s) to secondary; it does not revoke access.
+        await run('UPDATE user_departments SET is_primary = false WHERE user_id = $1 AND is_primary = true', [id]);
+        if (requestedPrimaryDepartmentId !== null) {
+          await run(
+            'INSERT INTO user_departments(user_id, department_id, is_primary) VALUES ($1, $2, true) ON CONFLICT (user_id, department_id) DO UPDATE SET is_primary = true',
+            [id, requestedPrimaryDepartmentId]
+          );
+        }
+      }
+      if (before && body.email !== undefined && before.email.toLowerCase() !== String(body.email).trim().toLowerCase()) {
+        await run(
+          "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'email_changed', $3)",
+          [actor.id, id, JSON.stringify({ from: before.email, to: String(body.email).trim().toLowerCase() })]
+        );
+      }
+      if (before && body.username !== undefined && before.username !== body.username.trim()) {
+        await run(
+          "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'username_changed', $3)",
+          [actor.id, id, JSON.stringify({ from: before.username, to: body.username.trim() })]
+        );
+      }
+      row = (await run(`${EMPLOYEE_SELECT} WHERE u.id = $1`, [id])).rows[0];
+      if (client) await run('COMMIT');
+    } catch (err) {
+      if (client) await run('ROLLBACK');
+      throw err;
+    } finally {
+      if (client) client.release();
     }
-    if (before && body.username !== undefined && before.username !== body.username.trim()) {
-      await query(
-        "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'username_changed', $3)",
-        [actor.id, id, JSON.stringify({ from: before.username, to: body.username.trim() })]
-      );
-    }
-    const row = (await query(`${EMPLOYEE_SELECT} WHERE u.id = $1`, [id])).rows[0];
     req.io?.to(`user_${id}`).emit('profile_updated', {}); // their account menu shows the new name, username or email
     res.json({ employee: mapEmployee(row) });
   } catch (err) {
@@ -223,8 +251,23 @@ router.put('/employees/:id/hr-role', async (req, res) => {
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     if (typeof (req.body && req.body.isHr) !== 'boolean') throw fail(400, 'isHr must be true or false');
-    const result = await query("UPDATE users SET is_hr = $1 WHERE id = $2 AND account_type = 'member' RETURNING id", [req.body.isHr, id]);
-    if (!result.rows.length) throw fail(404, 'Person not found');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const person = await client.query("SELECT id FROM users WHERE id = $1 AND account_type = 'member' AND deactivated_at IS NULL FOR UPDATE", [id]);
+      if (!person.rows.length) throw fail(404, 'Person not found');
+      const role = await client.query('SELECT id FROM roles WHERE legacy_hr = true LIMIT 1');
+      if (!role.rows.length) throw fail(409, 'Legacy HR role migration has not run');
+      if (req.body.isHr) {
+        await client.query('INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [id, role.rows[0].id, req.user.userId]);
+      } else {
+        await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2', [id, role.rows[0].id]);
+      }
+      await client.query('UPDATE users SET is_hr = $1 WHERE id = $2', [req.body.isHr, id]);
+      await client.query('COMMIT');
+    } catch (err) { await client.query('ROLLBACK'); throw err; }
+    finally { client.release(); }
+    if (req.io) req.io.emit('permissions_updated', { userId: id, byUserId: req.user.userId });
     res.json({ id, isHr: req.body.isHr });
   } catch (err) {
     sendError(res, err, 'Set HR role error');

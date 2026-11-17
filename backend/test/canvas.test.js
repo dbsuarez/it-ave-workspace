@@ -35,6 +35,12 @@ const API = () => (sql, params = []) => {
     const id = Number(params[0]);
     return { rows: [{ id }] };
   }
+  // Archive-state lookup introduced by Phase 4: ordinary fixtures are active.
+  if (sql.includes('SELECT archived_at FROM channels WHERE id = $1')) return { rows: [{ archived_at: null }] };
+  if (sql.includes('SELECT channel_id FROM canvases WHERE id = $1')) {
+    const canvas = canvases.get(Number(params[0]));
+    return { rows: canvas ? [{ channel_id: canvas.channel_id }] : [] };
+  }
   if (sql.includes('SELECT name FROM channels WHERE id = $1')) return { rows: [{ name: `chan-${params[0]}` }] };
   if (sql.includes('SELECT account_type FROM users WHERE id = $1')) {
     return { rows: [{ account_type: guests.has(Number(params[0])) ? 'guest' : 'member' }] };
@@ -47,11 +53,9 @@ const API = () => (sql, params = []) => {
     canvases.get(Number(params[1])).owner_id = Number(params[0]);
     return { rows: [] };
   }
-  if (sql.includes('SELECT g.role FROM canvas_channel_grants g')) {
-    const rows = grants
-      .filter((g) => g.canvasId === Number(params[0]) && members.has(`${g.channelId}:${params[1]}`))
-      .map((g) => ({ role: g.role }));
-    return { rows };
+  if (sql.includes('SELECT g.role, g.channel_id FROM canvas_channel_grants g')) {
+    return { rows: grants.filter((g) => g.canvasId === Number(params[0]))
+      .map((g) => ({ role: g.role, channel_id: g.channelId })) };
   }
   if (sql.includes('FROM canvas_channel_grants g JOIN channels c')) {
     return { rows: grants.filter((g) => g.canvasId === Number(params[0])).map((g) => ({ channel_id: g.channelId, name: `chan${g.channelId}`, role: g.role, created_at: new Date() })) };

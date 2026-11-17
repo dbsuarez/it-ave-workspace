@@ -192,21 +192,37 @@ function withoutLockedChannels(layout, workspaceLayout, personalChannelIds = [],
 
 router.get('/sidebar', async (req, res) => {
   try {
-    const [userResult, workspaceResult, personalResult, teamResult, directReports, canManageWorkspaceSections] = await Promise.all([
+    const [userResult, workspaceResult, personalResult, teamResult, directReports, canManageWorkspaceSections, creatorSections] = await Promise.all([
       query('SELECT sidebar_layout FROM users WHERE id = $1', [req.user.userId]),
       query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1'),
       query('SELECT id FROM channels WHERE created_by = $1 AND is_personal = TRUE', [req.user.userId]),
-      query(`SELECT ts.id, ts.name, ts.owner_id, owner.username AS owner_username,
+      // Include sections from every manager in the reporting chain, not only
+      // the immediate manager. UNION (not UNION ALL) terminates even if bad
+      // historical data contains a manager cycle.
+      query(`WITH RECURSIVE reporting_line AS (
+               SELECT id, manager_id FROM users WHERE id = $1
+               UNION
+               SELECT manager.id, manager.manager_id
+               FROM users manager JOIN reporting_line r ON manager.id = r.manager_id
+             )
+             SELECT ts.id, ts.name, ts.owner_id, owner.username AS owner_username,
                     COALESCE(array_agg(c.id ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL), '{}') AS channel_ids
              FROM team_sidebar_sections ts
              JOIN users owner ON owner.id = ts.owner_id
              LEFT JOIN channels c ON c.team_section_id = ts.id
-             WHERE ts.owner_id = $1 OR EXISTS (
-               SELECT 1 FROM users me WHERE me.id = $1 AND me.manager_id = ts.owner_id
-             )
+             WHERE ts.owner_id IN (SELECT id FROM reporting_line)
+                OR EXISTS (SELECT 1 FROM users viewer
+                           WHERE viewer.id = $1 AND viewer.is_superadmin = TRUE
+                             AND viewer.deactivated_at IS NULL)
              GROUP BY ts.id, owner.username ORDER BY LOWER(ts.name)`, [req.user.userId]),
       query("SELECT COUNT(*)::integer AS count FROM users WHERE manager_id = $1 AND account_type = 'member' AND deactivated_at IS NULL", [req.user.userId]),
       can(query, req.user.userId, 'manage_workspace'),
+      // Section placement follows ordinary channels to other viewers, without
+      // sharing personal-channel organization or exposing channel content.
+      query(`SELECT c.id AS channel_id, c.created_by, c.is_personal, c.team_section_id,
+              u.sidebar_layout
+             FROM channels c JOIN users u ON u.id = c.created_by
+             WHERE c.is_personal = FALSE AND c.team_section_id IS NULL`),
     ]);
     const stored = userResult.rows[0]?.sidebar_layout;
     const workspaceLayout = workspaceResult.rows[0]?.workspace_sidebar_layout || { sections: [] };
@@ -216,12 +232,68 @@ router.get('/sidebar', async (req, res) => {
       personalResult.rows.map((row) => row.id),
       teamResult.rows.flatMap((row) => row.channel_ids || [])
     );
-    const teamSections = teamResult.rows.map((row) => ({
-      id: `team-${row.id}`, teamSectionId: row.id, name: row.name, ownerId: row.owner_id,
-      ownerUsername: row.owner_username, editable: Number(row.owner_id) === Number(req.user.userId),
-      channelIds: (row.channel_ids || []).map(Number),
-    }));
-    res.json({ layout: { ...personal, workspaceSections: workspaceLayout.sections || [], teamSections,
+    const { ensureChannelMembership } = require('../security');
+    const checkedChannelAccess = new Map();
+    async function mayViewChannel(channelId) {
+      const id = Number(channelId);
+      if (!Number.isSafeInteger(id) || id < 1) return false;
+      if (!checkedChannelAccess.has(id)) {
+        checkedChannelAccess.set(id, (async () => {
+          try { await ensureChannelMembership(query, req.user.userId, id); return true; }
+          catch (err) { if ([403, 404].includes(err.status)) return false; throw err; }
+        })());
+      }
+      return checkedChannelAccess.get(id);
+    }
+    // Shared placement is metadata, never an independent access grant. This also
+    // hides team Section names with no authorized channels from unrelated admins.
+    const teamSections = [];
+    const teamPlaced = new Set();
+    for (const row of teamResult.rows) {
+      const channelIds = [];
+      for (const rawId of (row.channel_ids || [])) {
+        const id = Number(rawId);
+        if (!teamPlaced.has(id) && await mayViewChannel(id)) {
+          teamPlaced.add(id);
+          channelIds.push(id);
+        }
+      }
+      if (!channelIds.length && Number(row.owner_id) !== Number(req.user.userId)) continue;
+      teamSections.push({
+        id: `team-${row.id}`, teamSectionId: row.id, name: row.name, ownerId: row.owner_id,
+        ownerUsername: row.owner_username, editable: Number(row.owner_id) === Number(req.user.userId),
+        channelIds,
+      });
+    }
+    const workspaceLocked = new Set((workspaceLayout.sections || []).flatMap((s) => s.channelIds || []).map(Number));
+    const channelByOwner = new Map();
+    for (const channel of creatorSections.rows) {
+      if (workspaceLocked.has(Number(channel.channel_id))) continue;
+      const owner = Number(channel.created_by);
+      if (!channelByOwner.has(owner)) channelByOwner.set(owner, { channels: new Set(), layout: channel.sidebar_layout });
+      channelByOwner.get(owner).channels.add(Number(channel.channel_id));
+    }
+    const inheritedSections = [];
+    const inheritedChannelIds = new Set();
+    const visible = new Set();
+    for (const { channels } of channelByOwner.values()) {
+      for (const id of channels) {
+        if (visible.has(id)) continue;
+        if (await mayViewChannel(id)) visible.add(id);
+      }
+    }
+    for (const [owner, details] of channelByOwner) {
+      if (owner === Number(req.user.userId)) continue;
+      for (const section of (details.layout?.sections || [])) {
+        if (!Array.isArray(section.channelIds) || !section.name) continue;
+        const ids = section.channelIds.map(Number).filter((id) => visible.has(id) && !teamPlaced.has(id)
+          && !workspaceLocked.has(id) && !inheritedChannelIds.has(id));
+        if (!ids.length) continue;
+        ids.forEach((id) => inheritedChannelIds.add(id));
+        inheritedSections.push({ id: `inherited-${owner}-${section.id}`, name: section.name, channelIds: ids });
+      }
+    }
+    res.json({ layout: { ...personal, inheritedSections, workspaceSections: workspaceLayout.sections || [], teamSections,
       canCreateTeamSections: Number(directReports.rows[0]?.count || 0) > 0, canManageWorkspaceSections } });
   } catch (err) {
     console.error('Get sidebar layout error:', err);
@@ -272,8 +344,14 @@ router.put('/sidebar', async (req, res) => {
     const locked = new Set((workspaceLayout.sections || []).flatMap((section) => section.channelIds || []).map(Number));
     const personal = new Set((await query('SELECT id FROM channels WHERE created_by = $1 AND is_personal = TRUE', [req.user.userId])).rows.map((row) => Number(row.id)));
     const team = new Set((await query(
-      `SELECT c.id FROM channels c JOIN team_sidebar_sections ts ON ts.id = c.team_section_id
-       WHERE ts.owner_id = $1 OR EXISTS (SELECT 1 FROM users me WHERE me.id = $1 AND me.manager_id = ts.owner_id)`,
+          `WITH RECURSIVE reporting_line AS (
+             SELECT id, manager_id FROM users WHERE id = $1
+             UNION
+             SELECT manager.id, manager.manager_id FROM users manager
+             JOIN reporting_line r ON manager.id = r.manager_id
+           )
+           SELECT c.id FROM channels c JOIN team_sidebar_sections ts ON ts.id = c.team_section_id
+           WHERE ts.owner_id IN (SELECT id FROM reporting_line)`,
       [req.user.userId]
     )).rows.map((row) => Number(row.id)));
     if (layout.sections.some((section) => section.channelIds.some((id) => locked.has(Number(id))))) {

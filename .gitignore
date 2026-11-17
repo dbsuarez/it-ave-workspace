@@ -14,3 +14,7 @@ backups/
 
 # Local HTTPS certificates made by deploy/local-https.ps1 (private key: never commit)
 deploy/certs/
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json

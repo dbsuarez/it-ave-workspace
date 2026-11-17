@@ -42,9 +42,22 @@ function createClient() {
   return {
     async query(sql, params = []) {
       if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
+      // Channel file mutation guard, with all seeded channels active.
+      if (sql.includes('SELECT archived_at FROM channels WHERE id = $1')) {
+        return { rows: [{ archived_at: null }] };
+      }
       if (sql.includes('SELECT f.id, f.filename')) {
         const file = files.get(Number(params[0]));
         return { rows: file ? [{ ...file }] : [] };
+      }
+      // The production deletion route now checks effective channel membership before
+      // considering uploader/moderator rights. Model that authorization query instead
+      // of treating it as an unexpected SQL statement (HTTP 500).
+      if (sql.includes('FROM channels c') && sql.includes('CROSS JOIN users u') && sql.includes('needs_check')) {
+        const channelId = Number(params[0]);
+        const userId = Number(params[1]);
+        const member = channelId === 7 && [1, 2, 3].includes(userId);
+        return { rows: member ? [{ needs_check: false }] : [] };
       }
       if (sql.includes('SELECT 1') && sql.includes("cm.role = 'moderator'")) {
         return { rows: channelModerator ? [{}] : [] };
@@ -79,6 +92,11 @@ require.cache[dbPath] = {
   exports: {
     query: async (sql) => {
       if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
+      // Permission lookup for a non-uploader now reads the current account shape.
+      // Keep the user active but without manage_messages, so deletion is denied (403).
+      if (sql.includes('SELECT is_superadmin, account_type, department_id FROM users')) {
+        return { rows: [{ is_superadmin: false, account_type: 'member', department_id: null }] };
+      }
       if (sql.includes('SELECT is_superadmin, is_hr, account_type FROM users')) return { rows: [{ is_superadmin: false, is_hr: false, account_type: 'member' }] };
       if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: [] }] };
       if (sql.includes('FROM channel_overrides')) return { rows: [] };

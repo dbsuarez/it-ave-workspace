@@ -99,7 +99,7 @@ test('the Superadmin sets one slow mode on every existing channel', async (t) =>
   assert.equal(log.length, 1);
 });
 
-test('deleting a channel: the creator or the Superadmin, with everything in it, and everyone is told', async (t) => {
+test('permanent deletion needs archive, explicit confirmation and channel-management authority; content is removed and members told', async (t) => {
   if (skip(t)) return;
   const made = await call(ids.ann, 'POST', '/channels', { name: 'to-delete' });
   const id = made.json.channel.id;
@@ -109,10 +109,18 @@ test('deleting a channel: the creator or the Superadmin, with everything in it, 
   await admin.query("INSERT INTO files (message_id, filename, original_name, size, mime_type, uploaded_by) VALUES ($1, 'stored-file.bin', 'a.bin', 1, 'application/octet-stream', $2)", [msg, ids.ann]);
   fs.writeFileSync(path.join(uploads, 'kept-file.bin'), 'x');
 
-  assert.equal((await call(ids.bob, 'DELETE', `/moderation/channels/${id}`)).status, 403, 'a member who did not create it cannot');
+  assert.equal((await call(ids.bob, 'DELETE', `/moderation/channels/${id}`)).status, 403,
+    'unauthorized users are denied before archive state is disclosed');
   assert.equal((await call(ids.ann, 'DELETE', '/moderation/channels/99999')).status, 404);
+  assert.equal((await call(ids.boss, 'DELETE', `/moderation/channels/${id}`)).status, 409,
+    'even the Superadmin must archive before deleting a shared channel');
+  assert.equal((await call(ids.boss, 'POST', `/moderation/channels/${id}/archive`,
+    { confirmation: 'ARCHIVE CHANNEL' })).status, 200);
+  assert.equal((await call(ids.boss, 'DELETE', `/moderation/channels/${id}`)).status, 409,
+    'deletion also requires the exact explicit phrase');
   emitted.length = 0;
-  const gone = await call(ids.ann, 'DELETE', `/moderation/channels/${id}`);
+  const gone = await call(ids.boss, 'DELETE', `/moderation/channels/${id}`,
+    { confirmation: 'PERMANENTLY DELETE CHANNEL' });
   assert.equal(gone.status, 200);
   assert.equal(gone.json.filesRemoved, 1);
   assert.equal((await admin.query('SELECT 1 FROM channels WHERE id = $1', [id])).rows.length, 0);
@@ -128,5 +136,11 @@ test('deleting a channel: the creator or the Superadmin, with everything in it, 
   assert.equal(log[0].details.name, 'to-delete');
 
   const mine = await call(ids.bob, 'POST', '/channels', { name: 'bobs-room' });
-  assert.equal((await call(ids.boss, 'DELETE', `/moderation/channels/${mine.json.channel.id}`)).status, 200, 'the Superadmin can delete any channel');
+  const otherId = mine.json.channel.id;
+  assert.equal((await call(ids.boss, 'DELETE', `/moderation/channels/${otherId}`)).status, 409);
+  assert.equal((await call(ids.boss, 'POST', `/moderation/channels/${otherId}/archive`,
+    { confirmation: 'ARCHIVE CHANNEL' })).status, 200);
+  assert.equal((await call(ids.boss, 'DELETE', `/moderation/channels/${otherId}`,
+    { confirmation: 'PERMANENTLY DELETE CHANNEL' })).status, 200,
+    'Superadmin may archive and then permanently delete a shared channel');
 });

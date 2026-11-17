@@ -8,6 +8,7 @@ const db = require('./src/db');
 
 const authRoutes = require('./src/routes/auth');
 const channelRoutes = require('./src/routes/channels');
+const channelAccessPolicyRoutes = require('./src/routes/channelAccessPolicies');
 const messageRoutes = require('./src/routes/messages');
 const userRoutes = require('./src/routes/users');
 const filesRoutes = require('./src/routes/files');
@@ -88,6 +89,8 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/channels', channelRoutes);
+app.use('/api/channels', channelAccessPolicyRoutes);
+app.use('/api/organization', channelAccessPolicyRoutes);
 app.use('/api/channels', channelLinkRoutes);
 app.use('/api/channels', channelPermissionRoutes);
 app.use('/api/messages', messageRoutes);

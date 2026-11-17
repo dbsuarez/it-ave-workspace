@@ -211,6 +211,7 @@ function openEmployeeEditor(id) {
         ${state.moderation.isSuperadmin ? `<label class="preference-toggle"><input type="checkbox" id="emp-hr"${e.isHr ? ' checked' : ''}><span>HR: can manage employee records, departments and reporting lines</span></label>` : ''}
         <div class="form-group"><label for="emp-email">Email</label><input id="emp-email" type="email" maxlength="255" value="${escapeText(e.email)}" autocomplete="off"></div>
         <p class="form-note">${e.phone ? `Phone: ${escapeText(e.phone)}. ` : ''}The employee edits their own photo, phone and page.</p>
+        <div id="emp-multi-departments"><p class="form-note">Loading department memberships…</p></div>
         <div data-emp-roles-section><h4 class="modal-section-title">Roles</h4>
         <div id="emp-roles"><p class="pp-muted">Loading…</p></div></div>
         <h4 class="modal-section-title">Leave balances</h4>
@@ -232,6 +233,7 @@ function openEmployeeEditor(id) {
       </div>
     </form>`;
   openSettingsModal(modal);
+  if (typeof loadEmployeeDepartments === 'function') loadEmployeeDepartments(id);
   loadEmployeeTasks(id);
   if (typeof loadEmployeeRoles === 'function') loadEmployeeRoles(id);
   if (typeof loadEmployeeLeave === 'function') loadEmployeeLeave(id);
@@ -313,7 +315,8 @@ async function changeTasks(id, fn) {
     await loadEmployeeTasks(id);
   } catch (err) {
     showToast(err.message || 'Could not change the checklist.', 'error');
-    loadEmployeeTasks(id);
+    if (typeof loadEmployeeDepartments === 'function') loadEmployeeDepartments(id);
+  loadEmployeeTasks(id);
   }
 }
 

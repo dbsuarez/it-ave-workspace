@@ -20,6 +20,8 @@ module.exports = [
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS available_to_all BOOLEAN NOT NULL DEFAULT FALSE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT FALSE',
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE',
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS archived_by INTEGER REFERENCES users(id) ON DELETE SET NULL',
   `CREATE TABLE IF NOT EXISTS team_sidebar_sections (
      id SERIAL PRIMARY KEY,
      name VARCHAR(40) NOT NULL,
@@ -766,8 +768,9 @@ $$`,
   'ALTER TABLE channel_overrides ALTER COLUMN subject_type TYPE VARCHAR(12)',
   'ALTER TABLE channel_overrides DROP CONSTRAINT IF EXISTS channel_overrides_subject_type_check',
   "ALTER TABLE channel_overrides ADD CONSTRAINT channel_overrides_subject_type_check CHECK (subject_type IN ('role', 'user', 'department'))",
+  `ALTER TABLE roles ADD COLUMN IF NOT EXISTS legacy_hr BOOLEAN NOT NULL DEFAULT false`,
   `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('Owner', '#B45309', 0, ARRAY['view_channel','send_messages','attach_files','add_reactions','mention_everyone','create_channels','manage_channels','manage_messages','timeout_members','manage_roles','manage_people','view_audit_log','manage_workspace'], 'owner') ON CONFLICT (builtin_key) DO NOTHING`,
-  `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('HR', '#0F766E', 10, ARRAY['manage_people'], 'hr') ON CONFLICT (builtin_key) DO NOTHING`,
+  `INSERT INTO roles (name, color, position, permissions, builtin_key) SELECT 'HR', '#0F766E', 10, ARRAY['manage_people'], 'hr' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE legacy_hr = true OR LOWER(name) = 'hr') ON CONFLICT (builtin_key) DO NOTHING`,
   `INSERT INTO roles (name, color, position, permissions, builtin_key) VALUES ('Everyone', '#6B7280', 1000, ARRAY['view_channel','send_messages','attach_files','add_reactions','create_channels'], 'everyone') ON CONFLICT (builtin_key) DO NOTHING`,
   // Merge user_groups into roles (each group becomes a zero-permission role; membership is copied, tables dropped).
   `INSERT INTO roles (name, color, position, permissions, created_by)
@@ -784,4 +787,50 @@ $$`,
    ON CONFLICT DO NOTHING`,
   `DROP TABLE IF EXISTS user_group_members`,
   `DROP TABLE IF EXISTS user_groups`,
+  // One-time, idempotent conversion: preserve the original HR role ID and all references.
+  `UPDATE roles SET legacy_hr = true WHERE builtin_key = 'hr'`,
+  `INSERT INTO user_roles (user_id, role_id)
+   SELECT u.id, r.id FROM users u CROSS JOIN roles r
+   WHERE u.is_hr = true AND u.account_type = 'member' AND r.legacy_hr = true
+   ON CONFLICT DO NOTHING`,
+  `UPDATE roles SET builtin_key = NULL, position = 100 WHERE legacy_hr = true AND builtin_key = 'hr'`,
+  // Phase 2 foundation: separate organization membership from access grants and action permissions.
+  `CREATE TABLE IF NOT EXISTS user_departments (
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+     is_primary BOOLEAN NOT NULL DEFAULT false,
+     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (user_id, department_id)
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS user_departments_primary_unique
+   ON user_departments(user_id) WHERE is_primary`,
+  `INSERT INTO user_departments(user_id, department_id, is_primary)
+   SELECT u.id, u.department_id, true FROM users u WHERE u.department_id IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM user_departments ud WHERE ud.user_id = u.id AND ud.is_primary)
+   ON CONFLICT (user_id, department_id) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS channel_department_grants (
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+     granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (channel_id, department_id)
+   )`,
+  `CREATE TABLE IF NOT EXISTS channel_direct_grants (
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     expires_at TIMESTAMPTZ,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (channel_id, user_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS channel_direct_grants_expiry_idx
+   ON channel_direct_grants(expires_at) WHERE expires_at IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS channel_bans (
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     reason VARCHAR(500) NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (channel_id, user_id)
+   )`,
 ];

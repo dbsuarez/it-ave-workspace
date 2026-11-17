@@ -3,7 +3,7 @@ const router = express.Router();
 const { query, pool } = require('../db');
 const poolDb = { query }; // store functions take anything with .query(), the pool or a transaction client
 const authenticateToken = require('../middleware/auth');
-const { ensureChannelMembership } = require('../security');
+const { ensureChannelMembership, ensureChannelNotArchived } = require('../security');
 const { ensureNotGuest } = require('../guests');
 const store = require('../listsStore');
 const {
@@ -111,7 +111,10 @@ async function loadList(userId, listId, { write = false } = {}) {
   if (!list || list.archived_at) throw fail(404, 'List not found');
   await ensureChannelMembership(query, userId, list.channel_id);
   // Guests are read-only in lists (decision 4 of the Lists/Canvas plan).
-  if (write) await ensureNotGuest(query, userId, 'Guests have view-only access to lists');
+  if (write) {
+    await ensureNotGuest(query, userId, 'Guests have view-only access to lists');
+    await ensureChannelNotArchived(query, list.channel_id);
+  }
   return list;
 }
 
@@ -205,6 +208,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const description = typeof body.description === 'string' ? body.description.trim().slice(0, 500) : '';
     await ensureChannelMembership(query, req.user.userId, channelId);
     await ensureNotGuest(query, req.user.userId, 'Guests have view-only access to lists');
+    await ensureChannelNotArchived(query, channelId);
 
     // Validate the requested columns before anything is written.
     const extra = [];
@@ -328,6 +332,7 @@ router.post('/:listId/copy', authenticateToken, async (req, res) => {
     const channelId = body.channelId === undefined ? source.channel_id : parseId(body.channelId);
     if (channelId === null) return res.status(400).json({ error: 'A valid channel ID is required' });
     if (channelId !== source.channel_id) await ensureChannelMembership(query, req.user.userId, channelId);
+    await ensureChannelNotArchived(query, channelId);
     const newId = await withTransaction((client) => store.copyList(client, source, {
       title, channelId, includeRows: body.includeRows !== false, userId: req.user.userId,
     }));

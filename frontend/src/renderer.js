@@ -3236,6 +3236,7 @@ function showAuditDetails(detailsText) {
 function buildChannelConfigurator(host, channelName) {
   const labels = {
     overview: ['Overview', 'General channel settings and ownership.'],
+    access: ['Access', 'Manage department access, direct invitations, and bans.'],
     permissions: ['Permissions', 'Control what roles and individual people can do in this channel.'],
     moderation: ['Moderation', 'Manage timeouts and reported messages for this channel.'],
     integrations: ['Integrations', 'Connect external systems that post into this channel.'],
@@ -3243,7 +3244,7 @@ function buildChannelConfigurator(host, channelName) {
     danger: ['Danger zone', 'Destructive actions that cannot be undone.'],
   };
   const existingSections = Array.from(host.querySelectorAll(':scope > [data-channel-config-section]'));
-  const available = ['overview', 'permissions', 'moderation', 'integrations'];
+  const available = ['overview', 'access', 'permissions', 'moderation', 'integrations'];
   if (existingSections.some((element) => element.dataset.channelConfigSection === 'danger')) available.push('danger');
   if (!available.includes(state.moderation.channelSettingsTab)) state.moderation.channelSettingsTab = 'overview';
 
@@ -3323,6 +3324,7 @@ async function loadModerationChannel(channelId) {
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
       </div>
+      <div id="moderation-channel-access" data-channel-config-section="access"></div>
       <div id="moderation-channel-permissions" data-channel-config-section="permissions"></div>
       <div class="moderation-card" data-channel-config-section="moderation"><h2>Active timeouts</h2><div class="moderation-list">${(data.timeouts || []).map((timeout) => `
         <div class="moderation-row"><span>${escapeHtml(timeout.username)} · until ${escapeHtml(new Date(timeout.expiresAt).toLocaleString())}${timeout.reason ? ` · ${escapeHtml(timeout.reason)}` : ''}</span><button class="btn" data-action="remove-timeout" data-member-id="${timeout.userId}">Remove timeout</button></div>
@@ -3340,6 +3342,7 @@ async function loadModerationChannel(channelId) {
       paintAvatar(ownerAvatar, { id: selectedChannel.createdBy, photoVersion: selectedChannel.creatorPhotoVersion }, ownerName.charAt(0).toUpperCase());
     }
     loadChannelPermissionsCard(channelId);
+    if (typeof loadChannelAccessCard === 'function') loadChannelAccessCard(channelId);
     await loadChannelWebhooks(channelId);
   } catch (err) {
     console.error('Load channel moderation error:', err);

@@ -73,7 +73,7 @@ test('only the creator, an Owner or a role with manage_channels may read or chan
   assert.equal((await call(ids.maker, 'GET', `/${ids.channel}/permissions`)).status, 200);
   assert.equal((await call(ids.boss, 'GET', `/${ids.channel}/permissions`)).status, 200);
   const listed = (await call(ids.boss, 'GET', `/${ids.channel}/permissions`)).json;
-  assert.deepEqual(listed.roles.map((r) => r.builtin), ['hr', null, 'everyone'], 'Owner is not listed: it always has everything');
+  assert.deepEqual(listed.roles.map((r) => r.builtin), [null, null, 'everyone'], 'Owner is not listed: it always has everything');
 });
 
 test('a read-only channel: Everyone cannot post, the Editors role can, and the creator is unaffected only when allowed', async (t) => {
@@ -114,9 +114,10 @@ test('a department override follows the employee department without copied chann
   await query('DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2', [ids.channel, ids.bob]);
   const set = (body) => call(ids.maker, 'PUT', `/${ids.channel}/permissions`, body);
   assert.equal((await set({ subjectType: 'role', subjectId: ids.everyone, allow: [], deny: ['view_channel', 'send_messages'] })).status, 200);
-  assert.equal((await set({ subjectType: 'department', subjectId: departmentId, allow: ['view_channel', 'send_messages'], deny: [] })).status, 200);
+  assert.equal((await set({ subjectType: 'department', subjectId: departmentId, allow: ['view_channel', 'send_messages'], deny: [] })).status, 400);
+  assert.equal((await set({ subjectType: 'department', subjectId: departmentId, allow: ['view_channel'], deny: [] })).status, 200);
   assert.equal(await canView(ids.bob), true, 'membership is granted from the current department');
-  assert.equal(await canPost(ids.bob), true, 'department allow overrides Everyone deny');
+  assert.equal(await canPost(ids.bob), false, 'department entry never overrides Everyone action deny');
   const listed = (await call(ids.maker, 'GET', `/${ids.channel}/permissions`)).json;
   assert.ok(listed.departments.some((department) => department.id === departmentId && department.memberCount === 1));
   await set({ subjectType: 'role', subjectId: ids.everyone, allow: [], deny: [] });

@@ -49,14 +49,16 @@ async function loadWorkspaceAdmin() {
   section.innerHTML = '<div class="loading-state">Loading workspace administration…</div>';
   const admin = adminState();
   try {
-    const [users, invitations, registration, prelaunch] = await Promise.all([
+    const [users, invitations, registration, prelaunch, groups] = await Promise.all([
       adminApi('/api/admin/users'),
       adminApi('/api/admin/invitations'),
       adminApi('/api/admin/registration'),
       adminApi('/api/admin/prelaunch'),
+      adminApi('/api/admin/groups'),
     ]);
     admin.prelaunch = prelaunch;
     admin.users = users.users || [];
+    admin.groups = groups.groups || [];
     admin.invitations = invitations.invitations || [];
     admin.mode = registration.mode || 'open';
     renderWorkspaceAdmin();
@@ -206,6 +208,12 @@ function renderWorkspaceAdmin() {
       </div>`;
   }).join('');
 
+  const groupRows = (admin.groups || []).map((group) => `
+    <div class="moderation-row">
+      <span><strong>${escapeHtml(group.name || `Group ${group.id}`)}</strong><br>
+      <small>${Number(group.memberCount) || 0} members · created by ${escapeHtml(group.creator || 'former user')}</small></span>
+    </div>`).join('');
+
   const invitationRows = admin.invitations.map((invitation) => `
     <div class="moderation-row">
       <span><strong>${invitation.accountType === 'guest' ? 'Guest' : 'Member'}</strong>${invitation.note ? ` · ${escapeHtml(invitation.note)}` : ''}<br>
@@ -267,6 +275,27 @@ function renderWorkspaceAdmin() {
       ${admin.lastCode ? `<p class="admin-invite-code">New code: <code id="admin-last-code">${escapeHtml(admin.lastCode)}</code> <button class="btn" type="button" data-admin-action="copy-code">Copy</button><br><small>Share it now. It is shown only once and works for one sign-up.</small></p>` : ''}
     </form>
     <div class="moderation-card" id="admin-invitations" data-mod-tab="signup"><h2>Invitations</h2><div class="moderation-list">${invitationRows || '<p>No invitations yet.</p>'}</div></div>
+    <div class="moderation-card" id="admin-workspace-groups" data-mod-tab="people">
+      <h2>Groups</h2><p class="admin-help">Group conversation inventory. Messages remain private to group members.</p>
+      <div class="moderation-list">${groupRows || '<p>No group conversations have been created yet.</p>'}</div>
+    </div>
+    <div class="moderation-card" id="admin-employee-role-reset" data-mod-tab="people">
+      <h2>Reset Employee Roles</h2>
+      <p class="admin-help">Reset all non-Superadmin member accounts to their default Employee / Everyone permissions. This removes custom role assignments, HR flags, and individual channel action overrides. Owners, guests, department assignments, channel membership, bans, invitations, channel visibility overrides and existing content are preserved.</p>
+      <p class="admin-help"><strong>Test workspace only.</strong> Back up your database first. This action is audited and disconnects current sessions.</p>
+      <button class="btn danger-outline" type="button" data-admin-action="employee-role-reset-open">Reset Employee Roles…</button>
+      <div data-employee-reset-confirmation hidden>
+        <p><strong>Confirm the one-time role reset</strong></p>
+        <label>Type RESET EMPLOYEE ROLES to continue
+          <input type="text" data-employee-reset-phrase autocomplete="off" spellcheck="false" placeholder="RESET EMPLOYEE ROLES" aria-label="Employee role reset confirmation phrase">
+        </label>
+        <div class="admin-actions">
+          <button class="btn danger" type="button" data-admin-action="employee-role-reset-confirm" disabled>Reset all employee roles</button>
+          <button class="btn" type="button" data-admin-action="employee-role-reset-cancel">Cancel</button>
+        </div>
+      </div>
+      <div data-employee-reset-result role="status" aria-live="polite"></div>
+    </div>
     <div class="moderation-card" id="admin-workspace-members" data-mod-tab="people">
       <div class="workspace-members-head"><div><h2>Workspace members</h2>${channelContext ? `<p class="admin-help">Managing explicit access to <strong>#${escapeHtml(channelContext.name)}</strong>. Workspace roles and channel permissions may also grant access.</p>` : '<p class="admin-help">Manage workspace accounts and roles from one directory.</p>'}</div>
         ${channelContext ? '<button class="btn" type="button" data-action="close-channel-people">Show all workspace members</button>' : ''}</div>
@@ -276,6 +305,8 @@ function renderWorkspaceAdmin() {
   const panelKeys = {
     'admin-create-accounts': 'accounts',
     'admin-workspace-members': 'members',
+    'admin-employee-role-reset': 'members',
+    'admin-workspace-groups': 'groups',
     'admin-prelaunch-access': 'prelaunch',
     'admin-registration': 'registration',
     'admin-invite-form': 'invite',
@@ -300,7 +331,46 @@ async function handleAdminClick(event) {
   const admin = adminState();
   const action = button.dataset.adminAction;
   try {
-    if (action === 'save-registration') {
+    if (action === 'employee-role-reset-open') {
+      if (!state.moderation?.isSuperadmin) throw new Error('Superadmin access required.');
+      const card = button.closest('#admin-employee-role-reset');
+      const confirmation = card?.querySelector('[data-employee-reset-confirmation]');
+      if (confirmation) confirmation.hidden = false;
+      const input = card?.querySelector('[data-employee-reset-phrase]');
+      if (input) { input.value = ''; input.focus(); }
+      const submit = card?.querySelector('[data-admin-action="employee-role-reset-confirm"]');
+      if (submit) submit.disabled = true;
+      return;
+    } else if (action === 'employee-role-reset-cancel') {
+      const card = button.closest('#admin-employee-role-reset');
+      const confirmation = card?.querySelector('[data-employee-reset-confirmation]');
+      if (confirmation) confirmation.hidden = true;
+      const input = card?.querySelector('[data-employee-reset-phrase]');
+      if (input) input.value = '';
+      return;
+    } else if (action === 'employee-role-reset-confirm') {
+      if (!state.moderation?.isSuperadmin) throw new Error('Superadmin access required.');
+      const card = button.closest('#admin-employee-role-reset');
+      const input = card?.querySelector('[data-employee-reset-phrase]');
+      if (!input || input.value !== 'RESET EMPLOYEE ROLES') throw new Error('Enter the exact confirmation phrase.');
+      if (!confirm('Reset roles for ALL non-Owner employees?\n\nCustom roles, HR grants, and personal action overrides will be cleared. This affects permissions and signs out active sessions.\n\nContinue only after backing up the TEST database.')) return;
+      button.disabled = true;
+      try {
+        const result = await adminApi('/api/admin/employee-role-reset', 'POST', { confirmation: input.value });
+        const summary = `Employee reset complete: ${Number(result.employeeCount) || 0} employees, ${Number(result.rolesRemoved) || 0} roles removed, ${Number(result.overridesChanged) || 0} channel overrides updated.`;
+        const output = card?.querySelector('[data-employee-reset-result]');
+        if (output) output.textContent = summary;
+        const confirmation = card?.querySelector('[data-employee-reset-confirmation]');
+        if (confirmation) confirmation.hidden = true;
+        input.value = '';
+        showToast(summary, 'success');
+        // Re-read the role and directory state after privileges have changed.
+        await Promise.all([loadUsers(), loadModerationAccess()]);
+      } finally {
+        button.disabled = false;
+      }
+      return;
+    } else if (action === 'save-registration') {
       const mode = document.getElementById('admin-registration-mode').value;
       await adminApi('/api/admin/registration', 'PUT', { mode });
       admin.mode = mode;
@@ -443,6 +513,11 @@ function setupAdminFeatures() {
   document.addEventListener('click', handleAdminClick);
   document.addEventListener('submit', handleAdminSubmit);
   document.addEventListener('input', (event) => {
+    if (event.target.matches?.('[data-employee-reset-phrase]')) {
+      const confirmButton = event.target.closest('#admin-employee-role-reset')?.querySelector('[data-admin-action="employee-role-reset-confirm"]');
+      if (confirmButton) confirmButton.disabled = event.target.value !== 'RESET EMPLOYEE ROLES';
+      return;
+    }
     if (!event.target.matches?.('[data-workspace-member-search]')) return;
     const query = event.target.value.trim().toLowerCase();
     document.querySelectorAll('[data-workspace-member-list] [data-admin-user]').forEach((row) => {

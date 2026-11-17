@@ -86,6 +86,9 @@ router.put('/:channelId/permissions', async (req, res) => {
     if (!['role', 'user', 'department'].includes(subjectType) || !Number.isInteger(subjectId)) throw fail(400, 'Choose a role, department or person');
     if (![allow, deny].every((list) => Array.isArray(list) && list.every((key) => CHANNEL_KEYS.includes(key)))) throw fail(400, 'Unknown permission');
     if (allow.some((key) => deny.includes(key))) throw fail(400, 'A permission cannot be both allowed and denied');
+    if (subjectType === 'department' && [...allow, ...deny].some((key) => key !== 'view_channel')) {
+      throw fail(400, 'Departments grant channel access only; assign action permissions to a role or person');
+    }
     if (subjectType === 'role') {
       const role = (await query('SELECT builtin_key FROM roles WHERE id = $1', [subjectId])).rows[0];
       if (!role) throw fail(404, 'Role not found');

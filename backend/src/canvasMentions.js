@@ -33,7 +33,7 @@ function snippetFor(text, username) {
 // Tell these users about something in this canvas. Only people who can read the canvas are told.
 async function deliver({ query, io, canvas, actorId, userIds, source, snippet }) {
   const delivered = [];
-  const actor = (await query('SELECT id, username, avatar_color FROM users WHERE id = $1', [actorId])).rows[0];
+  const actor = (await query('SELECT id, username, first_name, middle_name, last_name, avatar_color FROM users WHERE id = $1', [actorId])).rows[0];
   for (const userId of new Set(userIds)) {
     if (Number(userId) === Number(actorId)) continue;
     try {
@@ -57,6 +57,8 @@ async function deliver({ query, io, canvas, actorId, userIds, source, snippet })
       channelId: canvas.channel_id || null,
       actorId: actor ? actor.id : null,
       actorUsername: actor ? actor.username : null,
+      actorDisplayName: actor ? [actor.first_name, actor.middle_name, actor.last_name].map((part) => String(part || '').trim()).filter(Boolean).join(' ') || actor.username : null,
+      actorDisplayName: actor ? [actor.first_name, actor.middle_name, actor.last_name].map((part) => String(part || '').trim()).filter(Boolean).join(' ') || actor.username : null,
       actorAvatarColor: actor ? actor.avatar_color : null,
       preview: snippet,
       createdAt: row.created_at,

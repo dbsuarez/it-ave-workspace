@@ -26,6 +26,9 @@ require.cache[dbPath] = {
       if (sql.includes('SELECT token_version FROM users')) {
         return { rows: [{ token_version: 0 }] };
       }
+      if (sql.includes('FROM channels c') && sql.includes('CROSS JOIN users u')) {
+        return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{ needs_check: false }] : [] };
+      }
       if (sql.includes('SELECT 1 FROM channel_members')) {
         return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{}] : [] };
       }
@@ -63,6 +66,7 @@ class FakeSocket {
     this.data = {};
     this.handlers = new Map();
     this.sent = [];
+    this.rooms = new Set();
   }
 
   on(event, handler) {
@@ -73,7 +77,9 @@ class FakeSocket {
     this.sent.push({ event, data });
   }
 
-  join() {}
+  join(room) { this.rooms.add(room); }
+
+  async leave(room) { this.rooms.delete(room); }
 
   take(event) {
     const index = this.sent.findIndex((entry) => entry.event === event);
@@ -85,6 +91,9 @@ class FakeSocket {
 function createSocket() {
   const io = {
     emitted: [],
+    in(room) {
+      return { async fetchSockets() { return socket.rooms.has(room) ? [socket] : []; } };
+    },
     to(room) {
       return { emit: (event, data) => io.emitted.push({ room, event, data }) };
     },

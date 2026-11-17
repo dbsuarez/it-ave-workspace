@@ -57,6 +57,7 @@ const API = () => (sql, params = []) => {
   if (sql.includes('FROM channel_members')) { // generic fallback (unused path)
     return { rows: [] };
   }
+  if (sql.includes('name = ANY($2::text[])')) return { rows: [] }; // neither test channel is built in
   if (sql.includes('FROM channels WHERE id = $1')) {
     const ch = channels.get(Number(params[0]));
     return { rows: ch ? [ch] : [] };

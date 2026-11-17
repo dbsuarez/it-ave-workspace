@@ -9,21 +9,57 @@ const {
 } = require('../security');
 const { findMentionedUsers } = require('../mentions');
 const { roleHandle } = require('../roles');
+const { reconcileChannelRoom, startChannelExpirySweep } = require('../channelRoomReconcile');
 const {
   insertChannelMessage, insertDirectMessage, parseAttachmentIds, ATTACHMENT_UNAVAILABLE,
 } = require('../attachments');
+
+// Never deliver private-channel metadata to a personal socket room based on a
+// cached recipient list: bans and expiring grants must be checked at send time.
+async function mayReceiveChannelActivity(query, userId, channelId) {
+  try {
+    await ensureChannelMembership(query, userId, channelId);
+    return true;
+  } catch (err) {
+    if (err.status !== 403 && err.status !== 404) console.error('Channel recipient access check failed:', err);
+    return false;
+  }
+}
+
+// Discover recipients through every supported channel-access source. The final
+// ensureChannelMembership check remains authoritative, including channel-level
+// view permission overrides and explicit bans.
+async function channelRecipientCandidates(query, channelId, excludedUserId) {
+  const result = await query(`SELECT DISTINCT u.id, u.username
+    FROM users u JOIN channels c ON c.id = $1
+    WHERE u.id <> $2 AND u.deactivated_at IS NULL
+      AND u.account_type = 'member'
+      AND (EXISTS (SELECT 1 FROM channel_members cm
+                    WHERE cm.channel_id = c.id AND cm.user_id = u.id)
+        OR EXISTS (SELECT 1 FROM channel_department_grants cdg
+                   JOIN user_departments ud ON ud.department_id = cdg.department_id
+                   WHERE cdg.channel_id = c.id AND ud.user_id = u.id)
+        OR EXISTS (SELECT 1 FROM channel_direct_grants dg
+                   WHERE dg.channel_id = c.id AND dg.user_id = u.id
+                     AND (dg.expires_at IS NULL OR dg.expires_at > NOW()))
+        OR EXISTS (SELECT 1 FROM channel_overrides co
+                   WHERE co.channel_id = c.id AND co.subject_type = 'department'
+                     AND co.subject_id = u.department_id AND 'view_channel' = ANY(co.allow)))
+      AND NOT EXISTS (SELECT 1 FROM channel_bans b
+                      WHERE b.channel_id = c.id AND b.user_id = u.id)`,
+    [channelId, excludedUserId]);
+  return result.rows;
+}
 
 // Record @mentions for a new channel message and push activity events to the
 // people it concerns. Never throws: a notification problem must not fail a send.
 async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
   try {
     const channel = await query('SELECT name FROM channels WHERE id = $1', [messageData.channelId]);
-    const recipients = await query(
-      'SELECT user_id FROM channel_members WHERE channel_id = $1 AND user_id <> $2',
-      [messageData.channelId, messageData.userId]
-    );
-    for (const recipient of recipients.rows) {
-      io.to(`user_${recipient.user_id}`).emit('channel_activity', {
+    const recipients = await channelRecipientCandidates(query, messageData.channelId, messageData.userId);
+    for (const recipient of recipients) {
+      if (!(await mayReceiveChannelActivity(query, recipient.id, messageData.channelId))) continue;
+      io.to(`user_${recipient.id}`).emit('channel_activity', {
         channelId: messageData.channelId,
         channelName: channel.rows[0]?.name || '',
         messageId: messageData.id,
@@ -47,14 +83,9 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
     const notified = new Set();
 
     if (String(messageData.content || '').includes('@')) {
-      const members = await query(
-        `SELECT u.id, u.username FROM channel_members cm
-         JOIN users u ON u.id = cm.user_id
-         WHERE cm.channel_id = $1`,
-        [messageData.channelId]
-      );
+      const members = recipients;
       const mentionedById = new Map();
-      findMentionedUsers(messageData.content, members.rows)
+      findMentionedUsers(messageData.content, members)
         .forEach((user) => mentionedById.set(Number(user.id), user));
 
       const departments = await query('SELECT id, name FROM departments');
@@ -65,11 +96,10 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
       const mentionedDepartments = findMentionedUsers(messageData.content, departmentCandidates);
       if (mentionedDepartments.length) {
         const departmentMembers = await query(
-          `SELECT DISTINCT u.id AS id
-           FROM users u
-           JOIN channel_members cm ON cm.user_id = u.id AND cm.channel_id = $2
-           WHERE u.department_id = ANY($1::int[])`,
-          [mentionedDepartments.map((dept) => dept.id), messageData.channelId]
+          `SELECT DISTINCT u.id
+           FROM users u JOIN user_departments ud ON ud.user_id = u.id
+           WHERE ud.department_id = ANY($1::int[]) AND u.deactivated_at IS NULL`,
+          [mentionedDepartments.map((dept) => dept.id)]
         );
         departmentMembers.rows.forEach((user) => mentionedById.set(Number(user.id), user));
       }
@@ -83,11 +113,9 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
         if (mentionedRoles.length) {
           const holders = await query(
             `SELECT DISTINCT u.id FROM users u
-             JOIN channel_members cm ON cm.user_id = u.id AND cm.channel_id = $2
              WHERE u.deactivated_at IS NULL
-               AND (u.id IN (SELECT user_id FROM user_roles WHERE role_id = ANY($1::int[]))
-                    OR ($3::boolean AND u.is_hr))`,
-            [mentionedRoles.map((r) => r.id), messageData.channelId, mentionedRoles.some((r) => r.builtin_key === 'hr')]
+               AND u.id IN (SELECT user_id FROM user_roles WHERE role_id = ANY($1::int[]))`,
+            [mentionedRoles.map((r) => r.id)]
           );
           holders.rows.forEach((user) => mentionedById.set(Number(user.id), user));
         }
@@ -95,9 +123,11 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
         console.error('Role mention error:', roleErr);
       }
 
+      const candidateIds = new Set(recipients.map((user) => Number(user.id)));
       const mentioned = [...mentionedById.values()]
-        .filter((user) => Number(user.id) !== Number(messageData.userId));
+        .filter((user) => candidateIds.has(Number(user.id)) && Number(user.id) !== Number(messageData.userId));
       for (const user of mentioned) {
+        if (!(await mayReceiveChannelActivity(query, user.id, messageData.channelId))) continue;
         await query(
           'INSERT INTO message_mentions (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
           [messageData.id, user.id]
@@ -108,7 +138,8 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
     }
 
     if (parentAuthorId && Number(parentAuthorId) !== Number(messageData.userId)
-      && !notified.has(Number(parentAuthorId))) {
+      && !notified.has(Number(parentAuthorId))
+      && await mayReceiveChannelActivity(query, parentAuthorId, messageData.channelId)) {
       io.to(`user_${parentAuthorId}`).emit('activity', { ...base, type: 'reply' });
     }
   } catch (err) {
@@ -167,6 +198,7 @@ async function withHuddleJoinLock(channelId, operation) {
 
 // Socket.io handlers for real-time chat
 module.exports = (io, socket) => {
+  startChannelExpirySweep(io, require('../db').query);
   let currentUserId = null;
   // The account this connection has claimed. Set before any await so two racing
   // `authenticate` events cannot both succeed as different people.
@@ -554,6 +586,8 @@ module.exports = (io, socket) => {
         clientMessageId,
       };
 
+      // A revoked or expired grant must not keep receiving messages via a stale socket room.
+      await reconcileChannelRoom(io, query, channelId);
       io.to(`channel_${channelId}`).emit('new_message', messageData);
       socket.emit('message_sent', { messageId: message.id, clientMessageId, message: messageData });
       await notifyMessageActivity(io, query, messageData, parentAuthorId);
@@ -709,6 +743,7 @@ module.exports = (io, socket) => {
       const { query } = require('../db');
       await ensureChannelMembership(query, currentUserId, channelId);
       await ensureNotTimedOut(query, currentUserId, channelId);
+      await reconcileChannelRoom(io, query, channelId);
       socket.to(`channel_${channelId}`).emit('user_typing', {
         userId: currentUserId,
         channelId,

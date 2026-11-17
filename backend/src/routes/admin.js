@@ -323,6 +323,13 @@ router.post('/users', async (req, res) => {
         [userId, fields.employeeNo || null, fields.jobTitle, fields.location, fields.hireDate, fields.employmentType, fields.jobLevel, fields.remoteClock,
           departmentId, fields.department || '', scheduleId, fields.phone]
       );
+      if (accountType === 'member' && departmentId !== null) {
+        // Account creation must populate the primary membership used by department access grants.
+        await query(
+          'INSERT INTO user_departments(user_id, department_id, is_primary) VALUES ($1, $2, true) ON CONFLICT (user_id, department_id) DO UPDATE SET is_primary = true',
+          [userId, departmentId]
+        );
+      }
       if (fields.reportsTo) managerLinks.push({ userId, username, reportsTo: fields.reportsTo });
       for (const channelId of joinIds) {
         await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, userId]);
@@ -562,6 +569,24 @@ router.post('/backups/:stamp/restore', async (req, res) => {
   } catch (err) { sendError(res, err, 'Restore backup error'); }
 });
 
+// Superadmin inventory only: conversation metadata, never private messages.
+router.get('/groups', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const groups = await query(`SELECT c.id, c.name, c.created_at, u.username AS creator,
+      COUNT(cm.user_id)::int AS member_count
+      FROM conversations c
+      LEFT JOIN users u ON u.id = c.created_by
+      LEFT JOIN conversation_members cm ON cm.conversation_id = c.id
+      GROUP BY c.id, c.name, c.created_at, u.username
+      ORDER BY c.created_at DESC, c.id DESC LIMIT 500`);
+    res.json({ groups: groups.rows.map((row) => ({
+      id: row.id, name: row.name || '', creator: row.creator || '',
+      memberCount: row.member_count, createdAt: row.created_at,
+    })) });
+  } catch (err) { sendError(res, err, 'List workspace groups error'); }
+});
+
 router.get('/workspace-reset/preview', async (req, res) => {
   try {
     await requireSuperadmin(req);
@@ -577,6 +602,18 @@ router.post('/workspace-reset', async (req, res) => {
     req.io?.disconnectSockets?.(true);
     res.json(result);
   } catch (err) { sendError(res, err, 'Workspace reset error'); }
+});
+
+// One-time Employee baseline reset. Never runs during startup or migrations.
+router.post('/employee-role-reset', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const { resetEmployeeRoles } = require('../employeeRoleReset');
+    const result = await resetEmployeeRoles(req.user.userId, req.body?.confirmation);
+    // Existing sessions may have cached role-sensitive state; clients should reconnect.
+    req.io?.disconnectSockets?.(true);
+    res.json({ ok: true, ...result });
+  } catch (err) { sendError(res, err, 'Employee role reset error'); }
 });
 
 module.exports = router;

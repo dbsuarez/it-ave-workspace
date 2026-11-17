@@ -2,10 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
+const { channelVisibleToUser } = require('../channelVisibilitySql');
 
 function escapeLike(value) {
   return value.replace(/[\\%_]/g, '\\$&');
 }
+
+// Keep search visibility aligned with the channel membership authorization layer.
+// Explicit bans override every grant, including legacy membership and Owner access.
 
 router.get('/', authenticateToken, async (req, res) => {
   const searchTerm = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -27,12 +31,7 @@ router.get('/', authenticateToken, async (req, res) => {
          FROM messages m
          JOIN channels c ON c.id = m.channel_id
          JOIN users u ON u.id = m.user_id
-         WHERE (m.channel_id IN (SELECT channel_id FROM channel_members WHERE user_id = $1)
-           OR EXISTS (
-             SELECT 1 FROM users me
-             JOIN channel_overrides co ON co.channel_id = m.channel_id AND co.subject_type = 'department' AND co.subject_id = me.department_id
-             WHERE me.id = $1 AND 'view_channel' = ANY(co.allow)
-           ))
+         WHERE ${channelVisibleToUser('m.channel_id')}
            AND m.content ILIKE $2 ESCAPE '\\'
          ORDER BY m.created_at DESC, m.id DESC
          LIMIT 5`,
@@ -74,12 +73,7 @@ router.get('/', authenticateToken, async (req, res) => {
            ON other_user.id = CASE WHEN dm.sender_id = $1 THEN dm.receiver_id ELSE dm.sender_id END
          WHERE f.original_name ILIKE $2 ESCAPE '\\'
            AND (
-             (f.message_id IS NOT NULL AND (m.channel_id IN (SELECT channel_id FROM channel_members WHERE user_id = $1)
-               OR EXISTS (
-                 SELECT 1 FROM users me
-                 JOIN channel_overrides co ON co.channel_id = m.channel_id AND co.subject_type = 'department' AND co.subject_id = me.department_id
-                 WHERE me.id = $1 AND 'view_channel' = ANY(co.allow)
-               )))
+             (f.message_id IS NOT NULL AND ${channelVisibleToUser('m.channel_id')})
              OR (f.dm_message_id IS NOT NULL AND (dm.sender_id = $1 OR dm.receiver_id = $1))
              OR (f.message_id IS NULL AND f.dm_message_id IS NULL AND f.uploaded_by = $1)
            )

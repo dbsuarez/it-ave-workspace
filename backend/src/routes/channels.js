@@ -13,7 +13,7 @@ const DEFAULT_CHANNEL_NAMES = DEFAULT_CHANNELS.map(([name]) => name);
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.archived_at, c.created_at, c.created_by,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
              creator.avatar_color AS creator_avatar_color,
@@ -31,7 +31,10 @@ router.get('/', authenticateToken, async (req, res) => {
         SELECT 1 FROM users u
         JOIN channel_overrides co ON co.channel_id = c.id AND co.subject_type = 'department' AND co.subject_id = u.department_id
         WHERE u.id = $1 AND 'view_channel' = ANY(co.allow)
-      ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)))
+      ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)
+      OR EXISTS (SELECT 1 FROM channel_department_grants cdg JOIN user_departments ud ON ud.department_id = cdg.department_id WHERE cdg.channel_id = c.id AND ud.user_id = $1)
+      OR EXISTS (SELECT 1 FROM channel_direct_grants dg WHERE dg.channel_id = c.id AND dg.user_id = $1 AND (dg.expires_at IS NULL OR dg.expires_at > NOW()))))
+      AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = c.id AND b.user_id = $1)
       GROUP BY c.id, creator.id
       ORDER BY c.name
     `, [req.user.userId]);
@@ -45,6 +48,7 @@ router.get('/', authenticateToken, async (req, res) => {
         isPersonal: ch.is_personal,
         teamSectionId: ch.team_section_id,
         availableToAll: ch.available_to_all,
+        archivedAt: ch.archived_at,
         memberCount: ch.member_count,
         createdAt: ch.created_at,
         createdBy: ch.created_by,
@@ -66,7 +70,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/my', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.archived_at, c.created_at, c.created_by,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
              creator.avatar_color AS creator_avatar_color,
@@ -91,7 +95,9 @@ router.get('/my', authenticateToken, async (req, res) => {
         WHERE u.id = $1 AND 'view_channel' = ANY(co.allow)
       ) OR EXISTS (
         SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE
-      )))
+      ) OR EXISTS (SELECT 1 FROM channel_department_grants cdg JOIN user_departments ud ON ud.department_id = cdg.department_id WHERE cdg.channel_id = c.id AND ud.user_id = $1)
+        OR EXISTS (SELECT 1 FROM channel_direct_grants dg WHERE dg.channel_id = c.id AND dg.user_id = $1 AND (dg.expires_at IS NULL OR dg.expires_at > NOW()))))
+      AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = c.id AND b.user_id = $1)
       GROUP BY c.id, creator.id
       ORDER BY c.name
     `, [req.user.userId]);
@@ -105,6 +111,7 @@ router.get('/my', authenticateToken, async (req, res) => {
         isPersonal: ch.is_personal,
         teamSectionId: ch.team_section_id,
         availableToAll: ch.available_to_all,
+        archivedAt: ch.archived_at,
         memberCount: ch.member_count,
         createdAt: ch.created_at,
         createdBy: ch.created_by,
@@ -359,14 +366,13 @@ router.post('/', authenticateToken, async (req, res) => {
       [channel.id, req.user.userId]
     );
     if (department) {
-      const departmentPermissions = ['view_channel', 'send_messages', 'attach_files', 'add_reactions'];
+      // Phase 3: a department grants channel ENTRY, not posting/moderation powers.
+      // Action permissions continue to come from Everyone, roles and per-user rules.
+      // The creator already holds a moderator membership above.
       await query(
-        `INSERT INTO channel_overrides (channel_id, subject_type, subject_id, allow, deny)
-         VALUES ($1, 'role', (SELECT id FROM roles WHERE builtin_key = 'everyone'), '{}', $2),
-                ($1, 'department', $3, $2, '{}'),
-                ($1, 'user', $4, $2, '{}')
-         ON CONFLICT (channel_id, subject_type, subject_id) DO UPDATE SET allow = EXCLUDED.allow, deny = EXCLUDED.deny`,
-        [channel.id, departmentPermissions, department.id, req.user.userId]
+        `INSERT INTO channel_department_grants (channel_id, department_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [channel.id, department.id]
       );
     }
     if (teamSection) {

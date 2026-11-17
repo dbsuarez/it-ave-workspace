@@ -30,6 +30,7 @@ require.cache[dbPath] = {
     query: async (sql, params = []) => {
       queryCalls.push({ sql, params });
       if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
+      if (sql.includes('SELECT archived_at FROM channels WHERE id = $1')) return { rows: [{ archived_at: null }] };
       if (sql.includes('FROM messages WHERE id = $1') || sql.includes('FROM messages m WHERE m.id = $1')) {
         return { rows: [{ channel_id: 7, user_id: 2, content: 'original message' }] };
       }

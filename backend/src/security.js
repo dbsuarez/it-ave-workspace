@@ -98,7 +98,17 @@ async function ensureChannelMembership(query, userId, channelId) {
            AND co.subject_type = 'department'
            AND co.subject_id = u.department_id
            AND 'view_channel' = ANY(co.allow)
-       ))))`,
+       ) OR EXISTS (
+         SELECT 1 FROM channel_department_grants cdg
+         JOIN user_departments ud ON ud.department_id = cdg.department_id
+         WHERE cdg.channel_id = $1 AND ud.user_id = u.id
+       ) OR EXISTS (
+         SELECT 1 FROM channel_direct_grants dg
+         WHERE dg.channel_id = $1 AND dg.user_id = u.id
+           AND (dg.expires_at IS NULL OR dg.expires_at > NOW())
+       ))))
+       AND u.deactivated_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = $1 AND b.user_id = u.id)`,
     [channelId, userId]
   );
 
@@ -118,6 +128,9 @@ async function ensureChannelMembership(query, userId, channelId) {
 // The channel-level permission check for send_messages, attach_files and add_reactions: a no-op in channels with no
 // setting for it (see needsCheckSql), otherwise the full check. Throws 403 with `message`.
 async function ensureChannelPermission(query, userId, channelId, permission, message) {
+  // Phase 3 boundary: a role can grant an action, never content access.
+  // Always check current access even when Everyone grants the action.
+  await ensureChannelMembership(query, userId, channelId);
   const flag = await query(`SELECT ${needsCheckSql(permission, '$1')} AS needs_check`, [channelId]);
   if (!flag.rows[0] || !flag.rows[0].needs_check) return;
   if (!(await can(query, userId, permission, { channelId }))) {
@@ -133,6 +146,9 @@ async function ensureChannelModerator(query, userId, channelId) {
     err.status = userId ? 400 : 401;
     throw err;
   }
+  // A moderator capability is not a channel-content access grant. In particular,
+  // channel bans and revoked/expired grants must apply even to Owners and moderators.
+  await ensureChannelMembership(query, userId, channelId);
   const result = await query(
     `SELECT 1
      FROM users u
@@ -170,8 +186,23 @@ async function ensureNotTimedOut(query, userId, channelId) {
   }
 }
 
+async function ensureChannelNotArchived(query, channelId) {
+  const state = await query('SELECT archived_at FROM channels WHERE id = $1', [channelId]);
+  if (state.rows[0]?.archived_at) {
+    const error = new Error('This channel is archived and read-only');
+    error.status = 409;
+    throw error;
+  }
+}
+
 async function ensureCanPostToChannel(query, userId, channelId) {
   await ensureChannelMembership(query, userId, channelId);
+  const archiveState = await query('SELECT archived_at FROM channels WHERE id = $1', [channelId]);
+  if (archiveState.rows[0]?.archived_at) {
+    const err = new Error('This channel is archived and read-only');
+    err.status = 409;
+    throw err;
+  }
   await ensureNotTimedOut(query, userId, channelId);
   const account = await query('SELECT is_superadmin FROM users WHERE id = $1', [userId]);
   if (account.rows[0]?.is_superadmin) return;
@@ -277,17 +308,24 @@ async function getStandaloneCanvasRole(query, userId, canvas) {
     'SELECT role FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2',
     [canvas.id, userId]
   );
+  // A standalone canvas shared to a channel inherits the channel's CURRENT access.
+  // A stale channel_members row is not sufficient after a ban or policy revocation.
   const granted = await query(
-    `SELECT g.role FROM canvas_channel_grants g
-     JOIN channel_members cm ON cm.channel_id = g.channel_id
-     WHERE g.canvas_id = $1 AND cm.user_id = $2`,
-    [canvas.id, userId]
+    `SELECT g.role, g.channel_id FROM canvas_channel_grants g
+     WHERE g.canvas_id = $1`,
+    [canvas.id]
   );
   let channelRole = null;
-  if (granted.rows.length > 0) {
-    channelRole = granted.rows.map((row) => row.role).reduce((best, role) => (CANVAS_ROLE_RANK[role] > CANVAS_ROLE_RANK[best] ? role : best));
-    if (channelRole === 'editor' && await isGuestAccount(query, userId)) channelRole = 'viewer';
+  for (const grant of granted.rows) {
+    try {
+      await ensureChannelMembership(query, userId, grant.channel_id);
+    } catch (err) {
+      if (err.status === 403 || err.status === 404) continue;
+      throw err; // fail closed on database errors rather than masking an outage
+    }
+    if (CANVAS_ROLE_RANK[grant.role] > (CANVAS_ROLE_RANK[channelRole] || 0)) channelRole = grant.role;
   }
+  if (channelRole === 'editor' && await isGuestAccount(query, userId)) channelRole = 'viewer';
   const roles = [personal.rows[0]?.role, channelRole].filter(Boolean);
   if (roles.length === 0) return null;
   return roles.reduce((best, role) => (CANVAS_ROLE_RANK[role] > CANVAS_ROLE_RANK[best] ? role : best));
@@ -404,6 +442,7 @@ module.exports = {
   ensureChannelModerator,
   ensureNotTimedOut,
   ensureCanPostToChannel,
+  ensureChannelNotArchived,
   ensureDirectMessageAccess,
   ensureCanvasAccess,
   getCanvasById,

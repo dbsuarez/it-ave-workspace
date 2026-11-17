@@ -6,9 +6,10 @@ const crypto = require('crypto');
 const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
-const { ensureFileAccess } = require('../security');
+const { ensureFileAccess, ensureChannelMembership, ensureChannelNotArchived } = require('../security');
 const { can } = require('../permissions');
 const { mimeForFilename } = require('../uploadContent');
+const { channelVisibleToUser } = require('../channelVisibilitySql');
 
 // List files shared in channels the user is a member of, and any direct
 // messages between the user and others. Newest first.
@@ -29,14 +30,7 @@ router.get('/', authenticateToken, async (req, res) => {
        LEFT JOIN channels c ON c.id = m.channel_id
        LEFT JOIN direct_messages dm ON dm.id = f.dm_message_id
        WHERE (
-         (f.message_id IS NOT NULL AND (
-           m.channel_id IN (SELECT channel_id FROM channel_members WHERE user_id = $1)
-           OR EXISTS (
-             SELECT 1 FROM users me
-             JOIN channel_overrides co ON co.channel_id = m.channel_id AND co.subject_type = 'department' AND co.subject_id = me.department_id
-             WHERE me.id = $1 AND 'view_channel' = ANY(co.allow)
-           )
-         ))
+         (f.message_id IS NOT NULL AND ${channelVisibleToUser('m.channel_id')})
          OR (f.dm_message_id IS NOT NULL AND (dm.sender_id = $1 OR dm.receiver_id = $1))
          OR (f.message_id IS NULL AND f.dm_message_id IS NULL AND f.uploaded_by = $1)
        )
@@ -133,7 +127,10 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     const file = result.rows[0];
-    if (file.channel_id) await ensureChannelMembership(client.query.bind(client), req.user.userId, file.channel_id);
+    if (file.channel_id) {
+      await ensureChannelMembership(client.query.bind(client), req.user.userId, file.channel_id);
+      await ensureChannelNotArchived(client.query.bind(client), file.channel_id);
+    }
     const isUploader = Number(file.uploaded_by) === Number(req.user.userId);
     let moderationReason = null;
     if (!isUploader) {

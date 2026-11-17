@@ -36,6 +36,7 @@ test('enforces size limits', () => {
 
 test('active channel timeouts reject channel messages', async () => {
   const query = async (sql) => {
+    if (sql.includes('SELECT archived_at FROM channels')) return { rows: [{ archived_at: null }] };
     if (sql.includes('FROM channels c')) return { rows: [{}] };
     if (sql.includes('FROM channel_timeouts')) return { rows: [{ expires_at: new Date(Date.now() + 60000) }] };
     throw new Error(`Unexpected query: ${sql}`);
@@ -48,6 +49,7 @@ test('active channel timeouts reject channel messages', async () => {
 
 test('channel slow mode rejects messages sent before the cooldown expires', async () => {
   const query = async (sql) => {
+    if (sql.includes('SELECT archived_at FROM channels')) return { rows: [{ archived_at: null }] };
     if (sql.includes('CROSS JOIN users u')) return { rows: [{}] };
     if (sql.includes('FROM channel_timeouts')) return { rows: [] };
     if (sql.includes('SELECT is_superadmin')) return { rows: [{ is_superadmin: false }] };

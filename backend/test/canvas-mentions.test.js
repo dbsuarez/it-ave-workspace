@@ -52,6 +52,8 @@ test.before(async () => {
     'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id', [name, `${name}@x.test`, 'x']
   )).rows[0].id;
   ids.alice = await user('alice');
+  await admin.query('UPDATE users SET first_name = $1, middle_name = $2, last_name = $3 WHERE id = $4', ['Alice', 'M.', 'Example', ids.alice]);
+  await admin.query('UPDATE users SET first_name = $1, middle_name = $2, last_name = $3 WHERE id = $4', ['Alice', 'M.', 'Example', ids.alice]);
   ids.bob = await user('bob');
   ids.carol = await user('carol');
   ids.eve = await user('eve');
@@ -111,6 +113,8 @@ test('a new @mention in the text notifies that person, once', async (t) => {
   assert.equal(event.payload.type, 'canvas_mention');
   assert.equal(event.payload.canvasTitle, 'Team page');
   assert.equal(event.payload.actorUsername, 'alice');
+  assert.equal(event.payload.actorDisplayName, 'Alice M. Example');
+  assert.equal(event.payload.actorDisplayName, 'Alice M. Example');
   // saving again with the same mention, or just more text, does not repeat it
   await call(ids.alice, 'PATCH', `/api/canvas/${id}`, { content: 'Ask @bob to review the plan today' });
   await call(ids.alice, 'PATCH', `/api/canvas/${id}`, { title: 'Renamed' });
@@ -164,6 +168,8 @@ test('the Activity feed lists canvas mentions and drops them when access is lost
   assert.equal(item.canvasKind, 'standalone');
   assert.equal(item.source, 'content');
   assert.equal(item.actorUsername, 'alice');
+  assert.equal(item.actorDisplayName, 'Alice M. Example');
+  assert.equal(item.actorDisplayName, 'Alice M. Example');
   assert.equal(item.unseen, true);
   assert.ok(feed.unseenCount >= 1);
   assert.ok((await call(ids.bob, 'GET', '/api/activity?type=mention')).json.items.some((i) => i.canvasId === id), 'it counts as a mention');

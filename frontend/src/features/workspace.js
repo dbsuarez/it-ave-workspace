@@ -174,6 +174,9 @@ function renderChannelNav() {
   const workspaceSections = (layout.workspaceSections || [])
     .filter((section) => Array.isArray(section.channelIds))
     .map((section) => ({ ...section, collapsed: collapsedWorkspace.has(section.id), workspace: true }));
+  const inheritedSections = (layout.inheritedSections || [])
+    .filter((section) => Array.isArray(section.channelIds))
+    .map((section) => ({ ...section, inherited: true, collapsed: collapsedWorkspace.has(section.id) }));
   const teamSections = (layout.teamSections || [])
     .filter((section) => Array.isArray(section.channelIds))
     .map((section) => ({ ...section, collapsed: collapsedWorkspace.has(section.id), team: true }));
@@ -182,7 +185,7 @@ function renderChannelNav() {
   // Only the owner manages sections; other members see the shared workspace/team sections
   // plus their own personal channels, and unassigned channels fall to the top-level list.
   const canManageSections = Boolean(sidebarLayout().canManageWorkspaceSections);
-  const sections = [...workspaceSections, ...teamSections, ...(canManageSections ? layout.sections.filter((section) => Array.isArray(section.channelIds)) : [])]
+  const sections = [...workspaceSections, ...teamSections, ...inheritedSections, ...(canManageSections ? layout.sections.filter((section) => Array.isArray(section.channelIds)) : [])]
     .map((section) => ({ ...section, channelIds: section.channelIds.filter((id) => !personalIds.has(Number(id))) }));
   const placed = new Set();
   const paneHome = document.getElementById('pane-home');

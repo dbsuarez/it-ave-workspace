@@ -28,7 +28,7 @@ require.cache[dbPath] = {
       if (sql.includes('SELECT is_superadmin FROM users')) return { rows: [{ is_superadmin: superadmin }] };
       if (sql.includes('SELECT c.team_section_id, ts.owner_id FROM channels c')) return { rows: [{ team_section_id: null, owner_id: null }] };
       if (sql.includes('SELECT is_personal FROM channels WHERE id')) return { rows: [{ is_personal: false }] };
-      if (sql.includes('SELECT is_superadmin, is_hr, account_type FROM users')) return { rows: [{ is_superadmin: superadmin, is_hr: false, account_type: 'member' }] };
+      if (sql.includes('SELECT is_superadmin, account_type, department_id FROM users') || sql.includes('SELECT is_superadmin, is_hr, account_type FROM users')) return { rows: [{ is_superadmin: superadmin, is_hr: false, account_type: 'member' }] };
       if (sql.includes('FROM roles r')) return { rows: [{ id: 3, builtin_key: 'everyone', permissions: [] }, ...(rolePermissions.length ? [{ id: 9, builtin_key: null, permissions: rolePermissions }] : [])] };
       if (sql.includes('SELECT default_timeout_minutes, max_timeout_minutes')) {
         return { rows: [savedSettings] };

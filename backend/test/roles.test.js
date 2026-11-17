@@ -100,7 +100,7 @@ test('only someone with manage_roles can use the roles routes', async (t) => {
   assert.equal((await call(ids.ann, 'POST', '/', { name: 'Sneaky' })).status, 403);
   const list = await call(ids.boss, 'GET', '/');
   assert.equal(list.status, 200);
-  assert.deepEqual(list.json.roles.map((r) => r.builtin), ['owner', 'hr', 'everyone']);
+  assert.deepEqual(list.json.roles.map((r) => r.builtin), ['owner', null, 'everyone']);
   assert.equal(list.json.roles.find((r) => r.builtin === 'owner').canManage, false);
 });
 
@@ -116,20 +116,20 @@ test('an Owner creates, edits, orders and deletes a role, and each change is aud
   assert.equal((await call(ids.boss, 'PUT', `/${ids.supportRole}`, { name: 'Support desk', permissions: ['send_messages', 'attach_files'] })).status, 200);
   assert.equal((await call(ids.boss, 'PUT', `/${ids.supportRole}/move`, { direction: 'up' })).status, 200);
   const order = (await call(ids.boss, 'GET', '/')).json.roles.filter((r) => !r.builtin).map((r) => r.name);
-  assert.deepEqual(order, ['Support desk', 'Team lead']);
+  assert.deepEqual(order, ['HR', 'Support desk', 'Team lead']);
   const audit = await admin.query("SELECT action FROM moderation_audit_log WHERE action LIKE 'role_%' ORDER BY id");
   assert.deepEqual(audit.rows.map((r) => r.action), ['role_created', 'role_created', 'role_updated', 'role_moved']);
 });
 
-test('built-in roles: Owner is untouchable; HR and Everyone keep their name but their permissions can change; none can be deleted', async (t) => {
+test('Owner is protected; legacy HR becomes editable but remains deletion-protected during compatibility', async (t) => {
   if (skip(t)) return;
   const roles = (await call(ids.boss, 'GET', '/')).json.roles;
   const owner = roles.find((r) => r.builtin === 'owner');
-  const hr = roles.find((r) => r.builtin === 'hr');
+  const hr = roles.find((r) => r.name === 'HR');
   assert.equal((await call(ids.boss, 'PUT', `/${owner.id}`, { permissions: [] })).status, 403);
   const edited = await call(ids.boss, 'PUT', `/${hr.id}`, { name: 'Renamed', permissions: ['manage_people', 'view_audit_log'] });
   assert.equal(edited.status, 200);
-  assert.equal(edited.json.role.name, 'HR');
+  assert.equal(edited.json.role.name, 'Renamed');
   assert.deepEqual(edited.json.role.permissions, ['manage_people', 'view_audit_log']);
   assert.equal((await call(ids.boss, 'DELETE', `/${hr.id}`)).status, 400);
 });
@@ -203,7 +203,8 @@ test('role mentions: the handle is the name in lowercase with hyphens, and any m
   const listed = await call(ids.ann, 'GET', '/mentionable');
   assert.equal(listed.status, 200);
   const handles = listed.json.roles.map((r) => r.handle);
-  assert.ok(handles.includes('hr') && handles.includes('table-role'));
+  assert.ok(handles.includes('renamed') && handles.includes('table-role'), 'renamed legacy HR role remains mentionable');
+  assert.ok(!handles.includes('hr'), 'the old @hr handle no longer exists after renaming the custom role');
   assert.ok(!handles.includes('everyone') && !handles.includes('owner'), 'Everyone and Owner are not mentionable');
   assert.equal(listed.json.roles.find((r) => r.handle === 'table-role').memberCount, 1);
 });
@@ -239,7 +240,7 @@ test('the access checker explains a person and a role, and refuses anyone who ca
   assert.equal(room.member, true);
   assert.equal(room.visible, true);
   assert.match(room.checks.send_messages.reason, /Given by/);
-  const hrRole = (await admin.query("SELECT id FROM roles WHERE builtin_key = 'hr'")).rows[0].id;
+  const hrRole = (await admin.query("SELECT id FROM roles WHERE legacy_hr = true")).rows[0].id;
   const role = await call(ids.boss, 'GET', `/check?roleId=${hrRole}`);
   assert.equal(role.status, 200);
   assert.equal(role.json.subject.type, 'role');

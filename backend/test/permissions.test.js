@@ -87,15 +87,18 @@ test('the built-in roles are there after the migrations, and a second run change
   if (skip(t)) return;
   await scratch.applyMigrations(db);
   const roles = (await query('SELECT builtin_key FROM roles WHERE builtin_key IS NOT NULL ORDER BY position')).rows;
-  assert.deepEqual(roles.map((r) => r.builtin_key), ['owner', 'hr', 'everyone']);
+  assert.deepEqual(roles.map((r) => r.builtin_key), ['owner', 'everyone']);
 });
 
-test('the existing flags keep working: Superadmin is an Owner, is_hr gives HR, everyone else is Everyone', async (t) => {
+test('Owner flag remains authoritative; HR requires a normal role assignment', async (t) => {
   if (skip(t)) return;
   const owner = await user('perm_owner', 'is_superadmin');
   const hr = await user('perm_hr', 'is_hr');
   const plain = await user('perm_plain');
   assert.equal(await can(query, owner, 'manage_roles'), true);
+  assert.equal(await can(query, hr, 'manage_people'), false, 'legacy flag alone cannot authorize');
+  const hrRole = (await query('SELECT id FROM roles WHERE legacy_hr = true')).rows[0].id;
+  await query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [hr, hrRole]);
   assert.equal(await can(query, hr, 'manage_people'), true);
   assert.equal(await can(query, hr, 'manage_roles'), false);
   assert.equal(await can(query, plain, 'manage_people'), false);

@@ -11,7 +11,9 @@ const TYPES = ['mention', 'reply', 'reaction'];
 const SOURCES = {
   mention: `
     SELECT 'mention' AS type, m.id AS message_id, m.channel_id, c.name AS channel_name,
-           u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+           u.id AS actor_id, u.username AS actor_username,
+           COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(u.first_name), ''), NULLIF(BTRIM(u.middle_name), ''), NULLIF(BTRIM(u.last_name), '')), ''), u.username) AS actor_display_name,
+           u.avatar_color AS actor_avatar_color,
            CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
              THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
            m.content AS preview, NULL::text AS emoji, mm.created_at
@@ -22,7 +24,9 @@ const SOURCES = {
     WHERE mm.user_id = $1 AND m.user_id <> $1`,
   reply: `
     SELECT 'reply' AS type, m.id AS message_id, m.channel_id, c.name AS channel_name,
-           u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+           u.id AS actor_id, u.username AS actor_username,
+           COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(u.first_name), ''), NULLIF(BTRIM(u.middle_name), ''), NULLIF(BTRIM(u.last_name), '')), ''), u.username) AS actor_display_name,
+           u.avatar_color AS actor_avatar_color,
            CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
              THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
            m.content AS preview, NULL::text AS emoji, m.created_at
@@ -33,7 +37,9 @@ const SOURCES = {
     WHERE parent.user_id = $1 AND m.user_id <> $1`,
   reaction: `
     SELECT 'reaction' AS type, m.id AS message_id, m.channel_id, c.name AS channel_name,
-           u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+           u.id AS actor_id, u.username AS actor_username,
+           COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(u.first_name), ''), NULLIF(BTRIM(u.middle_name), ''), NULLIF(BTRIM(u.last_name), '')), ''), u.username) AS actor_display_name,
+           u.avatar_color AS actor_avatar_color,
            CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
              THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
            m.content AS preview, r.emoji::text AS emoji, r.created_at
@@ -48,7 +54,9 @@ const SOURCES = {
 const CANVAS_ITEMS_SQL = `
   SELECT cm.id, cm.source, cm.snippet AS preview, cm.created_at, cm.canvas_id,
          c.kind AS canvas_kind, c.title AS canvas_title, c.channel_id, ch.name AS channel_name,
-         u.id AS actor_id, u.username AS actor_username, u.avatar_color AS actor_avatar_color,
+         u.id AS actor_id, u.username AS actor_username,
+           COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(u.first_name), ''), NULLIF(BTRIM(u.middle_name), ''), NULLIF(BTRIM(u.last_name), '')), ''), u.username) AS actor_display_name,
+           u.avatar_color AS actor_avatar_color,
          CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
            THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version
   FROM canvas_mentions cm
@@ -82,6 +90,8 @@ function mapCanvasItem(row, seenAt) {
     channelName: row.channel_name,
     actorId: row.actor_id,
     actorUsername: row.actor_username,
+    actorDisplayName: row.actor_display_name,
+    actorDisplayName: row.actor_display_name,
     actorAvatarColor: row.actor_avatar_color,
     actorPhotoVersion: row.actor_photo_version ? Number(row.actor_photo_version) : null,
     preview: String(row.preview || '').slice(0, 200),
@@ -147,6 +157,7 @@ router.get('/', async (req, res) => {
         channelName: row.channel_name,
         actorId: row.actor_id,
         actorUsername: row.actor_username,
+        actorDisplayName: row.actor_display_name,
         actorAvatarColor: row.actor_avatar_color,
         actorPhotoVersion: row.actor_photo_version ? Number(row.actor_photo_version) : null,
         preview: String(row.preview || '').slice(0, 200),

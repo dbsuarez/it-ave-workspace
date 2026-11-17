@@ -206,7 +206,7 @@ function activityCanvasLabel(item) {
 
 function activityCanvasSentence(item, html) {
   const wrap = (text) => (html ? `<strong>${escapeHtml(text)}</strong>` : text);
-  const actor = wrap(item.actorUsername || 'Someone');
+  const actor = wrap(item.actorDisplayName || item.actorDisplayName || item.actorUsername || 'Someone');
   const label = wrap(activityCanvasLabel(item));
   if (item.source === 'access') return `${actor} asked for edit access to ${label}`;
   if (item.source === 'reply') return `${actor} replied to your comment on ${label}`;
@@ -216,7 +216,7 @@ function activityCanvasSentence(item, html) {
 
 function activitySentence(item) {
   if (item.type === 'canvas_mention') return activityCanvasSentence(item, true);
-  const actor = `<strong>${escapeHtml(item.actorUsername || 'Someone')}</strong>`;
+  const actor = `<strong>${escapeHtml(item.actorDisplayName || item.actorDisplayName || item.actorUsername || 'Someone')}</strong>`;
   const channel = `<strong>#${escapeHtml(item.channelName || 'channel')}</strong>`;
   if (item.type === 'mention') return `${actor} mentioned you in ${channel}`;
   if (item.type === 'reply') return `${actor} replied to your message in ${channel}`;
@@ -225,7 +225,7 @@ function activitySentence(item) {
 
 function activityPlainSentence(item) {
   if (item.type === 'canvas_mention') return activityCanvasSentence(item, false);
-  const actor = item.actorUsername || 'Someone';
+  const actor = item.actorDisplayName || item.actorDisplayName || item.actorUsername || 'Someone';
   const channel = `#${item.channelName || 'channel'}`;
   if (item.type === 'mention') return `${actor} mentioned you in ${channel}`;
   if (item.type === 'reply') return `${actor} replied to your message in ${channel}`;
@@ -275,7 +275,7 @@ function renderActivityFeed() {
   }
   feed.innerHTML = items.map((item, index) => `
     <button type="button" class="activity-item${item.unseen ? ' unseen' : ''}" data-activity-index="${activity.items.indexOf(item)}">
-      <span class="avatar-mini" style="background:${escapeHtml(item.actorAvatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(item.actorId ?? ''))}">${escapeHtml((item.actorUsername || '?').charAt(0).toUpperCase())}</span>
+      <span class="avatar-mini" style="background:${escapeHtml(item.actorAvatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(item.actorId ?? ''))}">${escapeHtml((item.actorDisplayName || item.actorUsername || '?').charAt(0).toUpperCase())}</span>
       <span class="activity-item-body">
         <span class="activity-item-title">${activitySentence(item)}</span>
         <span class="activity-item-preview">${escapeHtml(item.preview || 'Attachment')}</span>
@@ -288,7 +288,7 @@ function renderActivityFeed() {
       const item = activity.items[Number(row.dataset.activityIndex)];
       const avatar = row.querySelector('.avatar-mini');
       if (avatar && item?.actorPhotoVersion) {
-        paintAvatar(avatar, { id: Number(item.actorId), photoVersion: Number(item.actorPhotoVersion) }, (item.actorUsername || '?').charAt(0).toUpperCase());
+        paintAvatar(avatar, { id: Number(item.actorId), photoVersion: Number(item.actorPhotoVersion) }, (item.actorDisplayName || item.actorUsername || '?').charAt(0).toUpperCase());
       }
     });
   }

@@ -6,7 +6,7 @@ const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
-const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel } = require('../security');
+const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel, ensureChannelNotArchived } = require('../security');
 const { can, needsCheckSql } = require('../permissions');
 
 const emojiSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -433,6 +433,7 @@ router.patch('/:messageId/pin', authenticateToken, async (req, res) => {
     }
     const { channel_id: channelId } = message.rows[0];
     await ensureChannelMembership(query, req.user.userId, channelId);
+    await ensureChannelNotArchived(query, channelId);
 
     const result = await query(
       `UPDATE messages
@@ -511,6 +512,7 @@ router.post('/:messageId/reactions', authenticateToken, async (req, res) => {
     const channelId = messageCheck.rows[0].channel_id;
     const messageAuthorId = messageCheck.rows[0].user_id;
     await ensureChannelMembership(query, req.user.userId, channelId);
+    await ensureChannelNotArchived(query, channelId);
 
     // Tell everyone in the channel about the new reaction state for this message.
     const broadcastReactions = async () => {

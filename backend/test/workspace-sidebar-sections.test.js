@@ -27,6 +27,7 @@ test.before(async () => {
   ids.member = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('section-member', 'member@x.test', 'x') RETURNING id")).rows[0].id;
   ids.leader = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('mis-leader', 'mis-leader@x.test', 'x') RETURNING id")).rows[0].id;
   ids.report = (await admin.query("INSERT INTO users (username, email, password_hash, manager_id) VALUES ('mis-report', 'mis-report@x.test', 'x', $1) RETURNING id", [ids.leader])).rows[0].id;
+  ids.grandchild = (await admin.query("INSERT INTO users (username, email, password_hash, manager_id) VALUES ('mis-grandchild', 'mis-grandchild@x.test', 'x', $1) RETURNING id", [ids.report])).rows[0].id;
   ids.channel = (await admin.query("INSERT INTO channels (name) VALUES ('zz-workspace-sections') RETURNING id")).rows[0].id;
   const app = express();
   app.use(express.json());
@@ -61,6 +62,32 @@ test('team leaders create team-only sections and channels for their direct repor
 
   const reportView = await request(ids.report, '/api/settings/sidebar');
   assert.equal(reportView.json.layout.teamSections[0].editable, false);
+  // A grandchild can be authorized for the channel independently of their
+  // reporting line, but must inherit the original section across both levels.
+  const grandchildInvite = await request(ids.leader, `/api/moderation/channels/${channel.json.channel.id}/members/${ids.grandchild}`, {
+    method: 'PUT', body: JSON.stringify({ role: 'member' }),
+  });
+  assert.equal(grandchildInvite.status, 200);
+  const grandchildView = await request(ids.grandchild, '/api/settings/sidebar');
+  assert.equal(grandchildView.status, 200);
+  assert.ok(grandchildView.json.layout.teamSections.some((section) =>
+    section.name === 'MIS Only' && section.channelIds.some((id) => Number(id) === Number(channel.json.channel.id))
+    && section.editable === false));
+  const grandchildChannels = await request(ids.grandchild, '/api/channels/my');
+  assert.ok(grandchildChannels.json.channels.some((item) => Number(item.id) === Number(channel.json.channel.id)));
+
+  // Superadmins are outside the reporting chain yet must receive the same
+  // shared Section placement for channels their account can actually access.
+  const ownerView = await request(ids.owner, '/api/settings/sidebar');
+  assert.equal(ownerView.status, 200);
+  const ownerSection = ownerView.json.layout.teamSections.find((entry) =>
+    entry.name === 'MIS Only' && entry.channelIds.some((id) => Number(id) === Number(channel.json.channel.id)));
+  assert.ok(ownerSection, 'Superadmin receives shared Team Section outside reporting hierarchy');
+  assert.equal(ownerSection.editable, false);
+  assert.equal(ownerView.json.layout.inheritedSections.flatMap((entry) => entry.channelIds)
+    .filter((id) => Number(id) === Number(channel.json.channel.id)).length, 0,
+  'team channel is not duplicated as an inherited personal section');
+
   const reportChannels = await request(ids.report, '/api/channels/my');
   assert.ok(reportChannels.json.channels.some((item) => Number(item.id) === Number(channel.json.channel.id)));
 

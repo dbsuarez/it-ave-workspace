@@ -122,18 +122,17 @@ function renderRoleTable() {
   const custom = rolesState.roles.filter((role) => !role.builtin);
   const q = roleTable.query.trim().toLowerCase();
   const people = rolesState.people.filter((p) => !q || [personName(p), p.username, p.jobTitle, p.department].some((v) => String(v || '').toLowerCase().includes(q)));
-  const head = `<tr><th>Person</th><th class="role-col">Owner</th><th class="role-col">HR</th>${custom.map((r) => `<th class="role-col">${roleDot(r)} ${escapeHtml(r.name)}</th>`).join('')}</tr>`;
+  const head = `<tr><th>Person</th><th class="role-col">Owner</th>${custom.map((r) => `<th class="role-col">${roleDot(r)} ${escapeHtml(r.name)}</th>`).join('')}</tr>`;
   const rows = people.map((p) => {
     const held = new Set(roleTable.assignments[p.id] || []);
     return `<tr data-role-person="${p.id}">
       <td><strong>${escapeHtml(personName(p))}</strong><small>${escapeHtml(p.jobTitle || '')}</small></td>
       <td class="role-col">${roleTable.owners.includes(p.id) ? '&#10003;' : ''}</td>
-      <td class="role-col">${roleTable.hr.includes(p.id) ? '&#10003;' : ''}</td>
       ${custom.map((r) => `<td class="role-col"><input type="checkbox" data-role-toggle="${r.id}" aria-label="${escapeHtml(r.name)} for ${escapeHtml(personName(p))}"${held.has(r.id) ? ' checked' : ''}${r.canManage ? '' : ' disabled'}></td>`).join('')}
     </tr>`;
   }).join('');
   host.innerHTML = custom.length
-    ? `<table class="role-table"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="3">No one matches.</td></tr>'}</tbody></table>`
+    ? `<table class="role-table"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="2">No one matches.</td></tr>'}</tbody></table>`
     : '<p class="moderation-help">Create a role first, then come back to give it to people.</p>';
 }
 

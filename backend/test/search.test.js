@@ -85,6 +85,17 @@ test('search returns messages, DMs, people, and only authorized file result grou
   assert.match(queries[0].sql, /channel_members WHERE user_id = \$1/);
   assert.match(queries[1].sql, /dm\.sender_id = \$1 OR dm\.receiver_id = \$1/);
   assert.match(queries[3].sql, /dm\.sender_id = \$1 OR dm\.receiver_id = \$1/);
+  for (const index of [0, 3]) {
+    const sql = queries[index].sql;
+    assert.match(sql, /NOT EXISTS \(\s*SELECT 1 FROM channel_bans/);
+    assert.match(sql, /channel_department_grants cdg/);
+    assert.match(sql, /user_departments ud/);
+    assert.match(sql, /channel_direct_grants dg/);
+    assert.match(sql, /dg\.expires_at > NOW\(\)/);
+    assert.match(sql, /viewer\.deactivated_at IS NULL/);
+    assert.match(sql, /permitted_channel\.is_personal/);
+  }
+
 });
 
 test('search rejects too-short input without querying the database', async () => {
