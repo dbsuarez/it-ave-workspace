@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { ensureChannelMembership, ensureDirectMessageAccess } = require('../security');
+const { ensureChannelMembership, ensureChannelNotArchived, ensureDirectMessageAccess } = require('../security');
 const { parseRemindAt } = require('./reminders');
 const { postChannelMessage, postDirectMessage } = require('../messageDelivery');
 
@@ -73,8 +73,10 @@ router.post('/', async (req, res) => {
     }
     const sendAt = parseRemindAt(req.body?.sendAt);
 
-    if (channelId) await ensureChannelMembership(query, req.user.userId, channelId);
-    else await ensureDirectMessageAccess(query, req.user.userId, receiverId);
+    if (channelId) {
+      await ensureChannelMembership(query, req.user.userId, channelId);
+      await ensureChannelNotArchived(query, channelId); // nothing can be scheduled into an archived channel
+    } else await ensureDirectMessageAccess(query, req.user.userId, receiverId);
 
     const pending = await query(
       'SELECT COUNT(*)::int AS count FROM scheduled_messages WHERE user_id = $1 AND sent_at IS NULL AND failed_at IS NULL',

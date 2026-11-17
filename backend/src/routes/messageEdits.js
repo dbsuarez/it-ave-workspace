@@ -4,7 +4,7 @@ const path = require('path');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const config = require('../config');
-const { ensureChannelMembership, ensureNotTimedOut } = require('../security');
+const { ensureChannelMembership, ensureChannelNotArchived, ensureNotTimedOut } = require('../security');
 const { findMentionedUsers } = require('../mentions');
 
 // Authors editing and deleting their own channel messages.
@@ -33,6 +33,7 @@ async function loadOwnMessage(messageId, userId) {
   if (!result.rows.length) throw Object.assign(new Error('Message not found'), { status: 404 });
   const message = result.rows[0];
   await ensureChannelMembership(query, userId, message.channel_id);
+  await ensureChannelNotArchived(query, message.channel_id); // archived channels are read-only: no edits, no deletes
   if (Number(message.user_id) !== Number(userId)) {
     throw Object.assign(new Error('You can only change your own messages'), { status: 403 });
   }

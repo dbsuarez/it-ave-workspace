@@ -6,6 +6,7 @@ const { query } = require('../db');
 const { passwordProblem } = require('../authLimits');
 const { hrActor, canManageEmployees, temporaryPassword, applyChecklist } = require('../hr');
 const prelaunch = require('../prelaunch');
+const ownerChannelAccess = require('../ownerChannelAccess');
 const { cleanEmployeeFields } = require('../accountFields');
 const authenticateToken = require('../middleware/auth');
 const {
@@ -362,6 +363,29 @@ router.post('/users', async (req, res) => {
 });
 
 // ---- pre-launch shared test password (Superadmin) ----
+
+// GET /api/admin/owner-private-access - may Owners open private channels they are not a member of? (off by default)
+router.get('/owner-private-access', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    res.json({ enabled: await ownerChannelAccess.isEnabled(query) });
+  } catch (err) {
+    sendError(res, err, 'Get owner private channel access error');
+  }
+});
+
+// PUT /api/admin/owner-private-access - { enabled }. Owner only, and always audited.
+router.put('/owner-private-access', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    if (typeof (req.body && req.body.enabled) !== 'boolean') throw fail(400, 'enabled must be true or false');
+    await query('UPDATE moderation_settings SET owner_private_channel_access = $1, updated_by = $2, updated_at = NOW() WHERE id = 1', [req.body.enabled, req.user.userId]);
+    await audit(req.user.userId, req.body.enabled ? 'owner_private_access_on' : 'owner_private_access_off', null, {});
+    res.json({ enabled: req.body.enabled });
+  } catch (err) {
+    sendError(res, err, 'Set owner private channel access error');
+  }
+});
 
 // GET /api/admin/prelaunch - is it on, and what is the password
 router.get('/prelaunch', async (req, res) => {

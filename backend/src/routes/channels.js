@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { ensureChannelMembership } = require('../security');
+const { ensureChannelMembership, ensureChannelNotArchived } = require('../security');
+const { superadminMaySee, isEnabled: ownerPrivateAccessOn } = require('../ownerChannelAccess');
 const { viewableChannels, can } = require('../permissions');
 const { ensureNotGuest } = require('../guests');
 const { DEFAULT_CHANNELS } = require('../defaultChannels');
@@ -31,7 +32,7 @@ router.get('/', authenticateToken, async (req, res) => {
         SELECT 1 FROM users u
         JOIN channel_overrides co ON co.channel_id = c.id AND co.subject_type = 'department' AND co.subject_id = u.department_id
         WHERE u.id = $1 AND 'view_channel' = ANY(co.allow)
-      ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE)
+      ) OR EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND ${superadminMaySee('u', 'c')})
       OR EXISTS (SELECT 1 FROM channel_department_grants cdg JOIN user_departments ud ON ud.department_id = cdg.department_id WHERE cdg.channel_id = c.id AND ud.user_id = $1)
       OR EXISTS (SELECT 1 FROM channel_direct_grants dg WHERE dg.channel_id = c.id AND dg.user_id = $1 AND (dg.expires_at IS NULL OR dg.expires_at > NOW()))))
       AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = c.id AND b.user_id = $1)
@@ -94,7 +95,7 @@ router.get('/my', authenticateToken, async (req, res) => {
         JOIN channel_overrides co ON co.channel_id = c.id AND co.subject_type = 'department' AND co.subject_id = u.department_id
         WHERE u.id = $1 AND 'view_channel' = ANY(co.allow)
       ) OR EXISTS (
-        SELECT 1 FROM users u WHERE u.id = $1 AND u.is_superadmin = TRUE
+        SELECT 1 FROM users u WHERE u.id = $1 AND ${superadminMaySee('u', 'c')}
       ) OR EXISTS (SELECT 1 FROM channel_department_grants cdg JOIN user_departments ud ON ud.department_id = cdg.department_id WHERE cdg.channel_id = c.id AND ud.user_id = $1)
         OR EXISTS (SELECT 1 FROM channel_direct_grants dg WHERE dg.channel_id = c.id AND dg.user_id = $1 AND (dg.expires_at IS NULL OR dg.expires_at > NOW()))))
       AND NOT EXISTS (SELECT 1 FROM channel_bans b WHERE b.channel_id = c.id AND b.user_id = $1)
@@ -144,6 +145,7 @@ router.patch('/:channelId', authenticateToken, async (req, res) => {
     }
 
     await ensureChannelMembership(query, req.user.userId, channelId);
+    await ensureChannelNotArchived(query, channelId); // an archived channel is read-only, its topic included
     await ensureNotGuest(query, req.user.userId, 'Guests cannot edit channels');
 
     // Editing the description is reserved for: Superadmin, the channel creator,
@@ -576,11 +578,13 @@ router.post('/:channelId/join', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Channel not found' });
     }
     if (channelResult.rows[0].is_private) {
+      // An Owner joins a private channel only while the "Owners can open private channels" switch is on;
+      // otherwise they are invited like anyone else (the channel's managers, or Moderation > Members, audited).
       const membership = await query(
         `SELECT 1 FROM users WHERE id = $1 AND is_superadmin = TRUE`,
         [req.user.userId]
       );
-      if (!membership.rows.length) {
+      if (!membership.rows.length || !(await ownerPrivateAccessOn(query))) {
         return res.status(403).json({ error: 'Private channels require an invitation from a Superadmin' });
       }
     }

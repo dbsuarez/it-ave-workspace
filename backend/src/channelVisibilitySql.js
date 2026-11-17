@@ -1,5 +1,7 @@
 // Shared channel visibility predicate for content listing and search.
 // The caller must supply the viewer ID in SQL parameter $1.
+const { superadminMaySee } = require('./ownerChannelAccess');
+
 function channelVisibleToUser(channelExpression) {
   return `EXISTS (
     SELECT 1 FROM channels permitted_channel
@@ -11,7 +13,7 @@ function channelVisibleToUser(channelExpression) {
       AND (
         (permitted_channel.is_personal = TRUE AND permitted_channel.created_by = $1)
         OR (permitted_channel.is_personal = FALSE AND (
-          viewer.is_superadmin = TRUE
+          ${superadminMaySee('viewer', 'permitted_channel')}
           OR permitted_channel.id IN (SELECT channel_id FROM channel_members WHERE user_id = $1)
           OR EXISTS (
             SELECT 1 FROM channel_overrides co

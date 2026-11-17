@@ -1,6 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
+const { superadminMaySee } = require('../ownerChannelAccess');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -108,7 +109,7 @@ function feedSql(types) {
       SELECT 1 FROM users me JOIN channels visible ON visible.id = e.channel_id
       WHERE me.id = $1 AND (
         (visible.is_personal = TRUE AND visible.created_by = me.id)
-        OR (visible.is_personal = FALSE AND (me.is_superadmin = TRUE OR EXISTS (
+        OR (visible.is_personal = FALSE AND (${superadminMaySee('me', 'visible')} OR EXISTS (
           SELECT 1 FROM channel_members cm WHERE cm.channel_id = e.channel_id AND cm.user_id = me.id
         ) OR EXISTS (
           SELECT 1 FROM channel_overrides co WHERE co.channel_id = e.channel_id

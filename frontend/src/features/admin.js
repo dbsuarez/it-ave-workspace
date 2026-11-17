@@ -49,14 +49,16 @@ async function loadWorkspaceAdmin() {
   section.innerHTML = '<div class="loading-state">Loading workspace administration…</div>';
   const admin = adminState();
   try {
-    const [users, invitations, registration, prelaunch, groups] = await Promise.all([
+    const [users, invitations, registration, prelaunch, groups, ownerAccess] = await Promise.all([
       adminApi('/api/admin/users'),
       adminApi('/api/admin/invitations'),
       adminApi('/api/admin/registration'),
       adminApi('/api/admin/prelaunch'),
       adminApi('/api/admin/groups'),
+      adminApi('/api/admin/owner-private-access'),
     ]);
     admin.prelaunch = prelaunch;
+    admin.ownerPrivateAccess = Boolean(ownerAccess && ownerAccess.enabled);
     admin.users = users.users || [];
     admin.groups = groups.groups || [];
     admin.invitations = invitations.invitations || [];
@@ -236,6 +238,14 @@ function renderWorkspaceAdmin() {
     : '<button class="btn" type="button" data-admin-action="prelaunch-on">Switch on</button>'}
       </div>
     </div>
+    <div class="moderation-card" id="admin-owner-private-access" data-mod-tab="signup">
+      <h2>Owner access to private channels</h2>
+      <p class="admin-help">Off (recommended): an Owner cannot read or post in a private channel they are not a member of, like everyone else. Owners can still manage a channel (managers, archive, recovery, deletion) without reading it. Turn this on only when you must look inside private channels; every change is written to the audit log.</p>
+      <p><strong>${admin.ownerPrivateAccess ? 'On: Owners can open every private channel' : 'Off: Owners need to be invited to private channels'}</strong></p>
+      <div class="admin-actions">
+        <button class="btn${admin.ownerPrivateAccess ? '' : ' danger'}" type="button" data-admin-action="owner-private-access" data-enabled="${admin.ownerPrivateAccess ? 'false' : 'true'}">${admin.ownerPrivateAccess ? 'Switch off' : 'Switch on'}</button>
+      </div>
+    </div>
     <div class="moderation-card" id="admin-registration" data-mod-tab="signup">
       <h2>Sign-up</h2>
       <div class="moderation-inline">
@@ -379,6 +389,12 @@ async function handleAdminClick(event) {
       await adminApi(`/api/admin/invitations/${button.dataset.invitationId}`, 'DELETE');
       showToast('Invitation revoked.', 'success');
       await loadWorkspaceAdmin();
+    } else if (action === 'owner-private-access') {
+      const enabled = button.dataset.enabled === 'true';
+      await adminApi('/api/admin/owner-private-access', 'PUT', { enabled });
+      showToast(enabled ? 'Owners can now open private channels.' : 'Owners can no longer open private channels they are not in.', 'success');
+      await loadWorkspaceAdmin();
+      return;
     } else if (action === 'prelaunch-on' || action === 'prelaunch-off') {
       await adminApi('/api/admin/prelaunch', 'PUT', { enabled: action === 'prelaunch-on' });
       showToast(action === 'prelaunch-on' ? 'Shared test password is on. Use "Give every employee…" to set it for existing employees.' : 'Shared test password is off. Existing passwords are unchanged.', 'success');

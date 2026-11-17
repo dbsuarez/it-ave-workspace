@@ -1,5 +1,6 @@
 const { can, needsCheckSql } = require('./permissions');
 const { ensureGuestCanReach } = require('./guests');
+const { superadminMaySee } = require('./ownerChannelAccess');
 
 const ALLOWED_EXTENSIONS = new Set([
   'txt', 'csv', 'json', 'xml', 'md', 'log', 'ini', 'cfg', 'yaml', 'yml',
@@ -89,7 +90,7 @@ async function ensureChannelMembership(query, userId, channelId) {
     `SELECT 1, ${needsCheckSql('view_channel', '$1')} AS needs_check FROM channels c
      CROSS JOIN users u
      WHERE c.id = $1 AND u.id = $2
-       AND ((c.is_personal = TRUE AND c.created_by = u.id) OR (c.is_personal = FALSE AND (u.is_superadmin = TRUE OR EXISTS (
+       AND ((c.is_personal = TRUE AND c.created_by = u.id) OR (c.is_personal = FALSE AND (${superadminMaySee('u', 'c')} OR EXISTS (
          SELECT 1 FROM channel_members cm
          WHERE cm.channel_id = $1 AND cm.user_id = u.id
        ) OR EXISTS (

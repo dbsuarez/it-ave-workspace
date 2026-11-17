@@ -118,8 +118,14 @@ test('team leaders create team-only sections and channels for their direct repor
   const grandchildChannels = await request(ids.grandchild, '/api/channels/my');
   assert.ok(grandchildChannels.json.channels.some((item) => Number(item.id) === Number(channel.json.channel.id)));
 
-  // Superadmins are outside the reporting chain yet must receive the same
-  // shared Section placement for channels their account can actually access.
+  // A Superadmin outside the reporting chain gets no placement for a private team channel they cannot open
+  // (the "Owners can open private channels" switch is off by default)...
+  const ownerBlind = await request(ids.owner, '/api/settings/sidebar');
+  assert.equal(ownerBlind.status, 200);
+  assert.ok(!ownerBlind.json.layout.teamSections.some((entry) =>
+    entry.channelIds.some((id) => Number(id) === Number(channel.json.channel.id))), 'no placement without access');
+  // ...and receives the same shared Section placement once the switch gives their account access.
+  await admin.query('UPDATE moderation_settings SET owner_private_channel_access = TRUE WHERE id = 1');
   const ownerView = await request(ids.owner, '/api/settings/sidebar');
   assert.equal(ownerView.status, 200);
   const ownerSection = ownerView.json.layout.teamSections.find((entry) =>
@@ -129,6 +135,7 @@ test('team leaders create team-only sections and channels for their direct repor
   assert.equal(ownerView.json.layout.inheritedSections.flatMap((entry) => entry.channelIds)
     .filter((id) => Number(id) === Number(channel.json.channel.id)).length, 0,
   'team channel is not duplicated as an inherited personal section');
+  await admin.query('UPDATE moderation_settings SET owner_private_channel_access = FALSE WHERE id = 1');
 
   const reportChannels = await request(ids.report, '/api/channels/my');
   assert.ok(reportChannels.json.channels.some((item) => Number(item.id) === Number(channel.json.channel.id)));

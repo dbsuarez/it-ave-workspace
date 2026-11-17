@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { ensureChannelMembership, ensureChannelModerator } = require('../security');
+const { ensureChannelMembership, ensureChannelModerator, ensureChannelNotArchived } = require('../security');
 
 // Shared links (bookmarks) for a channel, shown in its Links tab.
 // Mounted on /api/channels alongside the main channel routes.
@@ -66,6 +66,7 @@ router.post('/:channelId/links', authenticateToken, async (req, res) => {
   try {
     const channelId = parseId(req.params.channelId);
     await ensureChannelMembership(query, req.user.userId, channelId);
+    await ensureChannelNotArchived(query, channelId); // archived channels are read-only
     const url = normalizeLinkUrl(req.body?.url);
     if (!url) return res.status(400).json({ error: 'Enter a full web address starting with http:// or https://' });
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
@@ -98,6 +99,7 @@ router.delete('/:channelId/links/:linkId', authenticateToken, async (req, res) =
     const channelId = parseId(req.params.channelId);
     const linkId = parseId(req.params.linkId);
     await ensureChannelMembership(query, req.user.userId, channelId);
+    await ensureChannelNotArchived(query, channelId);
     if (!linkId) return res.status(400).json({ error: 'A valid link ID is required' });
     const link = await query(
       'SELECT created_by FROM channel_links WHERE id = $1 AND channel_id = $2',

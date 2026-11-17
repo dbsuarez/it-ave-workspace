@@ -22,7 +22,7 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
 | P5-ROLES-01 Access is not permission | PASS | Per-person deny of `send_messages` stops B posting while B can still read; an explicit allow does not help once access is removed. |
 | P5-MANAGER-01 Two equal managers | PASS | A and B both manage; B (not creator, not Superadmin) archives and A restores; audit names each actor. See observation 2. |
 | P5-MANAGER-02 Promotion / last manager | PASS | C (no access) and banned D cannot be promoted and no membership is created; an empty roster is refused; banning the last manager returns 409; non-managers get 403. |
-| P5-ARCHIVE-01 Archive is read-only | **FAIL**, partly fixed | Everything in the guide's table was blocked except the old **Wiki canvases**, now fixed (finding 2). Still open: the extra paths in finding 3, pending a decision. |
+| P5-ARCHIVE-01 Archive is read-only | FAIL when run, **fixed afterwards** | Everything in the guide's table was blocked except the old **Wiki canvases** (finding 2) and the extra paths in finding 3. Both are fixed and unit tested; re-run this check after the backend is rebuilt. |
 | P5-ARCHIVE-02 Restore and resume | PASS | Posting, reactions, pins, list and canvas edits resume; earlier content intact. |
 | P5-RECOVERY-01 Last-manager recovery | PASS | Reproduced by deactivating the sole manager through the HR API. Recovery refused for a non-member, a banned user, a deactivated user, a non-admin actor and a missing confirmation; works for an existing member; audit names actor and target; the channel administrator (not a Superadmin) still cannot read the channel and is not added as a member. |
 | P5-DELETE-01 Permanent deletion | PASS | Member denied (403); active channel refused (409); archived without the phrase or with a wrong phrase refused (409); exact phrase deletes; connected member notified; old links fail; audit entry written; other channels untouched. |
@@ -46,18 +46,24 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
    (`backend/src/routes/canvases.js` has no `ensureChannelNotArchived`; `routes/canvas.js` does). Comments and images on
    Wiki canvases were not exercised and probably have the same gap. Fix: create, edit and delete now return 409 in an
    archived channel (reading stays allowed); test in `canvases.test.js`.
-3. **Other write paths accepted in an archived channel** (not in the guide's table; confirm whether read-only should
-   cover them): editing and deleting your own message (`routes/messageEdits.js`), editing the channel topic
+3. **FIXED (same day): other write paths accepted in an archived channel** (not in the guide's table; the decision was to block all of them): editing and deleting your own message (`routes/messageEdits.js`), editing the channel topic
    (`PATCH /api/channels/:id`), adding a channel link, and creating a scheduled message (delivery is correctly refused
    later). Blocked correctly: new messages and replies, reactions, pins, lists and items, channel canvas and comments,
-   file deletion, incoming webhooks, slash commands, moderator message deletion.
+   file deletion, incoming webhooks, slash commands, moderator message deletion. Fix: editing or deleting your own
+   message, the topic, adding or removing a link and creating a scheduled message now return 409 in an archived channel
+   (`messageEdits.js`, `channels.js`, `channelLinks.js`, `scheduled.js`); test in
+   `owner-private-access-and-archive-writes.test.js`.
 
 ## Observations (design points to confirm)
 
-1. **Superadmins bypass private-channel access by design** (`backend/src/security.js`, `is_superadmin` checks). The
-   Superadmin account can read history, search and post in private channels it is not a member of. A non-Superadmin
-   channel administrator (`manage_channels` only) cannot, before or after recovery. The guide's "SA cannot read private
-   content" expectations only hold for the second kind of account.
+1. **CHANGED (same day): Superadmins no longer bypass private-channel access by default.** They used to read history,
+   search and post in private channels they were not a member of (`is_superadmin` checks in `security.js` and several
+   queries). That is now a workspace switch, **Owner access to private channels** (the admin screen next to the shared-test-password switch, Owner
+   only, audited as `owner_private_access_on/off`), off by default. With it off an Owner needs a membership, department
+   grant or invitation like anyone else, can no longer self-join a private channel, and does not get its search results,
+   Activity, saved items or sidebar placement. Public channels, personal channels and channel administration (managers,
+   archive, recovery, deletion) are unchanged. An Owner can still add themselves through Moderation > members (audited).
+   See `backend/src/ownerChannelAccess.js`; tests in `owner-private-access-and-archive-writes.test.js`.
 2. **Department-only readers cannot be promoted to manager** until they hold a channel membership row (409 "Assign a
    channel membership before promoting this employee"). Add them as members first.
 3. Department visibility does not remove default posting rights: users who can read through a department can post

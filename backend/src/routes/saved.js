@@ -2,6 +2,7 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership } = require('../security');
+const { SETTING_SQL } = require('../ownerChannelAccess');
 
 // Personal "saved for later" items: channel messages and files. Private to
 // each user and separate from shared channel pins.
@@ -21,7 +22,9 @@ function sendError(res, err, label) {
 
 // Only items in channels the user can still see are returned.
 const ACCESS = `EXISTS (
-  SELECT 1 FROM users me WHERE me.id = $1 AND (me.is_superadmin = TRUE OR EXISTS (
+  SELECT 1 FROM users me WHERE me.id = $1 AND ((me.is_superadmin = TRUE AND (
+    NOT EXISTS (SELECT 1 FROM channels pc WHERE pc.id = m.channel_id AND pc.is_private) OR ${SETTING_SQL}
+  )) OR EXISTS (
     SELECT 1 FROM channel_members cm WHERE cm.channel_id = m.channel_id AND cm.user_id = $1
   ))
 )`;
