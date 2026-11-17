@@ -331,6 +331,14 @@ router.delete('/sidebar/team/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'A valid team section is required' });
+    const owned = await query('SELECT id FROM team_sidebar_sections WHERE id = $1 AND owner_id = $2', [id, req.user.userId]);
+    if (!owned.rows.length) return res.status(403).json({ error: 'Only the team leader can delete this section' });
+    // Removing a section must never delete channels or their history: archive and delete those first
+    // (Moderation > channel > Archive, then Delete), the same safeguards any other channel has.
+    const held = await query('SELECT COUNT(*)::integer AS count FROM channels WHERE team_section_id = $1', [id]);
+    if (Number(held.rows[0]?.count || 0) > 0) {
+      return res.status(409).json({ error: `This team section still holds ${held.rows[0].count} channel(s). Archive and delete them first; deleting a section never removes channels.` });
+    }
     const removed = await query('DELETE FROM team_sidebar_sections WHERE id = $1 AND owner_id = $2 RETURNING id, name', [id, req.user.userId]);
     if (!removed.rows.length) return res.status(403).json({ error: 'Only the team leader can delete this section' });
     req.io?.emit('team_sections_updated'); res.json({ section: removed.rows[0] });

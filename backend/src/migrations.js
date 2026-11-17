@@ -28,7 +28,21 @@ module.exports = [
      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    )`,
-  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS team_section_id INTEGER REFERENCES team_sidebar_sections(id) ON DELETE CASCADE',
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS team_section_id INTEGER REFERENCES team_sidebar_sections(id) ON DELETE SET NULL',
+  // Older databases cascaded here, so removing a team section deleted its channels and messages. Replace that
+  // constraint with SET NULL (idempotent: it only acts while the cascading constraint still exists).
+  `DO $$
+   DECLARE old_constraint text;
+   BEGIN
+     SELECT conname INTO old_constraint FROM pg_constraint
+      WHERE conrelid = 'channels'::regclass AND contype = 'f'
+        AND confrelid = 'team_sidebar_sections'::regclass AND confdeltype = 'c';
+     IF old_constraint IS NOT NULL THEN
+       EXECUTE format('ALTER TABLE channels DROP CONSTRAINT %I', old_constraint);
+       ALTER TABLE channels ADD CONSTRAINT channels_team_section_id_fkey
+         FOREIGN KEY (team_section_id) REFERENCES team_sidebar_sections(id) ON DELETE SET NULL;
+     END IF;
+   END $$`,
   'CREATE INDEX IF NOT EXISTS idx_team_sections_owner ON team_sidebar_sections(owner_id)',
   'CREATE INDEX IF NOT EXISTS idx_channels_team_section ON channels(team_section_id)',
   `UPDATE channel_members cm SET membership_source = 'team'

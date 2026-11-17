@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { ensureChannelMembership } = require('../security');
+const { ensureChannelMembership, ensureChannelNotArchived } = require('../security');
 
 const MAX_CONTENT_LENGTH = 100000;
 
@@ -128,6 +128,7 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Canvas content must be text no longer than 100,000 characters' });
     }
     await ensureChannelMembership(query, req.user.userId, channelId);
+    await ensureChannelNotArchived(query, channelId); // an archived channel is read-only
 
     const result = await query(
       `INSERT INTO channel_canvases (channel_id, title, content, created_by)
@@ -164,6 +165,7 @@ router.put('/:canvasId', authenticateToken, async (req, res) => {
     }
     const canvas = await getCanvas(canvasId);
     await ensureChannelMembership(query, req.user.userId, canvas.channel_id);
+    await ensureChannelNotArchived(query, canvas.channel_id);
     const result = await query(
       `UPDATE channel_canvases
        SET title = $1, content = $2, updated_at = NOW()
@@ -192,6 +194,7 @@ router.delete('/:canvasId', authenticateToken, async (req, res) => {
     if (canvasId === null) return res.status(400).json({ error: 'A valid canvas ID is required' });
     const canvas = await getCanvas(canvasId);
     await ensureChannelMembership(query, req.user.userId, canvas.channel_id);
+    await ensureChannelNotArchived(query, canvas.channel_id);
     await query('DELETE FROM channel_canvases WHERE id = $1', [canvasId]);
     res.json({ success: true });
   } catch (err) {

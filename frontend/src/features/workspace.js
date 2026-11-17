@@ -597,7 +597,7 @@ async function handleSidebarModalClick(event) {
   if (deleteTeam) {
     const row = deleteTeam.closest('[data-team-section-index]');
     const section = state.teamSidebarDraft.sections[Number(row.dataset.teamSectionIndex)];
-    if (!(await confirmAction({ title: `Delete ${section.name}?`, message: 'Its team channels and their contents will be permanently deleted.', confirmLabel: 'Delete team section', danger: true }))) return;
+    if (!(await confirmAction({ title: `Delete ${section.name}?`, message: 'Only an empty section can be deleted. Channels are never removed with it: archive and delete them first.', confirmLabel: 'Delete team section', danger: true }))) return;
     try {
       const response = await api(`/api/settings/sidebar/team/${section.teamSectionId}`, { method: 'DELETE' });
       const data = await response.json();

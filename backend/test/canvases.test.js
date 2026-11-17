@@ -12,6 +12,7 @@ const config = require('../src/config');
 const dbPath = require.resolve('../src/db');
 const previousDbModule = require.cache[dbPath];
 const memberships = new Set(['1:7']);
+const archivedChannels = new Set();
 const canvases = new Map();
 let nextCanvasId = 10;
 
@@ -61,6 +62,9 @@ require.cache[dbPath] = {
       if (sql.includes('DELETE FROM channel_canvases')) {
         canvases.delete(Number(params[0]));
         return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes('SELECT archived_at FROM channels')) {
+        return { rows: [{ archived_at: archivedChannels.has(Number(params[0])) ? '2026-01-03T00:00:00Z' : null }] };
       }
       if (sql.includes('FROM canvas_channel_grants')) return { rows: [] }; // canvases shared into the channel: none here
       throw new Error(`Unexpected canvas query: ${sql}`);
@@ -162,6 +166,38 @@ test('non-members cannot read, update, or delete another channel canvas', async 
   });
   assert.equal(deleted.status, 403);
   assert.equal(canvases.has(canvas.id), true);
+});
+
+test('an archived channel keeps its Wiki canvases readable but not writable', async () => {
+  const create = await fetch(`${baseUrl}/api/canvases`, {
+    method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channelId: 7, title: 'Before archive', content: 'v1' }),
+  });
+  assert.equal(create.status, 201);
+  const canvas = (await create.json()).canvas;
+  archivedChannels.add(7);
+  try {
+    const json = { ...authHeader(), 'Content-Type': 'application/json' };
+    const read = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, { headers: authHeader() });
+    assert.equal(read.status, 200, 'reading stays allowed');
+    const list = await fetch(`${baseUrl}/api/canvases?channelId=7`, { headers: authHeader() });
+    assert.equal(list.status, 200, 'listing stays allowed');
+    const created = await fetch(`${baseUrl}/api/canvases`, { method: 'POST', headers: json, body: JSON.stringify({ channelId: 7, title: 'New', content: 'x' }) });
+    assert.equal(created.status, 409, 'creating is refused');
+    const updated = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, { method: 'PUT', headers: json, body: JSON.stringify({ title: 'Edited', content: 'changed' }) });
+    assert.equal(updated.status, 409, 'editing is refused');
+    const deleted = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, { method: 'DELETE', headers: authHeader() });
+    assert.equal(deleted.status, 409, 'deleting is refused');
+    assert.equal(canvases.get(canvas.id).content, 'v1', 'content untouched');
+  } finally {
+    archivedChannels.delete(7);
+  }
+  const restored = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, {
+    method: 'PUT', headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'After restore', content: 'v2' }),
+  });
+  assert.equal(restored.status, 200, 'editing works again once restored');
+  canvases.delete(canvas.id);
 });
 
 test('members can delete canvases', async () => {

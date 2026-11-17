@@ -22,7 +22,7 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
 | P5-ROLES-01 Access is not permission | PASS | Per-person deny of `send_messages` stops B posting while B can still read; an explicit allow does not help once access is removed. |
 | P5-MANAGER-01 Two equal managers | PASS | A and B both manage; B (not creator, not Superadmin) archives and A restores; audit names each actor. See observation 2. |
 | P5-MANAGER-02 Promotion / last manager | PASS | C (no access) and banned D cannot be promoted and no membership is created; an empty roster is refused; banning the last manager returns 409; non-managers get 403. |
-| P5-ARCHIVE-01 Archive is read-only | **FAIL** | Everything in the guide's table is blocked except the old **Wiki canvases** (see findings 2 and 3). |
+| P5-ARCHIVE-01 Archive is read-only | **FAIL**, partly fixed | Everything in the guide's table was blocked except the old **Wiki canvases**, now fixed (finding 2). Still open: the extra paths in finding 3, pending a decision. |
 | P5-ARCHIVE-02 Restore and resume | PASS | Posting, reactions, pins, list and canvas edits resume; earlier content intact. |
 | P5-RECOVERY-01 Last-manager recovery | PASS | Reproduced by deactivating the sole manager through the HR API. Recovery refused for a non-member, a banned user, a deactivated user, a non-admin actor and a missing confirmation; works for an existing member; audit names actor and target; the channel administrator (not a Superadmin) still cannot read the channel and is not added as a member. |
 | P5-DELETE-01 Permanent deletion | PASS | Member denied (403); active channel refused (409); archived without the phrase or with a wrong phrase refused (409); exact phrase deletes; connected member notified; old links fail; audit entry written; other channels untouched. |
@@ -35,14 +35,17 @@ counts it started with. A pre-test backup is in `backups/phase5-pre-*.dump` (git
 
 ## Findings that need a decision or a fix
 
-1. **Deleting a team section permanently deletes its channels and their messages.** `channels.team_section_id` is
+1. **FIXED (same day): deleting a team section permanently deleted its channels and their messages.** `channels.team_section_id` is
    `ON DELETE CASCADE` (`database/init.sql`, `backend/src/migrations.js`) and `DELETE /api/settings/sidebar/team/:id`
    removes the section directly. A team leader can therefore destroy channels and history in one call, bypassing the
-   archive-first and exact-phrase protection that Phase 4 put on channel deletion. Suggested fix: `ON DELETE SET NULL`
-   (channels return to the ordinary list) or refuse to delete a non-empty section.
-2. **Wiki canvases ignore the archive.** `PUT` and `DELETE /api/canvases/:id` succeed in an archived channel
+   archive-first and exact-phrase protection that Phase 4 put on channel deletion. Fix: the route now refuses (409) to
+   delete a section that still holds channels, the constraint is `ON DELETE SET NULL` in `init.sql` and in an idempotent
+   migration that converts existing databases, and the confirmation dialog says so. Tests in
+   `workspace-sidebar-sections.test.js`. The running Docker backend needs a rebuild to pick this up.
+2. **FIXED (same day): Wiki canvases ignored the archive.** `PUT` and `DELETE /api/canvases/:id` succeed in an archived channel
    (`backend/src/routes/canvases.js` has no `ensureChannelNotArchived`; `routes/canvas.js` does). Comments and images on
-   Wiki canvases were not exercised and probably have the same gap.
+   Wiki canvases were not exercised and probably have the same gap. Fix: create, edit and delete now return 409 in an
+   archived channel (reading stays allowed); test in `canvases.test.js`.
 3. **Other write paths accepted in an archived channel** (not in the guide's table; confirm whether read-only should
    cover them): editing and deleting your own message (`routes/messageEdits.js`), editing the channel topic
    (`PATCH /api/channels/:id`), adding a channel link, and creating a scheduled message (delivery is correctly refused

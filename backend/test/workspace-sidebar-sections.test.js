@@ -39,6 +39,48 @@ test.before(async () => {
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
+test('deleting a team section never deletes its channels or their history', async (t) => {
+  if (!scratch) return t.skip('no PostgreSQL reachable');
+  const section = (await request(ids.leader, '/api/settings/sidebar/team', { method: 'POST', body: JSON.stringify({ name: 'Keep Me' }) })).json.section;
+  const made = await admin.query("INSERT INTO channels (name, is_private, team_section_id, created_by) VALUES ('zz-keep-me', TRUE, $1, $2) RETURNING id", [section.id, ids.leader]);
+  const channelId = made.rows[0].id;
+  await admin.query("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, 'history that must survive')", [channelId, ids.leader]);
+
+  const stranger = await request(ids.member, `/api/settings/sidebar/team/${section.id}`, { method: 'DELETE' });
+  assert.equal(stranger.status, 403, 'only the leader may delete, and learns nothing about its contents');
+  const refused = await request(ids.leader, `/api/settings/sidebar/team/${section.id}`, { method: 'DELETE' });
+  assert.equal(refused.status, 409);
+  assert.match(refused.json.error, /still holds 1 channel/);
+  assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM channels WHERE id = $1', [channelId])).rows[0].n, 1, 'channel survives the refused delete');
+
+  // Backstop: even a direct delete of the section row (any other code path) must not cascade to the channel.
+  await admin.query('DELETE FROM team_sidebar_sections WHERE id = $1', [section.id]);
+  const after = await admin.query('SELECT team_section_id FROM channels WHERE id = $1', [channelId]);
+  assert.equal(after.rows.length, 1, 'channel still exists');
+  assert.equal(after.rows[0].team_section_id, null, 'channel is detached from the section, not deleted');
+  assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM messages WHERE channel_id = $1', [channelId])).rows[0].n, 1, 'history intact');
+
+  // An empty section can still be removed through the API.
+  const empty = (await request(ids.leader, '/api/settings/sidebar/team', { method: 'POST', body: JSON.stringify({ name: 'Empty' }) })).json.section;
+  const removed = await request(ids.leader, `/api/settings/sidebar/team/${empty.id}`, { method: 'DELETE' });
+  assert.equal(removed.status, 200);
+  await admin.query('DELETE FROM channels WHERE id = $1', [channelId]);
+});
+
+test('an upgraded database loses the cascading team-section constraint', async (t) => {
+  if (!scratch) return t.skip('no PostgreSQL reachable');
+  const kind = async () => (await admin.query(`SELECT confdeltype FROM pg_constraint WHERE conrelid = 'channels'::regclass AND contype = 'f' AND confrelid = 'team_sidebar_sections'::regclass`)).rows.map((r) => r.confdeltype);
+  assert.deepEqual(await kind(), ['n'], 'fresh schema: SET NULL');
+  // Recreate the old cascading constraint, then run every migration again as a restart would.
+  await admin.query('ALTER TABLE channels DROP CONSTRAINT channels_team_section_id_fkey');
+  await admin.query('ALTER TABLE channels ADD CONSTRAINT channels_team_section_id_fkey FOREIGN KEY (team_section_id) REFERENCES team_sidebar_sections(id) ON DELETE CASCADE');
+  assert.deepEqual(await kind(), ['c']);
+  await scratch.applyMigrations(admin);
+  assert.deepEqual(await kind(), ['n'], 'migration converts cascade to SET NULL');
+  await scratch.applyMigrations(admin);
+  assert.deepEqual(await kind(), ['n'], 'and is safe to run again');
+});
+
 test('team leaders create team-only sections and channels for their direct reports', async (t) => {
   if (!scratch) return t.skip('no PostgreSQL reachable');
   const created = await request(ids.leader, '/api/settings/sidebar/team', {
