@@ -8,7 +8,8 @@ The `init.sql` file creates:
 
 - **users** - User accounts with hashed passwords, avatar colors, token versions, and a
   Superadmin flag
-- **channels** - Public/private channels with per-channel slow-mode settings
+- **channels** - Public/private channels with per-channel slow-mode settings. `kind` is `channel` or `forum`; a forum has `forum_department_id` (one forum per department)
+- **forum_topics** - Topics of a department forum: title, author, `last_activity_at`, `pinned_at`, `locked_at`, `archived_at`. Forum posts are `messages` rows with `topic_id` (deleting a topic deletes its posts). Forum tables and columns live in `migrations.js`, not `init.sql`
 - **channel_members** - Channel membership, member/moderator role, and slow-mode send timestamps
 - **channel_read_at** - Per-user per-channel last-read timestamp (unread badges)
 - **messages** - Channel messages with inline replies and pin metadata

@@ -115,6 +115,8 @@ Notes: __________
 Notes: __________
 
 ### P5-SECTIONS-01 — Nested Team Section placement
+> **Retired 2026-11-18:** Team Sections were removed when department forums replaced Team Channels. Skip this step; it is replaced by the forum checks in `docs/superpowers/plans/2026-11-18-department-forums.md`.
+
 **Actions**
 1. As LEAD, create a Team Section using the sidebar Section tools.
 2. Put an appropriately authorized test channel in it; identify the channel by exact name.

@@ -31,6 +31,21 @@ Node.js + Express + Socket.io API server with PostgreSQL.
 | GET | `/api/channels/:id` | Get channel details |
 | POST | `/api/channels/:id/join` | Join a channel |
 
+### Department forums (`/api/forums`)
+Every department has one private forum channel (`channels.kind = 'forum'`, named `dept-<department>`), created automatically with the department and kept in step with it (renamed with it, archived when the department is deleted). Who may open it is read live from department membership, so moving someone out closes it for them at once. The department head moderates (a `dept-head` moderator row); Owners and `manage_messages` holders moderate too. An Owner who is not in the department only sees it when the private-channel switch is on.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/forums/:channelId/topics?archived=0\|1&offset=0` | Topics, pinned first then latest activity; 50 per page with `hasMore` |
+| POST | `/api/forums/:channelId/topics` | Start a topic: `{ title (1-120), content, attachmentIds? }`; the topic and its opening post are created together or not at all |
+| GET | `/api/forums/topics/:topicId` | One topic |
+| PATCH | `/api/forums/topics/:topicId` | `{ title }` (author while open, or a moderator); `{ pinned, locked, archived }` (moderators). Every change is audited |
+| DELETE | `/api/forums/topics/:topicId` | A moderator any time; the author only while nobody has replied. Posts go with it |
+
+Posts are ordinary messages carrying `topic_id`. In a forum, `send_message` needs a `topicId` of an open topic of that channel (a locked or archived topic refuses posts; the check and the insert hold a row lock on the topic, so a reply can never land after a lock). `GET /api/messages/:channelId?topicId=` returns one topic's posts; a forum without `topicId` is a 400, and ordinary channel history never contains topic posts. Announcements, polls, scheduled messages and webhooks cannot post into a forum directly. Search returns `topics` and labels messages and files with `topicId` / `topicTitle`; mentions and Activity items carry them too. Attachments are searchable by file name, not by content.
+
+Team Channels and Team Sections no longer exist: the `sidebar/team` routes, the `teamSectionId` creation parameter and the reporting-line membership sync are gone. A migration turned existing team channels into ordinary private channels (messages, files and members kept; team-sourced members became `invited`) and dropped `team_sidebar_sections` and `channels.team_section_id`.
+
 ### Messages
 | Method | Endpoint | Description |
 |--------|----------|-------------|

@@ -68,6 +68,7 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | Preferences | ✅ Device-local theme and Enter-to-send |
 | Account settings | ✅ Email/password update; manual UI verification pending |
 | Channel list + switch | ✅ |
+| Department forums | ✅ Opening a forum shows its topic list (Active / Archived, New topic dialog with optional files); opening a topic shows its posts in the usual stream and composer. Moderators pin, lock, archive, rename and delete; locked or archived topics turn the composer off. Markup comes from `features/forum-view.js` |
 | Direct messages | ✅ |
 | Real-time messaging (Socket.io) | ✅ Optimistic message display with send-failure rollback |
 | Channel replies | ✅ Inline preview and jump-to-original |
