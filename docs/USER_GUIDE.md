@@ -90,7 +90,13 @@ Yes. Everyone who has the drawing open sees each other's shapes appear as they a
 Yes. Your drawing is kept on this computer as you work, and the bar says **Offline: will sync**. When the connection returns, your changes are merged with what others did meanwhile and the bar goes back to **Saved**. If you and someone else changed the very same shape while apart, the later change wins; everything else from both of you is kept. A drawing started offline is created on the server the first time you are connected.
 
 ### How do I keep a copy of a drawing?
-Press **Export PNG** or **Export SVG** in the top bar.
+Press **Export PNG** or **Export SVG** in the top bar for a picture. To keep the drawing itself, press **Save file**: you get a `.excalidraw` file that opens in any Excalidraw, including excalidraw.com.
+
+### How do I open a .excalidraw file?
+On the Drawings screen press **Open file** to make a new drawing of your own from a file. Inside a drawing you can edit, **Open file** instead adds the file's shapes to that drawing; nothing already there is removed, so it is safe while others are drawing. Files from excalidraw.com work too.
+
+### Can I make a diagram from text?
+Yes. Open the shapes button at the end of the toolbar and choose **Mermaid to Excalidraw**. Type a Mermaid description on the left and the diagram appears on the right; press **Insert** to put it in the drawing as shapes you can edit. Flowcharts, sequence diagrams and class diagrams become shapes. Not sure how to start? Above the text box, **Start from a template** offers ready-made examples of each kind (steps in order, a decision, a network layout, a request and reply, a sign-in, people and roles, equipment and owners). Pick one and change the words.
 
 ### Why can't I change a drawing, or why does it say "Cannot sync"?
 View-only drawings show a note saying why (a Viewer share, a guest account, or an archived or locked conversation). **Cannot sync** means you lost access or the drawing was deleted; your copy stays on this computer, so export it to keep it.
