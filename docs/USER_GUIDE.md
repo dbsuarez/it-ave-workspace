@@ -73,6 +73,31 @@ Click the **padlock**. Nobody can reply or edit their own posts in a locked topi
 
 Every pin, lock, archive, rename and delete is recorded in the forum's audit log.
 
+## Drawings
+
+Drawings are whiteboards for quick sketches, diagrams and documenting how a system or process works. They are built on Excalidraw and work without any internet access beyond your workspace.
+
+### How do I start a drawing?
+Three ways. Open **Drawings** in the left rail and press **New drawing** for a drawing of your own. In any channel, open its **Drawings** tab and press **New drawing**. Or, while writing in a channel or a forum topic, press the pencil button beside the paperclip: the drawing is added to the conversation as a card anyone there can open.
+
+### Who can see and change a drawing?
+A drawing in a channel or topic follows that conversation: whoever can open the conversation can open the drawing, and whoever can post there can draw. Guests, and conversations that are archived or locked, are view-only. A drawing of your own is private until you share it: press **Share** in the drawing, add people by name, and choose **Editor** or **Viewer** for each. **Share as a copy** gives someone their own copy instead.
+
+### Can we draw together?
+Yes. Everyone who has the drawing open sees each other's shapes appear as they are drawn, and sees each other's pointers and names. The top bar shows who is here and whether your work is **Saved**.
+
+### Can I draw without a connection?
+Yes. Your drawing is kept on this computer as you work, and the bar says **Offline: will sync**. When the connection returns, your changes are merged with what others did meanwhile and the bar goes back to **Saved**. If you and someone else changed the very same shape while apart, the later change wins; everything else from both of you is kept. A drawing started offline is created on the server the first time you are connected.
+
+### How do I keep a copy of a drawing?
+Press **Export PNG** or **Export SVG** in the top bar.
+
+### Why can't I change a drawing, or why does it say "Cannot sync"?
+View-only drawings show a note saying why (a Viewer share, a guest account, or an archived or locked conversation). **Cannot sync** means you lost access or the drawing was deleted; your copy stays on this computer, so export it to keep it.
+
+### Who can delete a drawing?
+The person who made it, and moderators of the conversation it belongs to. Deleting a drawing in a conversation turns its card into "Drawing removed".
+
 ## People
 
 ### Where do I see who works here?

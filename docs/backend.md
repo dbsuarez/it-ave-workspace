@@ -346,6 +346,32 @@ Two background runners start with the server and check every 15 seconds: reminde
 - **Guests are kept out of group messages** (cannot be added, cannot send); converting a member to
   a guest removes them from their groups.
 
+### Drawings (`/api/drawings`)
+Excalidraw whiteboards. A drawing belongs to a channel or forum topic (`channel_id`, optional `topic_id`, with a `kind = 'drawing'` message card) or is standalone (no channel). Access reuses `ensureChannelMembership` (bans, department grants, Owner switch); guests, archived channels and locked or archived topics are view-only. Standalone drawings use `drawing_members` (editor or viewer). The router has its own 16 MB JSON parser, mounted before the general parser in `server.js`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/drawings?scope=mine\|shared` or `?channelId=&topicId=` | Standalone drawings you own or that were shared with you, or the drawings of one conversation |
+| POST | `/api/drawings` | `{ title, channelId?, topicId?, scene?, files? }`; `scene` and `files` carry a drawing made offline |
+| GET | `/api/drawings/:id` | Drawing with scene, role and `readOnlyReason` |
+| PATCH | `/api/drawings/:id` | `{ title }` |
+| DELETE | `/api/drawings/:id` | Owner or a moderator of its conversation; the card becomes "Drawing removed" |
+| PUT / DELETE | `/api/drawings/:id/members/:userId` | Share as editor or viewer; remove |
+| POST | `/api/drawings/:id/share` | Share as a copy |
+| POST / GET | `/api/drawings/:id/files[/:key]` | Pictures in a drawing (served with `nosniff` and a sandbox CSP) |
+
+Merge rule (`drawingMerge.js`, the same as the client's): per shape the higher `version` wins; a tie goes to the lower `versionNonce`, then the smaller JSON text; deleted shapes stay (`isDeleted`). Limits: 20000 shapes, 10 MB per scene, 2 MB per picture, 20 MB of pictures per drawing, 900 KB per live update.
+
+Live editing (`sockets/drawings.js`, `createDrawingHub`): the server keeps one room per open drawing, merges every update into memory, relays it, and saves dirty rooms every 5 seconds and on SIGTERM/SIGINT, so a restart loses at most the last few seconds (the client re-sends the difference when it reconnects). Each tick re-checks access of everyone in the room.
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `drawing:join` / `drawing:update` / `drawing:leave` | Client → Server | Acked `{ ok, ... }`; join returns scene, role, revision, presence. Joining needs a signed-in socket |
+| `drawing:pointer` | Client → Server | Pointer position, throttled to one per 30 ms |
+| `drawing:update` / `drawing:presence` / `drawing:pointer` | Server → Client | Changed shapes, who is present, others' pointers |
+| `drawing:role` / `drawing:revoked` / `drawing:removed` / `drawing:error` | Server → Client | Role changed, access lost, drawing deleted, refusal |
+| `drawing_created` | Server → Client | A drawing was added to a conversation |
+
 ### Socket.io Events
 
 | Event | Direction | Description |

@@ -38,6 +38,9 @@ The `init.sql` file creates:
 - **scheduled_messages** - Messages waiting to be sent to a channel or a person
 - **invitations** - Single-use sign-up codes (stored as hashes) with account type and channels
 - **channel_links** - Shared web links shown in a channel's Links tab
+- **drawings** - Excalidraw whiteboards: title, `scene` JSONB (shapes), `revision`, owner, and nullable `channel_id` / `topic_id` / `message_id` (standalone when `channel_id` is null). Chat cards are `messages` rows with `kind = 'drawing'`
+- **drawing_members** - Who a standalone drawing is shared with (`editor` or `viewer`)
+- **drawing_files** - Pictures inside a drawing, as `BYTEA` keyed by Excalidraw's file id. The three drawing tables live in `migrations.js`
 - ~~user_groups, user_group_members~~ - removed; the migration turned each group into a zero-permission role (members carried into `user_roles`). Departments are mentionable via `users.department_id`
 - **webhooks** - Incoming webhook addresses (stored as hashes) and their bot accounts
 

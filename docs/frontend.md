@@ -89,6 +89,19 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
 | Moderation | ✅ Channel-scoped roles, timeout policy, timeouts, slow mode, reports, message and attachment removal, and audit log |
 | Auto-updater | ⏳ Planned |
 
+## Drawings (Excalidraw)
+
+Drawings sit beside Canvas in the rail, in a channel's Drawings tab, and as cards in conversations. The editor is Excalidraw 0.18.1 bundled with esbuild into `src/vendor/drawing-editor.js` (global `ITADrawing`, fonts and CSS in `src/vendor/drawing-assets/`); rebuild with `npm run drawing`. It loads on first use. Nothing reaches outside the app: `scripts/drawing-hosts.js` keeps a reviewed allowlist of addresses in the bundle and `npm run check` fails on any other.
+
+| File | Role |
+|------|------|
+| `editor-src/drawing-editor.js` | `ITADrawing.mount(element, options)` returns a handle (`getElements`, `updateElements`, `setCollaborators`, `exportPng`, `exportSvg`, `setViewOnly`, `destroy`) |
+| `features/drawing-sync.js` | What to send after working offline, local merge, batching, status text |
+| `features/drawing-view.js` | Markup: cards, list rows, top bar, share dialog |
+| `features/drawing-store.js` | The copy kept on this computer (IndexedDB `ita-drawings`, memory fallback) |
+| `features/drawing-session.js` | One open drawing: local save, live send/receive, reconnect merge, drafts made offline |
+| `features/drawings.js` | Screens, rail section, tab, composer action, share, export; reconnects on the socket's `authenticated` event (the server refuses a join before sign-in) |
+
 ## Canvas: the editable page
 
 A canvas opens as a formatted page that people edit directly: click a heading and type, tick a
