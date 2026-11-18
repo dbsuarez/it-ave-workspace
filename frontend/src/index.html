@@ -107,6 +107,7 @@
           <span>Help</span>
           <svg class="submenu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           <div class="submenu" id="sub-help" role="menu" aria-label="Help">
+            <button class="menu-item" data-command="user-guide" role="menuitem">User guide</button>
             <button class="menu-item" data-command="shortcuts" role="menuitem">Keyboard shortcuts</button>
             <button class="menu-item" data-command="about" role="menuitem">About IT Avenue Workspace</button>
           </div>
@@ -990,6 +991,17 @@
       </div>
     </div>
 
+    <div class="modal help-modal" id="help-modal" role="dialog" aria-label="Help">
+      <div class="modal-header help-header">
+        <h3 id="help-title">Help</h3>
+        <input type="search" id="help-search" placeholder="Search the guide" aria-label="Search the guide" autocomplete="off">
+        <button class="modal-close" type="button" data-help-close aria-label="Close">&times;</button>
+      </div>
+      <div class="help-layout">
+        <nav class="help-toc" id="help-toc" aria-label="Guide sections"></nav>
+        <div class="help-body" id="help-body" tabindex="0"></div>
+      </div>
+    </div>
     <div class="modal people-editor-modal" id="people-editor-modal" role="dialog" aria-label="Edit my page"></div>
     <div class="modal people-editor-modal" id="employee-modal" role="dialog" aria-label="Employee record"></div>
     <div class="modal people-editor-modal" id="departments-modal" role="dialog" aria-label="Departments"></div>
@@ -1134,6 +1146,9 @@
   <script src="features/command-cards.js"></script>
   <script src="features/polls.js"></script>
   <script src="features/forum-view.js"></script>
+  <script src="features/help-guide.js"></script>
+  <script src="features/help-view.js"></script>
+  <script src="features/help.js"></script>
   <script src="features/dept-changes.js"></script>
   <script src="features/format.js"></script>
   <script src="features/activity.js"></script>

@@ -65,6 +65,16 @@ for (const file of [...pages, ...styles]) {
   }
 }
 
+// The in-app Help is generated from docs/USER_GUIDE.md; a stale copy would show an old guide.
+try {
+  const { generate, outPath } = require('./sync-help');
+  if (!fs.existsSync(outPath) || fs.readFileSync(outPath, 'utf8') !== generate()) {
+    problems.push('src/features/help-guide.js is out of step with docs/USER_GUIDE.md: run `npm run help`');
+  }
+} catch (err) {
+  problems.push(`help guide: ${err.message}`);
+}
+
 if (problems.length) {
   console.error('Desktop client check failed:\n  ' + problems.join('\n  '));
   process.exit(1);

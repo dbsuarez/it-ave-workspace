@@ -8068,3 +8068,22 @@ body.view-as .input-area { opacity: 0.45; pointer-events: none; }
 .forum-topic-by { color: var(--text-muted); font-size: 12px; }
 .forum-group-label { text-transform: uppercase; letter-spacing: .06em; font-size: 11px; font-weight: 700; color: var(--text-muted); padding: 6px 2px 0; }
 .forum-topic.pinned { background: color-mix(in srgb, var(--chip-bg) 35%, var(--surface)); }
+
+/* ---------- Help (the user guide) ---------- */
+.help-modal { width: min(980px, 94vw); height: min(720px, 88vh); }
+.help-header { display: flex; align-items: center; gap: 12px; }
+.help-header h3 { margin: 0; flex: 0 0 auto; }
+.help-header input[type="search"] { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.help-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); flex: 1 1 auto; min-height: 0; }
+.help-toc { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-right: 1px solid var(--border); overflow-y: auto; }
+.help-toc-item { text-align: left; border: 0; background: transparent; color: var(--text); font: inherit; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.help-toc-item:hover { background: var(--muted-bg); }
+.help-toc-item.active { background: var(--chip-bg); color: var(--chip-text); font-weight: 700; }
+.help-body { overflow-y: auto; padding: 8px 28px 28px; line-height: 1.55; scroll-behavior: smooth; }
+.help-body h2 { margin: 24px 0 6px; font-size: 20px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.help-body h3 { margin: 18px 0 4px; font-size: 15px; }
+.help-body p { margin: 6px 0; }
+.help-body ul, .help-body ol { margin: 6px 0 6px 22px; padding: 0; }
+.help-body code { background: var(--muted-bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12.5px; }
+.help-empty { color: var(--text-muted); padding: 24px 0; }
+@media (max-width: 720px) { .help-layout { grid-template-columns: 1fr; } .help-toc { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); } }

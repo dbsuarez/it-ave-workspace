@@ -335,6 +335,11 @@ function setupEventListeners() {
   // Global: Ctrl/Cmd+K focuses search, Esc closes menus and modals
   window.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'F1') {
+      e.preventDefault();
+      openHelp();
+      return;
+    }
     if (mod && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
       document.getElementById('global-search')?.focus();
@@ -495,7 +500,7 @@ function setupEventListeners() {
       handleAppCommand(item.dataset.command);
     });
   });
-  on('btn-help', 'click', () => showToast('Ctrl+K searches. Esc cancels a reply or closes menus.', undefined));
+  on('btn-help', 'click', () => openHelp());
 
   // Window controls (frameless window)
   on('btn-win-min', 'click', () => window.electronAPI?.appCommand?.('minimize'));
@@ -594,6 +599,7 @@ function setupEventListeners() {
   on('btn-close-note-editor', 'click', () => closeNoteEditor());
 
   setupForumScreens();
+  setupHelp();
 
   // Compose
   on('btn-compose', 'click', () => els.messageInput?.focus());
@@ -4695,6 +4701,9 @@ function handleAppCommand(cmd) {
       break;
     case 'sign-out':
       handleLogout();
+      break;
+    case 'user-guide':
+      openHelp();
       break;
     case 'shortcuts':
       showToast('Ctrl+K search · Ctrl+N new message · Esc cancels reply or closes menus');

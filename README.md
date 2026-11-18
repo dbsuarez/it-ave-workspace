@@ -3,6 +3,7 @@
 Office chat application - self-hosted on your own server.
 
 - Documentation: [docs/README.md](docs/README.md)
+- User guide (also shown in the app under the ? button): [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
 - Operations: [docs/RUNBOOK.md](docs/RUNBOOK.md)
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
 - Ghidra + REA setup and usage: [docs/REA-GHIDRA-SETUP.md](docs/REA-GHIDRA-SETUP.md)
