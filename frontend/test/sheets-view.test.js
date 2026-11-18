@@ -31,3 +31,29 @@ test('the top bar has the title, a way back and the save status, and only editor
   assert.match(viewer, /View only/);
   assert.doesNotMatch(sheetBarHtml({ sheet: sheet({ title: '<script>x</script>' }) }), /<script>/);
 });
+
+const { sheetShareHtml } = require('../src/features/sheets-view');
+
+test('the bar has export for everyone, import for editors, and share and delete only for the owner', () => {
+  const owner = sheetBarHtml({ sheet: sheet(), status: 'saved', isOwner: true });
+  for (const hook of ['data-sheet-export', 'data-sheet-import', 'data-sheet-share', 'data-sheet-delete']) assert.ok(owner.includes(hook), hook);
+  const editor = sheetBarHtml({ sheet: sheet(), status: 'saved', isOwner: false });
+  assert.match(editor, /data-sheet-export/);
+  assert.match(editor, /data-sheet-import/);
+  assert.doesNotMatch(editor, /data-sheet-share|data-sheet-delete/);
+  const viewer = sheetBarHtml({ sheet: sheet({ role: 'viewer' }), status: 'viewing', isOwner: false });
+  assert.match(viewer, /data-sheet-export/);
+  assert.doesNotMatch(viewer, /data-sheet-import|data-sheet-share|data-sheet-delete/);
+});
+
+test('the share dialog lists who has access with a role and a remove button, and can add a person with a role', () => {
+  const html = sheetShareHtml({ sheet: sheet(), members: [{ userId: 4, username: 'ann', role: 'viewer' }, { userId: 5, username: '<b>bob</b>', role: 'editor' }], people: ['Cara (cara)'] });
+  assert.match(html, /Share "Holidays 2027"/);
+  assert.match(html, /data-sheet-member-role="4"/);
+  assert.match(html, /data-sheet-member-remove="5"/);
+  assert.match(html, /<option value="viewer" selected>/);
+  assert.doesNotMatch(html, /<b>bob/);
+  assert.match(html, /data-sheet-add-person/);
+  assert.match(html, /<option value="Cara \(cara\)">/);
+  assert.match(sheetShareHtml({ sheet: sheet(), members: [], people: [] }), /Not shared with anyone yet/);
+});

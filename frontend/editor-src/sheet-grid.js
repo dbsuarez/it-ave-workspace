@@ -83,6 +83,7 @@ function mount(element, options = {}) {
         return { id: sheet.options.tabId, name: sheet.options.worksheetName, rows: trimRows(sheet.getData()), widths };
       });
     },
+    activeIndex() { return instance.length ? instance[0].parent.getWorksheetActive() : 0; },
     setTabs(tabs) { build(tabs); },
     destroy() {
       clearInterval(timer);

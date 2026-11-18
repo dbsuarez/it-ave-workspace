@@ -80,7 +80,7 @@ function renderSheetBar() {
   const open = sheetsState.open;
   const host = document.getElementById('sheet-bar-host');
   if (!open || !host) return;
-  host.innerHTML = sheetBarHtml({ sheet: open.sheet, status: open.sheet.role === 'viewer' ? 'viewing' : sheetsState.status });
+  host.innerHTML = sheetBarHtml({ sheet: open.sheet, status: open.sheet.role === 'viewer' ? 'viewing' : sheetsState.status, isOwner: open.isOwner });
 }
 
 function setSheetStatus(status) {
@@ -98,7 +98,7 @@ async function openSheet(id) {
     await ensureSheetGrid();
     if (sheetsState.open) await closeSheet();
     const data = await sheetJson(`/api/sheets/${id}`);
-    sheetsState.open = { id: Number(id), sheet: data.sheet, revision: data.sheet.revision, base: data.data };
+    sheetsState.open = { id: Number(id), sheet: data.sheet, revision: data.sheet.revision, base: data.data, isOwner: data.members !== undefined };
     sheetsState.status = 'saved';
     document.getElementById('sheets-home').hidden = true;
     document.getElementById('sheets-editor').hidden = false;
@@ -175,7 +175,99 @@ async function renameOpenSheet() {
   } catch (err) { showToast(err.message || 'Could not rename it.', 'error'); }
 }
 
+// ---- CSV in and out ----
+function downloadSheetFile(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = name;
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function exportSheetCsv() {
+  const open = sheetsState.open;
+  if (!open || !sheetsState.grid) return;
+  const tabs = sheetsState.grid.getTabs();
+  const tab = tabs[sheetsState.grid.activeIndex()] || tabs[0];
+  // a byte order mark so Excel reads accents and other languages correctly
+  downloadSheetFile(new Blob([`\uFEFF${rowsToCsv(tab.rows)}`], { type: 'text/csv;charset=utf-8' }), csvFileName(open.sheet.title, tab.name));
+}
+
+async function importSheetCsv(file) {
+  if (!file || !sheetsState.grid) return;
+  if (file.size > 5 * 1024 * 1024) { showToast('That file is too large (the limit is 5 MB).', 'error'); return; }
+  const rows = parseCsv(await file.text());
+  if (!rows.length) { showToast('There is nothing in that file to import.', 'info'); return; }
+  if (rows.length > 5000 || rows.some((row) => row.length > 200)) { showToast('A tab can have at most 5000 rows and 200 columns.', 'error'); return; }
+  const tabs = sheetsState.grid.getTabs();
+  const base = file.name.replace(/\.[^.]*$/, '').slice(0, 28).trim() || 'Imported';
+  let name = base;
+  for (let n = 2; tabs.some((tab) => tab.name.toLowerCase() === name.toLowerCase()); n += 1) name = `${base} ${n}`;
+  if (tabs.length >= 20) { showToast('A sheet can have at most 20 tabs.', 'error'); return; }
+  tabs.push({ id: `t${Math.random().toString(16).slice(2, 10)}`, name, rows });
+  sheetsState.grid.setTabs(tabs);
+  markSheetChanged();
+  showToast(`Imported ${rows.length} row${rows.length === 1 ? '' : 's'} as a new tab.`, 'success');
+}
+
+// ---- sharing and deleting (the owner's) ----
+async function openSheetShare() {
+  const open = sheetsState.open;
+  const modal = document.getElementById('sheet-share-modal');
+  if (!open || !modal) return;
+  try {
+    const data = await sheetJson(`/api/sheets/${open.id}`);
+    const people = (state.users || []).filter((user) => Number(user.id) !== Number(state.user.id) && user.accountType !== 'guest');
+    sheetsState.share = { people: employeeOptions(people.map((user) => ({ id: user.id, name: personName(user), username: user.username }))) };
+    modal.innerHTML = sheetShareHtml({ sheet: data.sheet, members: data.members || [], people: sheetsState.share.people.map((p) => p.label) });
+    openSettingsModal(modal);
+  } catch (err) { showToast(err.message || 'Could not open sharing.', 'error'); }
+}
+
+async function handleSheetShareClick(event) {
+  const open = sheetsState.open;
+  const modal = document.getElementById('sheet-share-modal');
+  if (!open || !modal) return;
+  const target = event.target;
+  try {
+    if (target.closest('[data-sheet-share-close]')) { closeSettingsModal(); return; }
+    const remove = target.closest('[data-sheet-member-remove]');
+    if (remove) { await sheetJson(`/api/sheets/${open.id}/members/${Number(remove.dataset.sheetMemberRemove)}`, { method: 'DELETE' }); await openSheetShare(); return; }
+    if (target.closest('[data-sheet-add]')) {
+      const id = headIdFromInput(modal.querySelector('[data-sheet-add-person]').value, sheetsState.share.people);
+      if (!id) { showToast('Pick the person from the list.', 'error'); return; }
+      await sheetJson(`/api/sheets/${open.id}/members/${id}`, { method: 'PUT', body: JSON.stringify({ role: modal.querySelector('[data-sheet-add-role]').value }) });
+      await openSheetShare();
+    }
+  } catch (err) { showToast(err.message || 'Could not change sharing.', 'error'); }
+}
+
+async function handleSheetShareChange(event) {
+  const open = sheetsState.open;
+  const select = event.target.closest && event.target.closest('[data-sheet-member-role]');
+  if (!open || !select) return;
+  try {
+    await sheetJson(`/api/sheets/${open.id}/members/${Number(select.dataset.sheetMemberRole)}`, { method: 'PUT', body: JSON.stringify({ role: select.value }) });
+  } catch (err) { showToast(err.message || 'Could not change the role.', 'error'); await openSheetShare(); }
+}
+
+async function deleteOpenSheet() {
+  const open = sheetsState.open;
+  if (!open) return;
+  if (!(await confirmAction({ title: 'Delete this sheet?', message: 'It is removed for everyone it was shared with. This cannot be undone.', confirmLabel: 'Delete sheet' }))) return;
+  try {
+    await sheetJson(`/api/sheets/${open.id}`, { method: 'DELETE' });
+    sheetsState.status = 'saved'; // nothing left to save
+    await closeSheet();
+    showToast('Sheet deleted.', 'success');
+  } catch (err) { showToast(err.message || 'Could not delete it.', 'error'); }
+}
+
 function setupSheets() {
+  const csvInput = document.getElementById('sheet-csv-input');
+  if (csvInput) csvInput.addEventListener('change', () => { const file = csvInput.files && csvInput.files[0]; csvInput.value = ''; importSheetCsv(file); });
+  const shareModal = document.getElementById('sheet-share-modal');
+  if (shareModal) { shareModal.addEventListener('click', handleSheetShareClick); shareModal.addEventListener('change', handleSheetShareChange); }
   document.addEventListener('click', (event) => {
     const target = event.target;
     const opener = target.closest && target.closest('[data-sheet-open]');
@@ -185,5 +277,9 @@ function setupSheets() {
     if (target.closest('#btn-sheets-new')) { startNewSheet(); return; }
     if (target.closest('[data-sheet-back]')) { closeSheet(); return; }
     if (target.closest('[data-sheet-rename]')) { renameOpenSheet(); return; }
+    if (target.closest('[data-sheet-export]')) { exportSheetCsv(); return; }
+    if (target.closest('[data-sheet-import]')) { document.getElementById('sheet-csv-input').click(); return; }
+    if (target.closest('[data-sheet-share]')) { openSheetShare(); return; }
+    if (target.closest('[data-sheet-delete]')) { deleteOpenSheet(); return; }
   });
 }
