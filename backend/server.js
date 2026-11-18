@@ -145,6 +145,7 @@ Promise.resolve()
   .then(() => migrations.reduce((chain, sql) => chain.then(() => db.query(sql)), Promise.resolve()))
   .then(() => require('./src/defaultChannels').ensureDefaultChannels(db))
   .then(() => require('./src/forums').ensureAllForums(db.query))
+  .then(() => { const roles = require('./src/departmentRoles'); return roles.reconcileEveryone(db.query).then((changes) => roles.announceRoleChanges(db.query, changes, { io })); })
   .then(() => {
     server.listen(PORT, () => {
       console.log(`IT Avenue Workspace backend running on port ${PORT}`);

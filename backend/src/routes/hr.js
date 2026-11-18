@@ -6,6 +6,7 @@ const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 const prelaunch = require('../prelaunch');
+const departmentRoles = require('../departmentRoles');
 const { fail, hrActor, canManageEmployees, requireHr, requireSuperadmin, temporaryPassword, applyChecklist } = require('../hr');
 
 const router = express.Router();
@@ -202,6 +203,7 @@ router.put('/employees/:id', async (req, res) => {
     const client = departmentChanged ? await pool.connect() : null;
     const run = client ? client.query.bind(client) : query;
     let row;
+    let roleChange = null;
     try {
       if (client) await run('BEGIN');
       const updated = await run(`UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} AND account_type = 'member' RETURNING id`, values);
@@ -216,6 +218,7 @@ router.put('/employees/:id', async (req, res) => {
             [id, requestedPrimaryDepartmentId]
           );
         }
+        roleChange = await departmentRoles.reconcileUser(run, id); // roles the departments give follow the membership
       }
       if (before && body.email !== undefined && before.email.toLowerCase() !== String(body.email).trim().toLowerCase()) {
         await run(
@@ -236,6 +239,9 @@ router.put('/employees/:id', async (req, res) => {
       throw err;
     } finally {
       if (client) client.release();
+    }
+    if (roleChange && (roleChange.added.length || roleChange.removed.length)) {
+      await departmentRoles.announceRoleChanges(query, [{ userId: id, ...roleChange }], { actorId: actor.id, io: req.io });
     }
     req.io?.to(`user_${id}`).emit('profile_updated', {}); // their account menu shows the new name, username or email
     res.json({ employee: mapEmployee(row) });
@@ -355,6 +361,8 @@ router.delete('/departments/:id', async (req, res) => {
     await forums.archiveForumForDepartment(query, id);
     const result = await query('DELETE FROM departments WHERE id = $1 RETURNING id', [id]);
     if (!result.rows.length) throw fail(404, 'Department not found');
+    // its rules and memberships went with it: take back the roles it gave
+    await departmentRoles.announceRoleChanges(query, await departmentRoles.reconcileEveryone(query), { actorId: req.user.userId, io: req.io, departmentId: id });
     res.json({ id });
   } catch (err) {
     sendError(res, err, 'Delete department error');

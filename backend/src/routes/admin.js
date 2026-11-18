@@ -7,6 +7,7 @@ const { query } = require('../db');
 const { passwordProblem } = require('../authLimits');
 const { hrActor, canManageEmployees, temporaryPassword, applyChecklist } = require('../hr');
 const prelaunch = require('../prelaunch');
+const departmentRoles = require('../departmentRoles');
 const ownerChannelAccess = require('../ownerChannelAccess');
 const { cleanEmployeeFields } = require('../accountFields');
 const authenticateToken = require('../middleware/auth');
@@ -331,6 +332,8 @@ router.post('/users', async (req, res) => {
           'INSERT INTO user_departments(user_id, department_id, is_primary) VALUES ($1, $2, true) ON CONFLICT (user_id, department_id) DO UPDATE SET is_primary = true',
           [userId, departmentId]
         );
+        const roleChange = await departmentRoles.reconcileUser(query, userId); // the roles the department gives
+        if (roleChange.added.length || roleChange.removed.length) await departmentRoles.announceRoleChanges(query, [{ userId, ...roleChange }], { actorId: req.user.userId, io: req.io });
       }
       if (fields.reportsTo) managerLinks.push({ userId, username, reportsTo: fields.reportsTo });
       for (const channelId of joinIds) {

@@ -6,6 +6,7 @@ const auth = require('../middleware/auth');
 const { can } = require('../permissions');
 const { positiveId } = require('../channelAccessPhase2');
 const { reconcileChannelRoom } = require('../channelRoomReconcile');
+const departmentRoles = require('../departmentRoles');
 const { refuseOwnerSelfGrant } = require('../ownerChannelAccess');
 const { idList, membershipInput, inviteInput, banInput } = require('../channelPolicyValidation');
 const router = express.Router();
@@ -149,6 +150,7 @@ router.put('/users/:userId/departments',async(req,res)=>{
     if(!(await can(query,req.user.userId,'manage_people'))) throw fail(403,'People management required');
     const {departmentIds,primary}=membershipInput(req.body);
     if(req.body?.confirmAccessChanges !== true) throw fail(400,'Confirm department-based channel access changes');
+    let roleChange = { added: [], removed: [] };
     await transaction(async client => {
       await verifyEmployees(client,[userId]);
       if(departmentIds.length) {
@@ -159,7 +161,9 @@ router.put('/users/:userId/departments',async(req,res)=>{
       for(const id of departmentIds) await client.query('INSERT INTO user_departments(user_id,department_id,is_primary) VALUES($1,$2,$3)',[userId,id,id===primary]);
       await client.query('UPDATE users SET department_id=$1 WHERE id=$2',[primary,userId]);
       await audit(client,null,req.user.userId,userId,'user_departments_changed',{departmentIds,primary});
+      roleChange = await departmentRoles.reconcileUser((text, params) => client.query(text, params), userId); // roles the departments give
     });
+    if (roleChange.added.length || roleChange.removed.length) await departmentRoles.announceRoleChanges(query, [{ userId, ...roleChange }], { actorId: req.user.userId, io: req.io });
     // Revalidate all sockets belonging to the edited employee; their old department
     // might have been their only channel grant.
     if (req.io) {

@@ -54,4 +54,16 @@ async function reconcileEveryone(query) {
   return reconcileMany(query, rows.map((row) => Number(row.user_id)));
 }
 
-module.exports = { reconcileUser, reconcileDepartment, reconcileEveryone };
+// Records changes in the audit log (a rule, not a person, made them: the actor is whoever changed the membership or the rule, or
+// nobody at start-up) and tells the people affected that their permissions changed.
+async function announceRoleChanges(query, changes, { actorId = null, io = null, departmentId = null } = {}) {
+  for (const change of changes) {
+    await query(
+      "INSERT INTO moderation_audit_log (channel_id, actor_id, target_user_id, action, details) VALUES (NULL, $1, $2, 'roles_assigned', $3)",
+      [actorId, change.userId, JSON.stringify({ added: change.added, removed: change.removed, source: 'department rule', departmentId })]
+    );
+    if (io) io.emit('permissions_updated', { userId: change.userId, byUserId: actorId });
+  }
+}
+
+module.exports = { reconcileUser, reconcileDepartment, reconcileEveryone, announceRoleChanges };
