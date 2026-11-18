@@ -65,6 +65,14 @@ for (const file of [...pages, ...styles]) {
   }
 }
 
+// The drawing editor bundle may only contain reviewed third-party addresses (scripts/drawing-hosts.js).
+try {
+  const { findOutsideAddresses } = require('./drawing-hosts');
+  for (const found of findOutsideAddresses(path.join(root, 'src', 'vendor'))) problems.push(`drawing bundle has an unreviewed address (${found}): review it in scripts/drawing-hosts.js`);
+} catch (err) {
+  problems.push(`drawing bundle check: ${err.message}`);
+}
+
 // The in-app Help is generated from docs/USER_GUIDE.md; a stale copy would show an old guide.
 try {
   const { generate, outPath } = require('./sync-help');
