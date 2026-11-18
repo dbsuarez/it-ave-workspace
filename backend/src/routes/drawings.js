@@ -22,7 +22,7 @@ function sendError(res, err, label) {
 }
 const context = (req) => ({ io: req.io, pool, query });
 
-const LIST_SQL = `SELECT d.id, d.title, d.owner_id, d.channel_id, d.topic_id, d.message_id, d.revision, d.created_at, d.updated_at, u.username AS owner_username`;
+const LIST_SQL = `SELECT d.id, d.title, d.owner_id, d.channel_id, d.topic_id, d.message_id, d.revision, d.created_at, d.updated_at, d.preview_at, u.username AS owner_username`;
 
 // GET /api/drawings?scope=mine|shared  or  ?channelId=<id>[&topicId=<id>]
 router.get('/', async (req, res) => {
@@ -82,11 +82,11 @@ router.get('/:id', async (req, res) => {
   try {
     const id = needId(req.params.id);
     const { drawing, role, readOnlyReason } = await requireDrawingRole(query, req.user.userId, id, 'viewer');
-    const full = (await query('SELECT scene, revision FROM drawings WHERE id = $1', [id])).rows[0];
+    const full = (await query('SELECT scene, revision, preview_at FROM drawings WHERE id = $1', [id])).rows[0];
     const files = (await query('SELECT file_key, mime FROM drawing_files WHERE drawing_id = $1 ORDER BY file_key', [id])).rows;
     const owner = (await query('SELECT username FROM users WHERE id = $1', [drawing.owner_id])).rows[0];
     const body = {
-      drawing: drawings.serializeDrawing({ ...drawing, revision: full.revision }, { role, readOnlyReason, ownerUsername: owner?.username }),
+      drawing: drawings.serializeDrawing({ ...drawing, revision: full.revision, preview_at: full.preview_at }, { role, readOnlyReason, ownerUsername: owner?.username }),
       scene: full.scene,
       files: files.map((file) => ({ key: file.file_key, mime: file.mime })),
       role, readOnlyReason,
@@ -202,6 +202,28 @@ router.get('/:id/files/:key', async (req, res) => {
     });
     res.send(file.bytes);
   } catch (err) { sendError(res, err, 'Get drawing image error'); }
+});
+
+// The picture on the drawing's card: an editor's client saves a small PNG after changes; anyone who can open the drawing sees it.
+router.put('/:id/preview', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    await requireDrawingRole(query, req.user.userId, id, 'editor');
+    const bytes = drawings.decodePreview(req.body);
+    const saved = (await query('UPDATE drawings SET preview = $2, preview_at = NOW() WHERE id = $1 RETURNING preview_at', [id, bytes])).rows[0];
+    res.json({ previewVersion: drawings.previewVersionOf(saved) });
+  } catch (err) { sendError(res, err, 'Save drawing preview error'); }
+});
+
+router.get('/:id/preview', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    await requireDrawingRole(query, req.user.userId, id, 'viewer');
+    const row = (await query('SELECT preview FROM drawings WHERE id = $1', [id])).rows[0];
+    if (!row || !row.preview) throw fail(404, 'This drawing has no preview yet');
+    res.set({ 'Content-Type': 'image/png', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=300' });
+    res.send(row.preview);
+  } catch (err) { sendError(res, err, 'Get drawing preview error'); }
 });
 
 module.exports = router;

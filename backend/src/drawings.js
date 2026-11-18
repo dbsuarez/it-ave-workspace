@@ -32,6 +32,22 @@ function decodeImage(file) {
   return { key: file.key, mime: file.mime, bytes };
 }
 
+const MAX_PREVIEW_BYTES = 300 * 1024;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// The card preview from a request: { dataBase64 } -> Buffer of a PNG, at most 300 KB; throws 400.
+function decodePreview(body) {
+  const data = body && body.dataBase64;
+  if (typeof data !== 'string' || !data || data.length % 4 !== 0 || !BASE64_PATTERN.test(data)) throw fail(400, 'The preview data is not valid');
+  if (data.length > Math.ceil((MAX_PREVIEW_BYTES * 4) / 3) + 8) throw fail(400, 'A preview can be at most 300 KB');
+  const bytes = Buffer.from(data, 'base64');
+  if (bytes.length > MAX_PREVIEW_BYTES) throw fail(400, 'A preview can be at most 300 KB');
+  if (bytes.length < PNG_SIGNATURE.length || !bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) throw fail(400, 'A preview must be a PNG picture');
+  return bytes;
+}
+
+const previewVersionOf = (row) => (row.preview_at ? new Date(row.preview_at).getTime() : null);
+
 function decodeImages(files) {
   if (files === undefined) return [];
   if (!Array.isArray(files) || files.length > MAX_FILES_PER_REQUEST) throw fail(400, 'files must be a list of pictures');
@@ -47,16 +63,16 @@ function serializeDrawing(row, { role = null, readOnlyReason = null, ownerUserna
   return {
     id: Number(row.id), title: row.title, kind: kindOf(row), ownerId: row.owner_id, ownerUsername: ownerUsername || row.owner_username || null,
     channelId: row.channel_id, topicId: row.topic_id, messageId: row.message_id, revision: row.revision,
-    createdAt: row.created_at, updatedAt: row.updated_at, role, readOnlyReason,
+    createdAt: row.created_at, updatedAt: row.updated_at, role, readOnlyReason, previewVersion: previewVersionOf(row),
   };
 }
 
-// The cards of drawings, for message history: Map(messageId -> { id, title }). A removed drawing has no entry.
+// The cards of drawings, for message history: Map(messageId -> { id, title, previewVersion }). A removed drawing has no entry.
 async function drawingsForMessages(query, messageIds) {
   const byMessage = new Map();
   if (!messageIds.length) return byMessage;
-  const rows = (await query('SELECT id, title, message_id FROM drawings WHERE message_id = ANY($1::int[])', [messageIds])).rows;
-  for (const row of rows) byMessage.set(row.message_id, { id: Number(row.id), title: row.title });
+  const rows = (await query('SELECT id, title, message_id, preview_at FROM drawings WHERE message_id = ANY($1::int[])', [messageIds])).rows;
+  for (const row of rows) byMessage.set(row.message_id, { id: Number(row.id), title: row.title, previewVersion: previewVersionOf(row) });
   return byMessage;
 }
 
@@ -155,6 +171,6 @@ async function mayDeleteDrawing(query, userId, drawing) {
 }
 
 module.exports = {
-  MAX_TITLE, IMAGE_TYPES, cleanTitle, decodeImage, decodeImages, validateScene, serializeDrawing, kindOf,
+  MAX_TITLE, IMAGE_TYPES, cleanTitle, decodeImage, decodeImages, decodePreview, MAX_PREVIEW_BYTES, previewVersionOf, validateScene, serializeDrawing, kindOf,
   drawingsForMessages, createDrawing, copyDrawing, deleteDrawing, mayDeleteDrawing,
 };

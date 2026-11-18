@@ -33,7 +33,7 @@ const draw = async (title, extra = {}) => (await q(
 
 test('the drawing tables have the agreed columns, and running the migrations again changes nothing', async (t) => {
   if (skip(t)) return;
-  assert.deepEqual(await cols('drawings'), ['channel_id', 'created_at', 'id', 'message_id', 'owner_id', 'revision', 'scene', 'title', 'topic_id', 'updated_at', 'updated_by']);
+  assert.deepEqual(await cols('drawings'), ['channel_id', 'created_at', 'id', 'message_id', 'owner_id', 'preview', 'preview_at', 'revision', 'scene', 'title', 'topic_id', 'updated_at', 'updated_by']);
   assert.deepEqual(await cols('drawing_members'), ['drawing_id', 'role', 'user_id']);
   assert.deepEqual(await cols('drawing_files'), ['bytes', 'drawing_id', 'file_key', 'mime']);
   await scratch.applyMigrations(db);

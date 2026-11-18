@@ -272,3 +272,43 @@ test('deleting: the owner any time, a channel or forum moderator for others (aud
   assert.equal((await call('ann', 'DELETE', `drawings/${own}`)).status, 200, 'its creator');
   assert.equal((await admin.query("SELECT 1 FROM moderation_audit_log WHERE action = 'drawing_deleted' AND details->>'drawingId' = $1", [String(own)])).rows.length, 0, 'the owner deleting their own is not a moderation action');
 });
+
+// ---------------------------------------------------------------------------------------- the picture shown on a drawing's card
+const pngBytes = (size) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(Math.max(0, size - 8), 7)]);
+
+test('a card preview: an editor saves a small PNG, everyone who can open the drawing sees the same bytes, and the card knows its version', async (t) => {
+  if (skip(t)) return;
+  const made = await create('ann', { title: 'Rack layout', channelId: ids.chan });
+  const id = made.json.drawing.id;
+  assert.equal(made.json.drawing.previewVersion, null, 'a new drawing has no preview');
+  assert.equal((await call('bob', 'GET', `drawings/${id}/preview`)).status, 404);
+  const saved = await call('ann', 'PUT', `drawings/${id}/preview`, { dataBase64: pngBytes(2000).toString('base64') });
+  assert.equal(saved.status, 200, JSON.stringify(saved.json));
+  assert.equal(typeof saved.json.previewVersion, 'number');
+  const response = await fetch(`${baseUrl}/api/drawings/${id}/preview`, { headers: { Authorization: `Bearer ${token(ids.bob)}` } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'image/png');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), pngBytes(2000));
+  assert.equal((await call('bob', 'GET', `drawings/${id}`)).json.drawing.previewVersion, saved.json.previewVersion);
+  const history = (await call('bob', 'GET', `messages/${ids.chan}`)).json.messages.find((m) => m.drawing && m.drawing.id === id);
+  assert.equal(history.drawing.previewVersion, saved.json.previewVersion, 'the card in the channel history carries it');
+  const newer = await call('ann', 'PUT', `drawings/${id}/preview`, { dataBase64: pngBytes(3000).toString('base64') });
+  assert.ok(newer.json.previewVersion >= saved.json.previewVersion);
+});
+
+test('a card preview: viewers and outsiders cannot change or read it, and anything that is not a small PNG is refused', async (t) => {
+  if (skip(t)) return;
+  const own = (await create('ann', { title: 'Private sketch' })).json.drawing.id;
+  await call('ann', 'PUT', `drawings/${own}/members/${ids.bob}`, { role: 'viewer' });
+  const body = { dataBase64: pngBytes(500).toString('base64') };
+  assert.equal((await call('bob', 'PUT', `drawings/${own}/preview`, body)).status, 403, 'a viewer');
+  assert.equal((await call('cara', 'PUT', `drawings/${own}/preview`, body)).status, 403, 'an outsider');
+  assert.equal((await call('ann', 'PUT', `drawings/${own}/preview`, body)).status, 200);
+  assert.equal((await call('bob', 'GET', `drawings/${own}/preview`)).status, 200, 'a viewer may look');
+  assert.equal((await call('cara', 'GET', `drawings/${own}/preview`)).status, 403, 'an outsider may not');
+  assert.equal((await call('ann', 'PUT', `drawings/${own}/preview`, { dataBase64: Buffer.from('<svg onload=alert(1)>').toString('base64') })).status, 400, 'not a PNG');
+  assert.equal((await call('ann', 'PUT', `drawings/${own}/preview`, { dataBase64: pngBytes(300 * 1024 + 1).toString('base64') })).status, 400, 'too large');
+  assert.equal((await call('ann', 'PUT', `drawings/${own}/preview`, {})).status, 400, 'nothing sent');
+  assert.equal((await call('ann', 'PUT', `drawings/${own}/preview`, { dataBase64: 'not base64 !!' })).status, 400);
+});

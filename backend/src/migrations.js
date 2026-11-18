@@ -935,4 +935,7 @@ $$`,
      PRIMARY KEY (department_id, role_id)
    )`,
   `ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS auto BOOLEAN NOT NULL DEFAULT false`,
+  // The picture shown on a drawing's card: a small PNG the editing client saves after changes.
+  `ALTER TABLE drawings ADD COLUMN IF NOT EXISTS preview BYTEA`,
+  `ALTER TABLE drawings ADD COLUMN IF NOT EXISTS preview_at TIMESTAMPTZ`,
 ];
