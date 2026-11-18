@@ -8276,3 +8276,26 @@ body.theme-dark .notes-nav-item[aria-current="page"] { background: #41295a; }
 body.theme-dark .note-chip { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.08); }
 body.theme-dark .note-tool-btn:hover, body.theme-dark .note-pin:hover { background: rgba(255,255,255,0.14); }
 body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
+
+/* ---------- Polls: a compact card and the Create poll dialog ---------- */
+.poll-card { color: var(--text); white-space: normal; display: block; width: min(100%, 420px); max-width: none; padding: 10px 12px; box-sizing: border-box; }
+.poll-question { margin-bottom: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.poll-meta { margin-bottom: 6px; }
+.poll-row { margin-bottom: 4px; }
+.poll-option { padding: 6px 10px; color: var(--text); }
+.poll-footer { margin-top: 2px; }
+
+.poll-modal { width: min(480px, 94vw); }
+.poll-field-label { margin: 12px 0 6px; font-size: 13px; font-weight: 700; color: var(--text); }
+.poll-modal .poll-field-label:first-child { margin-top: 0; }
+.poll-field { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; outline: none; }
+.poll-field:focus { border-color: var(--purple); box-shadow: 0 0 0 1px var(--purple); }
+.poll-option-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.poll-remove { flex: 0 0 auto; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); font-size: 18px; cursor: pointer; }
+.poll-remove:hover { background: var(--muted-bg); color: var(--danger); }
+.poll-add-option { display: inline-flex; align-items: center; padding: 8px 4px; border: 0; background: transparent; color: var(--purple); font: inherit; font-weight: 700; cursor: pointer; }
+.poll-add-option:hover { text-decoration: underline; }
+.poll-settings { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.poll-switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.poll-end { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.poll-end select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }

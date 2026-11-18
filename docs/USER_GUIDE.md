@@ -31,7 +31,8 @@ A channel is a running conversation, shown with a **#**. A forum is a list of se
 Type **/** in a channel to see what you can use.
 - **/help** lists the commands available to you.
 - **/search words** searches, with the answer shown only to you.
-- **/poll "Question?" "Option A" "Option B"** starts a poll. Add `--multi` to let people pick several, `--anonymous` to hide who voted, and `--closes 2h` to close it automatically.
+- **The poll button** (the little bars icon in the message box) opens a **Create poll** window: type the question, fill in the options (press Enter for the next one, **+ Add option** for more, up to 10), choose **Allow multiple answers**, **Anonymous votes** and when the poll ends, then press **Create poll**. Once a poll has ended, voters show as small round pictures instead of names.
+- **/poll "Question?" "Option A" "Option B"** does the same from the keyboard. Add `--multi` to let people pick several, `--anonymous` to hide who voted, and `--closes 2h` to close it automatically.
 - **/announce text** posts an announcement. It only works in channels marked as announcement channels, and only for people who have the Announce permission. You see a preview first and confirm.
 
 Slash commands that post to everyone (**/poll** and **/announce**) do not work inside a forum, because a forum only takes posts inside topics.

@@ -1,7 +1,10 @@
-// IT Avenue Workspace - the interactive card shown for a message with kind 'poll'.
+// IT Avenue Workspace - polls: the interactive card shown for a message with kind 'poll', and the "Create poll" dialog.
 //
-// A pure function: poll data in, HTML out, every value escaped. Voting, withdrawing and closing are handled by
-// delegated click handlers in renderer.js, which read the data attributes written here. Loaded before renderer.js.
+// Pure functions: data in, HTML out, every value escaped. Voting, withdrawing and closing are handled by delegated click handlers
+// in renderer.js, and the dialog's behaviour by poll-dialog.js; both read the data attributes written here. Loaded before them.
+//
+// The card's markup has no line breaks or indentation between tags on purpose: chat text keeps whitespace, so any would show as
+// blank lines and make the poll tall.
 
 function pollEscape(value) {
   return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -36,9 +39,7 @@ function pollCardHtml(poll, { canClose = false, people = null } = {}) {
     const showAvatars = poll.closed && Array.isArray(option.voterIds) && option.voterIds.length;
     const voters = showAvatars ? pollAvatarsHtml(option, people)
       : (Array.isArray(option.voters) && option.voters.length ? `<small class="poll-voters">${option.voters.map(pollEscape).join(', ')}</small>` : '');
-    return `<div class="poll-row"><button type="button" class="poll-option${selected ? ' selected' : ''}" data-poll-vote="${id}" aria-pressed="${selected}"${poll.closed ? ' disabled' : ''}>
-        <span class="poll-bar" style="width:${percent}%"></span><span class="poll-label">${pollEscape(option.label)}</span><span class="poll-count">${count} (${percent}%)</span>
-      </button>${voters}</div>`;
+    return `<div class="poll-row"><button type="button" class="poll-option${selected ? ' selected' : ''}" data-poll-vote="${id}" aria-pressed="${selected}"${poll.closed ? ' disabled' : ''}><span class="poll-bar" style="width:${percent}%"></span><span class="poll-label">${pollEscape(option.label)}</span><span class="poll-count">${count} (${percent}%)</span></button>${voters}</div>`;
   }).join('');
   const meta = [
     poll.multiple ? 'Pick any' : 'Pick one',
@@ -48,14 +49,51 @@ function pollCardHtml(poll, { canClose = false, people = null } = {}) {
   const actions = !poll.closed
     ? `${mine.size ? '<button type="button" class="btn poll-action" data-poll-withdraw>Withdraw vote</button>' : ''}${canClose ? '<button type="button" class="btn poll-action" data-poll-close>Close poll</button>' : ''}`
     : '';
-  return `<div class="poll-card" data-poll-id="${Number(poll.id)}" data-poll-multiple="${poll.multiple ? 1 : 0}" data-poll-mine="${[...mine].sort((a, b) => a - b).join(',')}" data-poll-can-close="${canClose ? 1 : 0}">
-    <div class="poll-question">${pollEscape(poll.question)}</div>
-    <div class="poll-meta">${meta}</div>
-    <div class="poll-options">${options}</div>
-    <div class="poll-footer"><span>${total ? `${total} ${total === 1 ? 'person' : 'people'} voted` : 'No votes yet'}</span>${actions}</div>
-  </div>`;
+  return `<div class="poll-card" data-poll-id="${Number(poll.id)}" data-poll-multiple="${poll.multiple ? 1 : 0}" data-poll-mine="${[...mine].sort((a, b) => a - b).join(',')}" data-poll-can-close="${canClose ? 1 : 0}"><div class="poll-question">${pollEscape(poll.question)}</div><div class="poll-meta">${meta}</div><div class="poll-options">${options}</div><div class="poll-footer"><span>${total ? `${total} ${total === 1 ? 'person' : 'people'} voted` : 'No votes yet'}</span>${actions}</div></div>`;
+}
+
+// ---- the "Create poll" dialog (Messenger style: a question, options you add one by one, a few switches) ----
+const POLL_MAX_QUESTION = 200;
+const POLL_MAX_OPTION = 100;
+const POLL_MIN_OPTIONS = 2;
+const POLL_MAX_OPTIONS = 10;
+
+// The values are what the server's /poll accepts as durations (30 minutes to 30 days).
+const POLL_CLOSE_CHOICES = [
+  { value: '', label: 'Never' },
+  { value: '1h', label: 'In 1 hour' },
+  { value: '1d', label: 'In 1 day' },
+  { value: '3d', label: 'In 3 days' },
+  { value: '7d', label: 'In 1 week' },
+];
+
+const pollFilledOptions = (draft) => (draft.options || []).map((option) => String(option).trim()).filter(Boolean);
+
+// A question up to 200 characters and 2 to 10 options of up to 100 (boxes left empty do not count).
+function pollDraftValid(draft) {
+  const question = String(draft.question || '').trim();
+  const options = pollFilledOptions(draft);
+  return Boolean(question) && question.length <= POLL_MAX_QUESTION
+    && options.length >= POLL_MIN_OPTIONS && options.length <= POLL_MAX_OPTIONS && options.every((option) => option.length <= POLL_MAX_OPTION);
+}
+
+// What is sent to POST /api/polls.
+function pollDraftRequest(draft, channelId) {
+  const request = {
+    channelId: Number(channelId), question: String(draft.question || '').trim(), options: pollFilledOptions(draft),
+    multiple: Boolean(draft.multiple), anonymous: Boolean(draft.anonymous),
+  };
+  if (draft.closes) request.closes = draft.closes;
+  return request;
+}
+
+function pollDialogHtml(draft) {
+  const options = draft.options && draft.options.length ? draft.options : ['', ''];
+  const rows = options.map((option, index) => `<div class="poll-option-row"><input type="text" class="poll-field" data-poll-option="${index}" maxlength="${POLL_MAX_OPTION}" placeholder="Option ${index + 1}" aria-label="Option ${index + 1}" value="${pollEscape(option)}">${options.length > POLL_MIN_OPTIONS ? `<button type="button" class="poll-remove" data-poll-remove-option="${index}" title="Remove option" aria-label="Remove option ${index + 1}">&times;</button>` : ''}</div>`).join('');
+  const closes = POLL_CLOSE_CHOICES.map((choice) => `<option value="${choice.value}"${choice.value === (draft.closes || '') ? ' selected' : ''}>${choice.label}</option>`).join('');
+  return `<div class="modal open poll-modal" role="dialog" aria-modal="true" aria-label="Create poll"><div class="modal-header"><h3>Create poll</h3><button class="modal-close" type="button" data-poll-cancel aria-label="Close">&times;</button></div><div class="modal-body"><label class="poll-field-label" for="poll-question">Question</label><input id="poll-question" type="text" class="poll-field" data-poll-question maxlength="${POLL_MAX_QUESTION}" placeholder="Ask a question..." value="${pollEscape(draft.question || '')}"><div class="poll-field-label">Options</div>${rows}${options.length < POLL_MAX_OPTIONS ? '<button type="button" class="poll-add-option" data-poll-add-option>+ Add option</button>' : ''}<div class="poll-settings"><label class="poll-switch"><input type="checkbox" data-poll-multiple${draft.multiple ? ' checked' : ''}><span>Allow multiple answers</span></label><label class="poll-switch"><input type="checkbox" data-poll-anonymous${draft.anonymous ? ' checked' : ''}><span>Anonymous votes</span></label><label class="poll-end"><span>Poll ends</span><select data-poll-closes>${closes}</select></label></div></div><div class="modal-footer"><button type="button" class="btn" data-poll-cancel>Cancel</button><button type="button" class="btn primary" data-poll-create${pollDraftValid(draft) ? '' : ' disabled'}>Create poll</button></div></div>`;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { pollCardHtml };
+  module.exports = { pollCardHtml, pollDialogHtml, pollDraftValid, pollDraftRequest, POLL_CLOSE_CHOICES };
 }

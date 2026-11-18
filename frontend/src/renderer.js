@@ -596,6 +596,7 @@ function setupEventListeners() {
   setupHelp();
   setupDrawings();
   setupNotes();
+  setupPollDialog();
 
   // Compose
   on('btn-compose', 'click', () => els.messageInput?.focus());

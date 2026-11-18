@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { pollCardHtml } = require('../src/features/polls');
+const { pollCardHtml, pollDialogHtml, pollDraftValid, pollDraftRequest, POLL_CLOSE_CHOICES } = require('../src/features/polls');
 
 const poll = (overrides = {}) => ({
   id: 7, question: 'Lunch on Friday?', multiple: false, anonymous: false, closed: false, closesAt: null, myOptionIds: [2], totalVoters: 4,
@@ -123,4 +123,65 @@ test('a closed poll from a server that sends no ids falls back to the names', ()
 test('avatar names are escaped', () => {
   const html = pollCardHtml(closedPoll(), { people: () => ({ name: '"><img src=x>', avatarColor: '#000000' }) });
   assert.doesNotMatch(html, /<img/);
+});
+
+test('the card has no line breaks or indentation between its tags, because chat text keeps them as blank lines (that made polls tall)', () => {
+  for (const html of [pollCardHtml(poll()), pollCardHtml(poll({ closed: true })), pollCardHtml(poll({ totalVoters: 0, myOptionIds: [] }))]) {
+    assert.doesNotMatch(html, /\n/);
+    assert.doesNotMatch(html, />\s+</);
+  }
+});
+
+const draft = (extra = {}) => ({ question: 'Lunch?', options: ['Pizza', 'Sushi'], multiple: false, anonymous: false, closes: '', ...extra });
+
+test('the create-poll dialog has a question box, two option boxes to start, switches, an end time and a Create button', () => {
+  const html = pollDialogHtml(draft());
+  assert.match(html, /data-poll-question/);
+  assert.equal((html.match(/data-poll-option="/g) || []).length, 2);
+  assert.match(html, /data-poll-add-option/);
+  assert.match(html, /data-poll-multiple/);
+  assert.match(html, /data-poll-anonymous/);
+  assert.match(html, /data-poll-closes/);
+  assert.match(html, /data-poll-create(?![-\w])/);
+  assert.match(html, /Create poll/);
+});
+
+test('more options can be added up to ten, and extra ones can be removed but never below two', () => {
+  const three = pollDialogHtml(draft({ options: ['a', 'b', 'c'] }));
+  assert.equal((three.match(/data-poll-remove-option="/g) || []).length, 3);
+  assert.equal((pollDialogHtml(draft()).match(/data-poll-remove-option="/g) || []).length, 0);
+  const ten = pollDialogHtml(draft({ options: Array.from({ length: 10 }, (_, i) => `o${i}`) }));
+  assert.doesNotMatch(ten, /data-poll-add-option/);
+});
+
+test('the Create button is off until there is a question and two real options, and the dialog shows what was typed, escaped', () => {
+  assert.match(pollDialogHtml(draft({ question: '' })), /data-poll-create[^>]*disabled/);
+  assert.match(pollDialogHtml(draft({ options: ['only', ''] })), /data-poll-create[^>]*disabled/);
+  assert.doesNotMatch(pollDialogHtml(draft()), /data-poll-create[^>]*disabled/);
+  const html = pollDialogHtml(draft({ question: '"><script>x</script>', options: ['<b>a</b>', 'b'], multiple: true, anonymous: true, closes: '1d' }));
+  assert.doesNotMatch(html, /<script>|<b>/);
+  assert.match(html, /data-poll-multiple[^>]*checked/);
+  assert.match(html, /data-poll-anonymous[^>]*checked/);
+  assert.match(html, /<option value="1d" selected>/);
+});
+
+test('a draft is valid with a question up to 200 characters and 2 to 10 options of up to 100, blank boxes ignored', () => {
+  assert.equal(pollDraftValid(draft()), true);
+  assert.equal(pollDraftValid(draft({ options: ['a', '', '  ', 'b'] })), true, 'blank boxes do not count');
+  assert.equal(pollDraftValid(draft({ options: ['a', ' '] })), false);
+  assert.equal(pollDraftValid(draft({ question: ' ' })), false);
+  assert.equal(pollDraftValid(draft({ question: 'x'.repeat(201) })), false);
+  assert.equal(pollDraftValid(draft({ options: ['a', 'x'.repeat(101)] })), false);
+  assert.equal(pollDraftValid(draft({ options: Array.from({ length: 11 }, (_, i) => `o${i}`) })), false);
+});
+
+test('the request sent to the server is trimmed, drops blank boxes and carries the switches and the end time', () => {
+  assert.deepEqual(pollDraftRequest(draft({ question: '  Lunch?  ', options: [' Pizza ', '', 'Sushi'], multiple: true, anonymous: true, closes: '1h' }), 12),
+    { channelId: 12, question: 'Lunch?', options: ['Pizza', 'Sushi'], multiple: true, anonymous: true, closes: '1h' });
+  assert.equal('closes' in pollDraftRequest(draft(), 3), false, 'no end time is left out');
+});
+
+test('the end-time choices start with never and all fit what the server accepts', () => {
+  assert.equal(POLL_CLOSE_CHOICES[0].value, '');
+  for (const choice of POLL_CLOSE_CHOICES.slice(1)) assert.match(choice.value, /^\d{1,4}[mhd]$/);
 });

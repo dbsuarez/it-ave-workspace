@@ -353,3 +353,62 @@ test('the pinned list says what a pinned poll or announcement is', async (t) => 
   const pins = (await call(ids.bob, 'GET', `/api/messages/${ch}/pins`)).json.messages;
   assert.deepEqual(pins.map((m) => [m.content, m.kind]).sort(), [['All hands at 3', 'announcement'], ['Lunch?', 'poll'], ['plain one', 'message']]);
 });
+
+// ------------------------------------------------------------------------------------------- creating a poll from the dialog
+const create = (userId, body) => call(userId, 'POST', '/api/polls', body);
+
+test('the poll dialog creates the same poll as /poll: one message with its options and flags', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const before = emitted.length;
+  const made = await create(ids.alice, { channelId: ch, question: '  Lunch on Friday?  ', options: ['Pizza', ' Sushi ', 'Salad'], multiple: true, anonymous: true, closes: '1d' });
+  assert.equal(made.status, 201, JSON.stringify(made.json));
+  const row = (await admin.query('SELECT id, question, multiple, anonymous, closes_at, created_by FROM polls WHERE channel_id = $1', [ch])).rows;
+  assert.equal(row.length, 1);
+  assert.deepEqual([row[0].question, row[0].multiple, row[0].anonymous, row[0].created_by], ['Lunch on Friday?', true, true, ids.alice]);
+  const hoursAhead = (new Date(row[0].closes_at).getTime() - Date.now()) / 3600000;
+  assert.ok(hoursAhead > 23.9 && hoursAhead < 24.1, 'closes in a day');
+  assert.deepEqual((await options(row[0].id)).map((o) => o.label), ['Pizza', 'Sushi', 'Salad']);
+  const message = (await admin.query("SELECT kind, content, user_id FROM messages WHERE channel_id = $1 AND kind = 'poll'", [ch])).rows;
+  assert.deepEqual(message.map((m) => [m.kind, m.content, m.user_id]), [['poll', 'Lunch on Friday?', ids.alice]]);
+  assert.ok(emitted.slice(before).some((e) => e.event === 'new_message' && e.payload.poll && e.payload.poll.question === 'Lunch on Friday?'), 'the channel is told');
+  assert.equal(made.json.message.poll.question, 'Lunch on Friday?');
+});
+
+test('the dialog defaults: single choice, named votes, no closing time', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  assert.equal((await create(ids.alice, { channelId: ch, question: 'Q?', options: ['a', 'b'] })).status, 201);
+  const row = (await admin.query('SELECT multiple, anonymous, closes_at FROM polls WHERE channel_id = $1', [ch])).rows[0];
+  assert.deepEqual([row.multiple, row.anonymous, row.closes_at], [false, false, null]);
+});
+
+test('the dialog refuses bad polls before anything is posted', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const bad = [
+    { question: '', options: ['a', 'b'] }, { question: '   ', options: ['a', 'b'] }, { options: ['a', 'b'] },
+    { question: 'x'.repeat(201), options: ['a', 'b'] },
+    { question: 'Q?', options: ['only one'] }, { question: 'Q?', options: [] }, { question: 'Q?' }, { question: 'Q?', options: 'a,b' },
+    { question: 'Q?', options: Array.from({ length: 11 }, (_, i) => `o${i}`) },
+    { question: 'Q?', options: ['a', ''] }, { question: 'Q?', options: ['a', '   '] }, { question: 'Q?', options: ['a', 'x'.repeat(101)] },
+    { question: 'Q?', options: ['a', 'b'], closes: '2 weeks' }, { question: 'Q?', options: ['a', 'b'], closes: '31d' },
+    { question: 5, options: ['a', 'b'] },
+  ];
+  for (const body of bad) assert.equal((await create(ids.alice, { channelId: ch, ...body })).status, 400, JSON.stringify(body).slice(0, 60));
+  assert.equal((await create(ids.alice, { question: 'Q?', options: ['a', 'b'] })).status, 400, 'no channel');
+  assert.equal((await create(ids.alice, { channelId: 'x', question: 'Q?', options: ['a', 'b'] })).status, 400);
+  assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM polls WHERE channel_id = $1', [ch])).rows[0].n, 0);
+});
+
+test('the dialog follows the same rules as /poll: members only, no guests, not in the HR channel, not in an archived channel', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const body = { channelId: ch, question: 'Q?', options: ['a', 'b'] };
+  assert.equal((await create(ids.guest, body)).status, 403, 'a guest');
+  assert.equal((await create(ids.outsider, body)).status, 403, 'not a member');
+  assert.equal((await create(ids.alice, { ...body, channelId: ids.hr })).status, 403, 'not in #hr-inquiry');
+  await admin.query('UPDATE channels SET archived_at = NOW() WHERE id = $1', [ch]);
+  assert.equal((await create(ids.alice, body)).status, 409, 'archived');
+  assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM polls WHERE channel_id = $1', [ch])).rows[0].n, 0);
+});

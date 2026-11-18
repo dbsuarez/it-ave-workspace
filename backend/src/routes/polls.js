@@ -4,6 +4,7 @@ const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership, ensureChannelModerator, ensureChannelNotArchived } = require('../security');
 const polls = require('../polls');
+const { ensureNotGuest } = require('../guests');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -16,6 +17,27 @@ function sendError(res, err, label) {
 }
 // Clients refetch their own view when told a poll changed, so the event carries ids only (never votes or voters).
 const announceChange = (req, poll) => req.io?.to(`channel_${poll.channel_id}`).emit('poll_updated', { pollId: Number(poll.id), channelId: poll.channel_id });
+
+// Creates a poll from the dialog (the same rules as /poll): { channelId, question, options, multiple?, anonymous?, closes? } where
+// closes is a duration like 1h, 1d or 7d. Posts the poll message into the channel.
+router.post('/', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const userId = req.user.userId;
+    const channelId = parseId(body.channelId);
+    if (!channelId) throw Object.assign(new Error('A channel is required'), { status: 400 });
+    await ensureChannelMembership(query, userId, channelId);
+    await ensureNotGuest(query, userId, 'Guest accounts cannot create polls');
+    const channel = (await query('SELECT command_scope FROM channels WHERE id = $1', [channelId])).rows[0];
+    if (channel && channel.command_scope === 'hr-inquiry') throw Object.assign(new Error('Polls are not available in this channel'), { status: 403 });
+    const valid = polls.validateNewPoll({ question: body.question, options: body.options });
+    const closesAt = body.closes === undefined || body.closes === null || body.closes === '' ? null : new Date(Date.now() + polls.parseDuration(body.closes));
+    const message = await polls.createPoll(req.io, query, {
+      userId, channelId, question: valid.question, options: valid.options, multiple: body.multiple === true, anonymous: body.anonymous === true, closesAt,
+    });
+    res.status(201).json({ message });
+  } catch (err) { sendError(res, err, 'Create poll error'); }
+});
 
 router.get('/:pollId', async (req, res) => {
   try {
