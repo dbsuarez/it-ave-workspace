@@ -8185,7 +8185,7 @@ body .ttd-dialog .ttd-template-restore[hidden] { display: none; }
 .notes-empty h2 { margin: 0 0 6px; font-size: 18px; color: var(--text); }
 .notes-trash-bar { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 16px; color: var(--text-muted); font-size: 13px; }
 
-.note-card { position: relative; display: block; break-inside: avoid; margin: 0 0 16px; padding: 12px 14px 8px; border: 1px solid var(--border); border-radius: 10px; background: #fff; cursor: pointer; overflow: hidden; }
+.note-card { position: relative; display: block; break-inside: avoid; margin: 0 0 16px; padding: 12px 14px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); cursor: pointer; overflow: hidden; }
 .note-card:hover { box-shadow: 0 1px 6px rgba(0,0,0,0.28); }
 .note-card-image { display: block; width: calc(100% + 28px); max-height: 220px; margin: -12px -14px 10px; object-fit: cover; }
 .note-card-title { font-weight: 700; font-size: 15px; padding-right: 26px; margin-bottom: 6px; overflow-wrap: anywhere; }
@@ -8207,7 +8207,7 @@ body .ttd-dialog .ttd-template-restore[hidden] { display: none; }
 .note-tool-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
 .note-tool-btn:hover { background: rgba(0,0,0,0.08); color: var(--text); }
 
-.note-color-default { background: #ffffff; }
+.note-color-default { background: var(--surface); }
 .note-color-red { background: #faafa8; }
 .note-color-orange { background: #f39f76; }
 .note-color-yellow { background: #fff8b8; }
@@ -8259,3 +8259,20 @@ body .ttd-dialog .ttd-template-restore[hidden] { display: none; }
 .note-editor-toolbar { display: flex; align-items: center; gap: 2px; padding: 6px 8px 8px; flex-wrap: wrap; }
 .note-toolbar-spacer { flex: 1 1 auto; }
 .note-editor-card .note-popover { bottom: 52px; left: 12px; }
+
+/* Notes in the dark theme: Keep's dark colours, light text, softer chips and hover */
+body.theme-dark .note-color-red { background: #77172e; }
+body.theme-dark .note-color-orange { background: #692b17; }
+body.theme-dark .note-color-yellow { background: #7c4a03; }
+body.theme-dark .note-color-green { background: #264d3b; }
+body.theme-dark .note-color-teal { background: #0c625d; }
+body.theme-dark .note-color-blue { background: #256377; }
+body.theme-dark .note-color-darkblue { background: #284255; }
+body.theme-dark .note-color-purple { background: #472e5b; }
+body.theme-dark .note-color-pink { background: #6c394f; }
+body.theme-dark .note-color-brown { background: #4b443a; }
+body.theme-dark .note-color-gray { background: #232427; }
+body.theme-dark .notes-nav-item[aria-current="page"] { background: #41295a; }
+body.theme-dark .note-chip { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.08); }
+body.theme-dark .note-tool-btn:hover, body.theme-dark .note-pin:hover { background: rgba(255,255,255,0.14); }
+body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
