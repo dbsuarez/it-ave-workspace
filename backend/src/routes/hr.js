@@ -1,6 +1,7 @@
 // Employee management: records (employee number, hire date, status, type, department), departments, the HR
 // role, and a CSV export. Open to the Superadmin and to HR; departments can be read by every member.
 const express = require('express');
+const forums = require('../forums');
 const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
@@ -312,6 +313,7 @@ router.post('/departments', async (req, res) => {
     const headId = await headIdFrom(req.body || {});
     if ((await query('SELECT 1 FROM departments WHERE LOWER(name) = LOWER($1)', [name])).rows.length) throw fail(409, 'There is already a department with that name');
     const created = await query('INSERT INTO departments (name, head_id) VALUES ($1, $2) RETURNING id', [name, headId === undefined ? null : headId]);
+    try { await forums.ensureDepartmentForum(query, created.rows[0].id); } catch (forumError) { console.error('Create department forum error (it is created again at the next start):', forumError); }
     const row = (await query(`${DEPARTMENT_SELECT} WHERE d.id = $1`, [created.rows[0].id])).rows[0];
     res.status(201).json({ department: mapDepartment(row) });
   } catch (err) {
@@ -336,6 +338,8 @@ router.put('/departments/:id', async (req, res) => {
     const headId = await headIdFrom(body);
     await query('UPDATE departments SET name = $1, head_id = CASE WHEN $2::boolean THEN $3 ELSE head_id END WHERE id = $4', [name, headId !== undefined, headId === undefined ? null : headId, id]);
     if (name !== existing.name) await query('UPDATE users SET department = $1 WHERE department_id = $2', [name, id]);
+    await forums.renameForum(query, id);
+    await forums.syncForumHead(query, id);
     const row = (await query(`${DEPARTMENT_SELECT} WHERE d.id = $1`, [id])).rows[0];
     res.json({ department: mapDepartment(row) });
   } catch (err) {
@@ -349,6 +353,7 @@ router.delete('/departments/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid department ID is required');
     await query("UPDATE users SET department = '' WHERE department_id = $1", [id]);
+    await forums.archiveForumForDepartment(query, id);
     const result = await query('DELETE FROM departments WHERE id = $1 RETURNING id', [id]);
     if (!result.rows.length) throw fail(404, 'Department not found');
     res.json({ id });
@@ -395,7 +400,8 @@ router.post('/employees/:id/deactivate', async (req, res) => {
     const moved = await query('UPDATE users SET manager_id = $1 WHERE manager_id = $2 RETURNING id', [target.manager_id, id]);
     for (const report of moved.rows) await syncReportTeamChannels(query, report.id, id, target.manager_id);
     await query('DELETE FROM user_secondary_managers WHERE user_id = $1 OR manager_id = $1', [id]);
-    await query('UPDATE departments SET head_id = NULL WHERE head_id = $1', [id]);
+    const headed = await query('UPDATE departments SET head_id = NULL WHERE head_id = $1 RETURNING id', [id]);
+    for (const row of headed.rows) await forums.syncForumHead(query, row.id);
     await applyChecklist(id, 'offboarding');
     req.io?.in(`user_${id}`).disconnectSockets(true);
     req.io?.emit('team_sections_updated');

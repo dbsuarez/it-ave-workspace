@@ -39,17 +39,22 @@ async function syncForumHead(query, departmentId) {
   return channelId;
 }
 
+// dept-<name>, or dept-<name>-<id> when another channel already has that name.
+async function pickForumName(query, department, excludeChannelId = null) {
+  const name = forumChannelName(department.name, department.id);
+  const clash = await query('SELECT 1 FROM channels WHERE name = $1 AND id IS DISTINCT FROM $2', [name, excludeChannelId]);
+  if (!clash.rows.length) return name;
+  const suffix = `-${department.id}`;
+  return `${name.slice(0, MAX_NAME - suffix.length).replace(/-+$/, '')}${suffix}`;
+}
+
 // Creates the department's forum (private, slow mode 0, the department grant, the head as moderator) unless it exists.
 async function ensureDepartmentForum(query, departmentId) {
   const existing = await forumChannelIdFor(query, departmentId);
   if (existing) return existing;
   const department = (await query('SELECT id, name FROM departments WHERE id = $1', [departmentId])).rows[0];
   if (!department) throw fail(404, 'Department not found');
-  let name = forumChannelName(department.name, department.id);
-  if ((await query('SELECT 1 FROM channels WHERE name = $1', [name])).rows.length) {
-    const suffix = `-${department.id}`;
-    name = `${name.slice(0, MAX_NAME - suffix.length).replace(/-+$/, '')}${suffix}`;
-  }
+  const name = await pickForumName(query, department);
   const created = await query(
     `INSERT INTO channels (name, topic, is_private, is_personal, available_to_all, kind, forum_department_id, slowmode_seconds, created_by)
      VALUES ($1, $2, TRUE, FALSE, FALSE, 'forum', $3, 0, NULL)
@@ -63,6 +68,25 @@ async function ensureDepartmentForum(query, departmentId) {
   return channelId;
 }
 
+// Keeps the forum's name (and description) in step with the department's name.
+async function renameForum(query, departmentId) {
+  const channelId = await forumChannelIdFor(query, departmentId);
+  if (!channelId) return null;
+  const department = (await query('SELECT id, name FROM departments WHERE id = $1', [departmentId])).rows[0];
+  if (!department) return channelId;
+  await query('UPDATE channels SET name = $2, topic = $3 WHERE id = $1', [channelId, await pickForumName(query, department, channelId), `Topics for ${department.name}`]);
+  return channelId;
+}
+
+// A deleted department's forum is archived (read-only, content kept) and detached; an Owner may delete it later.
+async function archiveForumForDepartment(query, departmentId) {
+  const archived = await query(
+    'UPDATE channels SET archived_at = COALESCE(archived_at, NOW()), forum_department_id = NULL WHERE forum_department_id = $1 RETURNING id',
+    [departmentId]
+  );
+  return archived.rows.length ? archived.rows[0].id : null;
+}
+
 // Creates the forum of every department that lacks one. Returns how many were created.
 async function ensureAllForums(query) {
   const missing = await query(
@@ -72,4 +96,4 @@ async function ensureAllForums(query) {
   return missing.rows.length;
 }
 
-module.exports = { forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead };
+module.exports = { forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };
