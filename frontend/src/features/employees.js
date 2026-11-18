@@ -386,17 +386,21 @@ function openDepartments() {
   const modal = document.getElementById('departments-modal');
   if (!modal) return;
   const members = employeeState.list;
-  const headSelect = (d) => `<select data-dept-head aria-label="Head of ${escapeText(d.name)}"><option value="">No head</option>${members.map((m) => `<option value="${m.id}"${d.headId === m.id ? ' selected' : ''}>${escapeText(employeeFullName(m))}</option>`).join('')}</select>`;
+  // the head is chosen by typing: an alphabetical, searchable list of everyone (see employeeOptions)
+  const options = employeeOptions(members.map((m) => ({ id: m.id, name: employeeFullName(m), username: m.username })));
+  employeeState.headOptions = options;
+  const labelOf = (id) => (options.find((option) => option.id === Number(id)) || {}).label || '';
+  const headSelect = (d) => `<input type="text" list="dept-head-options" data-dept-head autocomplete="off" placeholder="No head (type to search)" value="${escapeText(labelOf(d.headId))}" aria-label="Head of ${escapeText(d.name)}">`;
   modal.innerHTML = `
     <div class="modal-header"><h3>Departments</h3><button class="modal-close" type="button" data-emp-close aria-label="Close">&times;</button></div>
     <div class="modal-body pp-editor-body">
-      <p class="form-note">Departments are shared across the workspace. Renaming one renames it for everyone in it.</p>
+      <datalist id="dept-head-options">${options.map((option) => `<option value="${escapeText(option.label)}"></option>`).join('')}</datalist>
+      <p class="form-note">Departments are shared across the workspace. Renaming one renames it for everyone in it. Change as many as you like, then press Save changes once.</p>
       ${employeeState.departments.length ? employeeState.departments.map((d) => `
         <div class="dept-row" data-dept="${d.id}">
           <input type="text" maxlength="100" value="${escapeText(d.name)}" data-dept-name aria-label="Department name">
           ${headSelect(d)}
           <span class="pp-muted dept-count">${d.memberCount} ${d.memberCount === 1 ? 'person' : 'people'}</span>
-          <button type="button" class="btn" data-dept-save>Save</button>
           <button type="button" class="btn" data-dept-delete>Delete</button>
         </div>`).join('') : '<p class="pp-muted">No departments yet.</p>'}
       <h4 class="modal-section-title">New department</h4>
@@ -406,19 +410,66 @@ function openDepartments() {
         <span></span>
         <button type="button" class="btn primary" data-dept-add>Add</button>
       </div>
+    </div>
+    <div class="modal-footer">
+      <span class="pp-muted dept-save-note" data-dept-save-note>No changes yet</span>
+      <button class="btn" type="button" data-emp-close>Close</button>
+      <button class="btn primary" type="button" data-dept-save-all disabled>Save changes</button>
     </div>`;
   openSettingsModal(modal);
 }
 
+// What the dialog currently shows for the existing departments (not the "new" row).
+function readDepartmentRows() {
+  return [...document.querySelectorAll('#departments-modal [data-dept]:not([data-dept="new"])')].map((row) => ({
+    id: Number(row.dataset.dept), name: row.querySelector('[data-dept-name]').value,
+    headId: headIdFromInput(row.querySelector('[data-dept-head]').value, employeeState.headOptions || []),
+  }));
+}
+
+// Marks edited rows and enables the one Save button only when something changed.
+function refreshDepartmentSaveState() {
+  const modal = document.getElementById('departments-modal');
+  if (!modal) return;
+  const { changes, blank, invalid } = departmentChanges(employeeState.departments, readDepartmentRows());
+  const changed = new Set(changes.map((change) => change.id));
+  modal.querySelectorAll('[data-dept]:not([data-dept="new"])').forEach((row) => {
+    row.classList.toggle('dirty', changed.has(Number(row.dataset.dept)));
+    row.classList.toggle('invalid', invalid.includes(Number(row.dataset.dept)));
+  });
+  const button = modal.querySelector('[data-dept-save-all]');
+  if (button) button.disabled = !changes.length;
+  const note = modal.querySelector('[data-dept-save-note]');
+  if (note) note.textContent = invalid.length ? 'Pick the head from the list, or clear the box for no head' : blank.length ? 'A department needs a name' : (changes.length ? `${changes.length} unsaved ${changes.length === 1 ? 'change' : 'changes'}` : 'No changes yet');
+}
+
+// The one Save button: every edited department is saved, one after another; failures are reported by name.
+async function saveAllDepartments() {
+  const { changes, blank, invalid } = departmentChanges(employeeState.departments, readDepartmentRows());
+  if (blank.length) { showToast('A department needs a name before it can be saved.', 'error'); return; }
+  if (invalid.length) { showToast('Pick the head from the list, or clear the box for no head.', 'error'); return; }
+  if (!changes.length) return;
+  const failed = [];
+  for (const change of changes) {
+    try { await hrApi(`/api/hr/departments/${change.id}`, 'PUT', { name: change.name, headId: change.headId }); }
+    catch (err) { failed.push(`${change.name}: ${err.message || 'could not be saved'}`); }
+  }
+  await loadEmployeeManagement();
+  openDepartments();
+  if (typeof loadPeople === 'function') loadPeople(true);
+  if (failed.length) showToast(`${changes.length - failed.length} saved, ${failed.length} failed. ${failed.join(' | ')}`, 'error');
+  else showToast(changes.length === 1 ? 'Department saved.' : `${changes.length} departments saved.`, 'success');
+}
+
 async function departmentAction(row, action) {
   const name = row.querySelector('[data-dept-name]').value;
-  const headValue = row.querySelector('[data-dept-head]').value;
-  const headId = headValue === '' ? null : Number(headValue);
+  const headId = headIdFromInput(row.querySelector('[data-dept-head]').value, employeeState.headOptions || []);
+  if (headId === undefined) { showToast('Pick the head from the list, or clear the box for no head.', 'error'); return; }
   try {
     if (action === 'add') await hrApi('/api/hr/departments', 'POST', { name, headId });
-    else if (action === 'save') await hrApi(`/api/hr/departments/${row.dataset.dept}`, 'PUT', { name, headId });
     else if (action === 'delete') {
-      if (!(await confirmAction({ title: 'Delete department', message: 'Delete this department? People in it stay, with no department.', confirmLabel: 'Delete department' }))) return;
+      const unsaved = departmentChanges(employeeState.departments, readDepartmentRows()).changes.length;
+      if (!(await confirmAction({ title: 'Delete department', message: `Delete this department? People in it stay, with no department.${unsaved ? ' Your other unsaved changes in this window will be lost.' : ''}`, confirmLabel: 'Delete department' }))) return;
       await hrApi(`/api/hr/departments/${row.dataset.dept}`, 'DELETE');
     }
     await loadEmployeeManagement();
@@ -503,9 +554,10 @@ if (typeof document !== 'undefined') {
     if (t.closest('[data-emp-export]')) { exportEmployees(); return; }
     const page = t.closest('[data-emp-page]');
     if (page) { closeSettingsModal(); openPersonPage(Number(page.dataset.empPage)); return; }
-    const dept = t.closest('[data-dept-save], [data-dept-delete], [data-dept-add]');
+    if (t.closest('[data-dept-save-all]')) { saveAllDepartments(); return; }
+    const dept = t.closest('[data-dept-delete], [data-dept-add]');
     if (dept) {
-      const action = dept.hasAttribute('data-dept-save') ? 'save' : dept.hasAttribute('data-dept-delete') ? 'delete' : 'add';
+      const action = dept.hasAttribute('data-dept-delete') ? 'delete' : 'add';
       departmentAction(dept.closest('[data-dept]'), action);
     }
   });
@@ -517,6 +569,12 @@ if (typeof document !== 'undefined') {
     const row = event.target.closest('[data-emp-row]');
     if (row) openEmployeeEditor(Number(row.dataset.empRow));
   });
+
+  // typing in or choosing from a department row marks it as changed and enables the one Save button
+  const onDepartmentEdit = (event) => { if (event.target.closest && event.target.closest('#departments-modal [data-dept]')) refreshDepartmentSaveState(); };
+  document.addEventListener('focusin', (event) => { if (event.target.matches && event.target.matches('#departments-modal [data-dept-head]')) event.target.select(); });
+  document.addEventListener('input', onDepartmentEdit);
+  document.addEventListener('change', onDepartmentEdit);
 
   document.addEventListener('change', (event) => {
     if (event.target.dataset && event.target.dataset.taskToggle) {
