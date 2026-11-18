@@ -8368,3 +8368,13 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .sheet-check.ok { background: #e6f6ec; color: #14532d; }
 .sheet-check.bad { background: #fdecec; color: #7f1d1d; }
 .sheet-check ul { margin: 6px 0 0 18px; padding: 0; max-height: 200px; overflow-y: auto; }
+
+/* Sheets that feed Leave */
+.sheet-table-feeds { margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--purple); }
+.sheet-feed-preview { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--muted-bg); }
+.sheet-feed-preview h4 { margin: 0 0 6px; }
+.sheet-feed-group { margin: 8px 0; }
+.sheet-feed-group ul { margin: 4px 0 0; padding-left: 20px; }
+.sheet-feed-remove { border-left: 3px solid var(--danger); padding-left: 8px; }
+.sheet-feed-danger { color: var(--danger); }
+.lv-managed { color: var(--purple); font-weight: 700; }

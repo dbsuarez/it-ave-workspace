@@ -273,9 +273,12 @@ async function openLeaveSettings() {
   if (!modal) return;
   let types;
   let holidays;
+  let managed = null;
   try {
     types = (await leaveApi('/api/leave/types')).types;
-    holidays = (await leaveApi(`/api/leave/holidays?year=${new Date().getFullYear()}`)).holidays;
+    const holidayData = await leaveApi(`/api/leave/holidays?year=${new Date().getFullYear()}`);
+    holidays = holidayData.holidays;
+    managed = holidayData.managed;
   } catch (err) {
     showToast(err.message || 'Could not load the leave settings.', 'error');
     return;
@@ -286,6 +289,7 @@ async function openLeaveSettings() {
       <label class="admin-inline-check"><input type="checkbox" data-type-paid${!t || t.paid ? ' checked' : ''}> Paid</label>
       ${t ? `<button type="button" class="btn" data-type-save>Save</button><button type="button" class="btn" data-type-delete>${t.active ? 'Delete' : 'Deleted'}</button>` : '<button type="button" class="btn primary" data-type-add>Add</button>'}
     </div>`;
+  const holidayNote = leaveManagedNote(managed, new Date().getFullYear());
   modal.innerHTML = `
     <div class="modal-header"><h3>Leave settings</h3><button class="modal-close" type="button" data-leave-close aria-label="Close">&times;</button></div>
     <div class="modal-body pp-editor-body">
@@ -294,8 +298,9 @@ async function openLeaveSettings() {
       ${types.filter((t) => t.active).map(typeRow).join('')}${typeRow(null)}
       <h4 class="modal-section-title">Company holidays ${new Date().getFullYear()}</h4>
       <p class="form-note">Holidays are not counted as leave days.</p>
-      ${holidays.length ? holidays.map((h) => `<div class="lv-type-row lv-holiday-row"><span>${escapeText(leaveDate(h.day))}</span><span>${escapeText(h.name)}</span><span></span><button type="button" class="btn" data-holiday-delete="${h.day}">Remove</button></div>`).join('') : '<p class="pp-muted">No holidays added for this year.</p>'}
-      <div class="lv-type-row" data-holiday-new><input type="date" data-holiday-day aria-label="Date"><input type="text" maxlength="100" placeholder="Name, for example Independence Day" data-holiday-name aria-label="Holiday name"><span></span><button type="button" class="btn primary" data-holiday-add>Add</button></div>
+      ${holidayNote ? `<p class="form-note lv-managed">${escapeText(holidayNote)}</p>` : ''}
+      ${holidays.length ? holidays.map((h) => `<div class="lv-type-row lv-holiday-row"><span>${escapeText(leaveDate(h.day))}</span><span>${escapeText(h.name)}</span><span></span>${holidayNote ? '' : `<button type="button" class="btn" data-holiday-delete="${h.day}">Remove</button>`}</div>`).join('') : '<p class="pp-muted">No holidays added for this year.</p>'}
+      ${holidayNote ? '' : `<div class="lv-type-row" data-holiday-new><input type="date" data-holiday-day aria-label="Date"><input type="text" maxlength="100" placeholder="Name, for example Independence Day" data-holiday-name aria-label="Holiday name"><span></span><button type="button" class="btn primary" data-holiday-add>Add</button></div>`}
     </div>`;
   openSettingsModal(modal);
 }
@@ -330,11 +335,13 @@ async function loadEmployeeLeave(id) {
   try {
     const data = await leaveApi(`/api/leave/balances/${id}?year=${year}`);
     if (employeeState.editingId !== id) return;
+    const creditNote = leaveManagedNote(data.managed, year);
     host.innerHTML = `<p class="form-note">${year}. Adjustment adds (or removes) days for this person only.</p>
+      ${creditNote ? `<p class="form-note lv-managed">${escapeText(creditNote)}</p>` : ''}
       ${data.balances.map((b) => `<div class="lv-type-row" data-adjust-type="${b.typeId}">
         <span>${escapeText(b.name)}</span><span class="pp-muted">${b.capped ? `${b.remaining} left of ${b.entitled}` : 'no limit'} · ${b.used} used</span>
-        <input type="number" min="-365" max="365" step="0.5" value="${b.adjustment}" data-adjust-value aria-label="Adjustment for ${escapeText(b.name)}">
-        <button type="button" class="btn" data-adjust-save="${id}">Save</button></div>`).join('') || '<p class="pp-muted">No leave types yet.</p>'}`;
+        <input type="number" min="-365" max="365" step="0.5" value="${b.adjustment}" data-adjust-value aria-label="Adjustment for ${escapeText(b.name)}"${creditNote ? ' disabled' : ''}>
+        ${creditNote ? '<span></span>' : `<button type="button" class="btn" data-adjust-save="${id}">Save</button>`}</div>`).join('') || '<p class="pp-muted">No leave types yet.</p>'}`;
   } catch (err) {
     host.innerHTML = `<p class="pp-muted">${escapeText(err.message || 'Could not load the balances.')}</p>`;
   }

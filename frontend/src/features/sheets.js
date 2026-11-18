@@ -48,6 +48,8 @@ async function loadSheetsList() {
     if (newButton) newButton.hidden = !sheetsState.canCreate;
     const leaveButton = document.getElementById('btn-sheets-leave');
     if (leaveButton) leaveButton.hidden = !sheetsState.canCreate;
+    const holidaysButton = document.getElementById('btn-sheets-holidays');
+    if (holidaysButton) holidaysButton.hidden = !sheetsState.canCreate;
     const sheets = (data.sheets || []).map((sheet) => ({ ...sheet, updatedText: forumRelativeTime(sheet.updatedAt) }));
     list.innerHTML = sheetListHtml(sheets, {
       empty: sheetsState.scope === 'mine'
@@ -87,6 +89,20 @@ async function newSheetFromLeave() {
     if (records.truncated) showToast('Only the first 500 leave records were copied.', 'info');
     await openSheet(created.sheet.id);
   } catch (err) { showToast(err.status === 403 ? 'Only HR can copy the leave records.' : (err.message || 'Could not copy the leave records.'), 'error'); }
+}
+
+// A holidays sheet to start from: last year's company holidays moved to the year asked for. HR edits it, then Publishes with a preview.
+async function newHolidaysSheet() {
+  const next = new Date().getFullYear() + 1;
+  const asked = await askText('Holidays for which year?', { placeholder: String(next), maxLength: 4, required: true });
+  if (asked === null || asked === undefined) return;
+  const year = Number(String(asked).trim() || next);
+  if (!Number.isInteger(year)) { showToast('Type a year, for example ' + next + '.', 'error'); return; }
+  try {
+    const created = await sheetJson('/api/sheets/holidays-from-year', { method: 'POST', body: JSON.stringify({ year }) });
+    await openSheet(created.sheet.id);
+    showToast(`Copied ${year - 1}'s holidays. Moving holidays (Holy Week, Eid) must be corrected by hand before you Publish.`, 'info');
+  } catch (err) { showToast(err.message || 'Could not make the holidays sheet.', 'error'); }
 }
 
 // ------------------------------------------------------------------------------------------------------------ an open sheet
@@ -266,7 +282,7 @@ async function handleSheetShareChange(event) {
 }
 
 // ---- tables: declare a tab as a table, check it, publish it ----
-const tablesState = { list: [], draft: null };
+const tablesState = { list: [], draft: null, pending: null };
 
 const tableModal = () => document.getElementById('sheet-tables-modal');
 
@@ -314,26 +330,38 @@ async function checkOrPublishTable(name, publish) {
       showTableResult(sheetProblemsHtml(await sheetJson(`/api/sheets/${open.id}/tables/${name}/check`, { method: 'POST', body: JSON.stringify({ values }) })));
       return;
     }
-    const done = await sheetJson(`/api/sheets/${open.id}/tables/${name}/publish`, { method: 'POST', body: JSON.stringify({ values }) });
-    await loadSheetTables();
-    renderSheetTables();
-    showTableResult(`<div class="sheet-check ok">Published ${Number(done.rowCount)} row${done.rowCount === 1 ? '' : 's'} of <strong>${sheetEscape(name)}</strong>.</div>`);
+    await publishTable(name, values, false);
   } catch (err) {
     if (err.data && err.data.problems) showTableResult(sheetProblemsHtml({ ok: false, rowCount: 0, problems: err.data.problems, problemCount: err.data.problemCount }));
     else showToast(err.message || 'Could not do that.', 'error');
   }
 }
 
+// A table that feeds Leave answers the first Publish with a preview and publishes nothing; Apply sends it again with confirm.
+async function publishTable(name, values, confirm) {
+  const open = sheetsState.open;
+  const done = await sheetJson(`/api/sheets/${open.id}/tables/${name}/publish`, { method: 'POST', body: JSON.stringify(confirm ? { values, confirm: true } : { values }) });
+  if (done.needsConfirm) {
+    tablesState.pending = { name, values };
+    showTableResult(sheetFeedPreviewHtml({ feeds: done.feeds, name, preview: done.preview }));
+    return;
+  }
+  tablesState.pending = null;
+  await loadSheetTables();
+  renderSheetTables();
+  showTableResult(`<div class="sheet-check ok">Published ${Number(done.rowCount)} row${done.rowCount === 1 ? '' : 's'} of <strong>${sheetEscape(name)}</strong>${done.applied ? '. Leave was updated.' : '.'}</div>`);
+}
+
 function renderTableForm() {
   const tabs = sheetsState.grid.getTabs().map((tab) => ({ id: tab.id, name: tab.name }));
-  tableModal().innerHTML = sheetTableFormHtml({ tabs, draft: tablesState.draft });
+  tableModal().innerHTML = sheetTableFormHtml({ tabs, draft: tablesState.draft, canFeed: sheetsState.canCreate && sheetsState.open.sheet.role === 'editor' });
 }
 
 function startTableForm(table) {
   const tabs = sheetsState.grid.getTabs();
   tablesState.draft = table
-    ? { name: table.name, tabId: table.tabId, columns: table.columns.map((column) => ({ ...column })), isNew: false }
-    : { name: '', tabId: tabs[0].id, columns: [], isNew: true };
+    ? { name: table.name, tabId: table.tabId, columns: table.columns.map((column) => ({ ...column })), isNew: false, feeds: table.feeds || '' }
+    : { name: '', tabId: tabs[0].id, columns: [], isNew: true, feeds: '' };
   renderTableForm();
 }
 
@@ -344,6 +372,13 @@ function handleTableFormInput(event) {
   if (!draft) return;
   if (target.matches('[data-table-name]')) draft.name = target.value;
   else if (target.matches('[data-table-tab]')) draft.tabId = target.value;
+  else if (target.matches('[data-table-feeds]')) {
+    if (event.type !== 'change') return;
+    draft.feeds = target.value;
+    if (draft.feeds && !feedColumnsFit(draft.feeds, draft.columns)) draft.columns = feedColumnsFor(draft.feeds);
+    if (draft.feeds && !draft.name) draft.name = draft.feeds;
+    renderTableForm();
+  }
   else if (target.matches('[data-table-column-name]')) draft.columns[Number(target.dataset.tableColumnName)].name = target.value;
   else if (target.matches('[data-table-column-type]')) draft.columns[Number(target.dataset.tableColumnType)].type = target.value;
   else if (target.matches('[data-table-column-required]')) draft.columns[Number(target.dataset.tableColumnRequired)].required = target.checked;
@@ -360,6 +395,18 @@ async function handleTablesClick(event) {
     if (edit) { startTableForm(tablesState.list.find((table) => table.name === edit.dataset.sheetTableEdit)); return; }
     const check = target.closest('[data-sheet-table-check]');
     if (check) { await checkOrPublishTable(check.dataset.sheetTableCheck, false); return; }
+    if (target.closest('[data-sheet-feed-cancel]')) { tablesState.pending = null; showTableResult(''); return; }
+    const apply = target.closest('[data-sheet-feed-apply]');
+    if (apply) {
+      const pending = tablesState.pending;
+      if (!pending || pending.name !== apply.dataset.sheetFeedApply) return;
+      try { await publishTable(pending.name, pending.values, true); }
+      catch (err) {
+        if (err.data && err.data.problems) showTableResult(sheetProblemsHtml({ ok: false, rowCount: 0, problems: err.data.problems, problemCount: err.data.problemCount }));
+        else showToast(err.message || 'Could not publish.', 'error');
+      }
+      return;
+    }
     const publish = target.closest('[data-sheet-table-publish]');
     if (publish) { await checkOrPublishTable(publish.dataset.sheetTablePublish, true); return; }
     const remove = target.closest('[data-sheet-table-remove]');
@@ -382,7 +429,17 @@ async function handleTablesClick(event) {
       return;
     }
     if (target.closest('[data-table-save]')) {
-      await sheetJson(`/api/sheets/${sheetsState.open.id}/tables/${draft.name}`, { method: 'PUT', body: JSON.stringify({ tabId: draft.tabId, columns: draft.columns }) });
+      const body = { tabId: draft.tabId, columns: draft.columns };
+      if (sheetsState.canCreate) body.feeds = draft.feeds || null; // only people who manage sheets send it, so an editor's save keeps what the table feeds
+      const url = `/api/sheets/${sheetsState.open.id}/tables/${draft.name}`;
+      try {
+        await sheetJson(url, { method: 'PUT', body: JSON.stringify(body) });
+      } catch (err) {
+        if (err.status !== 409 || !err.data || !err.data.takenBy) throw err;
+        const taken = err.data.takenBy;
+        if (!(await confirmAction({ title: 'Switch what feeds Leave?', message: `The sheet "${taken.title}" already feeds ${draft.feeds === 'credits' ? 'leave credits' : 'company holidays'}. Use this table instead? Leave keeps what is there until you Publish.`, confirmLabel: 'Use this table' }))) return;
+        await sheetJson(url, { method: 'PUT', body: JSON.stringify({ ...body, replace: true }) });
+      }
       await loadSheetTables(); renderSheetTables();
     }
   } catch (err) { showToast(err.message || 'Could not do that.', 'error'); }
@@ -415,6 +472,7 @@ function setupSheets() {
     if (scope) { sheetsState.scope = scope.dataset.sheetsScope; showSheetsHome(); return; }
     if (target.closest('#btn-sheets-new')) { startNewSheet(); return; }
     if (target.closest('#btn-sheets-leave')) { newSheetFromLeave(); return; }
+    if (target.closest('#btn-sheets-holidays')) { newHolidaysSheet(); return; }
     if (target.closest('[data-sheet-back]')) { closeSheet(); return; }
     if (target.closest('[data-sheet-rename]')) { renameOpenSheet(); return; }
     if (target.closest('[data-sheet-tables]')) { openSheetTables(); return; }

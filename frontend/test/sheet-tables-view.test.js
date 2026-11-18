@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { sheetTablesHtml, sheetTableFormHtml, sheetProblemsHtml, columnsFromHeader } = require('../src/features/sheet-tables-view');
+const { sheetTablesHtml, sheetTableFormHtml, sheetProblemsHtml, columnsFromHeader, feedColumnsFit, feedColumnsFor, sheetFeedPreviewHtml } = require('../src/features/sheet-tables-view');
 
 const table = (extra = {}) => ({ name: 'holidays', tabId: 'a', tabName: 'Holidays', columns: [{ name: 'Date', type: 'date', required: true }, { name: 'Name', type: 'text', required: false }], published: null, ...extra });
 
@@ -70,4 +70,59 @@ test('the header row of a tab becomes a list of text columns, up to the first em
   assert.deepEqual(columnsFromHeader([]), []);
   assert.equal(columnsFromHeader(Array.from({ length: 80 }, (_, i) => `c${i}`)).length, 50);
   assert.deepEqual(columnsFromHeader(['A', 'a', 'B']).map((c) => c.name), ['A', 'B'], 'a repeated name is dropped');
+});
+
+test('a table that feeds Leave says so in the list', () => {
+  const html = sheetTablesHtml({ tables: [table({ feeds: 'holidays' }), table({ name: 'plain' })], canEdit: true });
+  assert.equal((html.match(/data-sheet-table-feeds/g) || []).length, 1);
+  assert.match(html, /Feeds Leave: company holidays/);
+});
+
+test('the form offers "feeds Leave" only to people who may use it, with the current choice selected', () => {
+  const tabs = [{ id: 'a', name: 'Holidays' }];
+  const draft = { name: 'holidays', tabId: 'a', columns: [], isNew: true, feeds: 'credits' };
+  const withIt = sheetTableFormHtml({ tabs, draft, canFeed: true });
+  assert.match(withIt, /data-table-feeds/);
+  assert.match(withIt, /<option value="credits" selected>/);
+  assert.equal(/data-table-feeds/.test(sheetTableFormHtml({ tabs, draft, canFeed: false })), false);
+});
+
+test('the columns a feed needs are found in any case, and picking a feed gives exactly those columns', () => {
+  assert.equal(feedColumnsFit('holidays', [{ name: 'Date', type: 'date' }, { name: 'NAME', type: 'text' }, { name: 'note', type: 'text' }]), true);
+  assert.equal(feedColumnsFit('holidays', [{ name: 'date', type: 'text' }, { name: 'name', type: 'text' }]), false);
+  assert.equal(feedColumnsFit('credits', [{ name: 'person', type: 'person' }]), false);
+  assert.equal(feedColumnsFit('', []), true, 'no feed needs nothing');
+  assert.deepEqual(feedColumnsFor('credits').map((c) => [c.name, c.type, c.required]), [['person', 'person', true], ['leave_type', 'text', true], ['year', 'number', true], ['days', 'number', true]]);
+  assert.deepEqual(feedColumnsFor('holidays').map((c) => c.name), ['date', 'name']);
+});
+
+test('the holidays preview lists what is added, renamed and removed, with the removals stood out', () => {
+  const html = sheetFeedPreviewHtml({ feeds: 'holidays', name: 'holidays', preview: {
+    years: [2027], unchanged: 4,
+    add: [{ day: '2027-12-25', name: 'Christmas <b>' }], rename: [{ day: '2027-04-09', from: 'Valor Day', to: 'Araw ng Kagitingan' }], remove: [{ day: '2027-06-12', name: 'Independence Day' }],
+  } });
+  assert.match(html, /2027/);
+  assert.match(html, /Add \(1\)/);
+  assert.match(html, /2027-12-25/);
+  assert.match(html, /Christmas &lt;b&gt;/);
+  assert.match(html, /Valor Day.*Araw ng Kagitingan/);
+  assert.match(html, /<strong[^>]*>Remove \(1\)/);
+  assert.match(html, /Independence Day/);
+  assert.match(html, /4 stay the same/);
+  assert.match(html, /data-sheet-feed-apply="holidays"/);
+  assert.match(html, /data-sheet-feed-cancel/);
+});
+
+test('the credits preview lists new and changed days and the ones that go back to the default; an empty plan says nothing changes', () => {
+  const html = sheetFeedPreviewHtml({ feeds: 'credits', name: 'credits', preview: {
+    years: [2027], unchanged: 0,
+    set: [{ username: 'ann', typeName: 'Vacation Leave', year: 2027, adjustment: 3, previous: 1 }],
+    reset: [{ username: 'cy', typeName: 'Vacation Leave', year: 2027, previous: 2 }],
+  } });
+  assert.match(html, /ann/);
+  assert.match(html, /Vacation Leave 2027: 1 to 3/);
+  assert.match(html, /<strong[^>]*>Back to the default \(1\)/);
+  assert.match(html, /cy.*2 to none/);
+  const none = sheetFeedPreviewHtml({ feeds: 'holidays', name: 'holidays', preview: { years: [2027], unchanged: 5, add: [], rename: [], remove: [] } });
+  assert.match(none, /No change to Leave/);
 });

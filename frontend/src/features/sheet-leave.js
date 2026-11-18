@@ -19,6 +19,12 @@ function leaveRecordsToRows(records, { statuses = ['pending', 'approved'] } = {}
   })];
 }
 
+// managed: what the Leave API says a sheet has taken over ({ years, sheet: { title } } or null). Text for a year it manages, else ''.
+function leaveManagedNote(managed, year) {
+  if (!managed || !Array.isArray(managed.years) || !managed.years.includes(year)) return '';
+  return `Managed by the sheet "${managed.sheet && managed.sheet.title ? managed.sheet.title : 'a sheet'}". Change it there and Publish again.`;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { leaveRecordsToRows, LEAVE_SHEET_HEADER };
+  module.exports = { leaveRecordsToRows, LEAVE_SHEET_HEADER, leaveManagedNote };
 }
