@@ -162,7 +162,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      SELECT m.id, m.channel_id, m.user_id, m.content, m.reply_to, m.edited_at, m.created_at,
+      SELECT m.id, m.channel_id, m.user_id, m.content, m.kind, m.reply_to, m.edited_at, m.created_at,
              m.pinned_at, m.pinned_by,
              u.username, u.avatar_color,
              parent.id AS reply_to_message_id, parent.content AS reply_to_content,
@@ -232,6 +232,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       username: m.username,
       avatarColor: m.avatar_color,
       content: m.content,
+      kind: m.kind,
       replyTo: m.reply_to,
       replyToMessage: m.reply_to ? {
         id: m.reply_to_message_id,

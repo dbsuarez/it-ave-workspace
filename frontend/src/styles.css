@@ -1913,6 +1913,8 @@ body.iav-dev .demo-banner {
 }
 
 .command-option span { color: var(--text-muted); }
+.message-announcement { background: color-mix(in srgb, var(--primary, #6b21a8) 8%, transparent); border-left: 3px solid var(--primary, #6b21a8); border-radius: 6px; }
+.message-announcement-badge { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 10px; background: var(--primary, #6b21a8); color: #fff; }
 .command-group { padding: 6px 10px 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
 .command-usage { display: block; font-size: 11px; color: var(--text-muted); }
 .command-option:hover, .command-option.active { background: var(--muted-bg); }

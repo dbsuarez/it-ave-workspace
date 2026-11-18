@@ -1,5 +1,6 @@
 const leave = require('./handlers/leave');
 const general = require('./handlers/general');
+const announce = require('./handlers/announce');
 
 // Where a command may run. A definition lists one or more of:
 //   { type: 'global' }                              any channel, including personal ones
@@ -73,6 +74,12 @@ register({
 register({
   name: 'search', category: 'search', usage: '/search <keywords>', description: 'Search messages, people and files you can see',
   scopes: [{ type: 'global' }], handler: general.search,
+});
+
+register({
+  name: 'announce', category: 'announcements', usage: '/announce <text>', description: 'Post an announcement to this channel',
+  scopes: [{ type: 'channel-scope', value: 'announcements' }], permission: 'announce', visibility: 'shared', maxLength: 2000,
+  confirm: { preview: announce.preview }, handler: announce.announce,
 });
 
 function publicDefinition(definition) {

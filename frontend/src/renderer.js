@@ -2074,12 +2074,14 @@ function renderMessageEl(msg, allowReply = false) {
   }).join('');
   const replyPreview = msg.replyTo ? (msg.replyToMessage || {}) : null;
 
+  if (msg.kind === 'announcement') el.classList.add('message-announcement');
   el.innerHTML = `
     <div class="avatar-mini" style="background:${avatarColor};" data-user-id="${escapeHtml(String(msg.userId ?? msg.senderId ?? ''))}" role="button" tabindex="0" title="View profile" aria-label="View profile">${initials}</div>
     <div class="message-body">
       <div class="message-header">
         <span class="name"${author.color ? ` style="color:${escapeHtml(author.color)}"` : ''}>${escapeHtml(author.name)}</span>
         ${isYou ? '<span class="you">You</span>' : ''}
+        ${msg.kind === 'announcement' ? '<span class="message-announcement-badge" title="Posted with /announce">&#128227; Announcement</span>' : ''}
         <span class="time">${shortTime(msg.createdAt)}</span>
         ${allowReply ? messageEditedHtml(msg) : ''}
         ${allowReply && isPinned ? '<span class="message-pinned-badge">Pinned</span>' : ''}
@@ -3331,6 +3333,11 @@ async function loadModerationChannel(channelId) {
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
       </div>
+      ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card" data-channel-config-section="overview"><h2>Announcement channel</h2>
+        <p class="admin-help">In an announcement channel, people with the Announce permission can post with <code>/announce</code> (they see a preview first). Everyone in the channel sees the result.</p>
+        ${data.channel.commandScope === 'hr-inquiry' ? '<p class="admin-help">This is the HR Inquiry channel and keeps its own commands.</p>'
+    : `<p><strong>${data.channel.commandScope === 'announcements' ? 'On' : 'Off'}</strong></p><div class="admin-actions"><button class="btn" type="button" data-action="set-announcement-scope" data-scope="${data.channel.commandScope === 'announcements' ? '' : 'announcements'}">${data.channel.commandScope === 'announcements' ? 'Turn off' : 'Turn on'}</button></div>`}
+      </div>` : ''}
       <div id="moderation-channel-access" data-channel-config-section="access"></div>
       <div id="moderation-channel-permissions" data-channel-config-section="permissions"></div>
       <div class="moderation-card" data-channel-config-section="moderation"><h2>Active timeouts</h2><div class="moderation-list">${(data.timeouts || []).map((timeout) => `
@@ -3567,6 +3574,8 @@ async function handleModerationClick(event) {
       showToast(`Slow mode is ${seconds} seconds on ${result.channels} channel${result.channels === 1 ? '' : 's'}.`, 'success');
       await loadModerationChannel(channelId);
       return;
+    } else if (action === 'set-announcement-scope') {
+      await checkedApi(`/api/moderation/channels/${channelId}/command-scope`, 'PATCH', { scope: button.dataset.scope || null });
     } else if (action === 'save-slowmode') {
       await checkedApi(`/api/moderation/channels/${channelId}/slowmode`, 'PATCH', {
         seconds: Number(document.getElementById('moderation-slowmode').value),

@@ -31,6 +31,8 @@ async function ensureDefaultChannels(target) {
       [name, topic]
     );
   }
+  // /announce works in the built-in #announcements channel (an Owner can tag other channels in Moderation)
+  await target.query("UPDATE channels SET command_scope = 'announcements' WHERE name = 'announcements' AND command_scope IS NULL");
   await target.query(
     `INSERT INTO channel_members (channel_id, user_id)
      SELECT c.id, u.id

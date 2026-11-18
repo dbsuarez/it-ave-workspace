@@ -67,6 +67,10 @@ module.exports = [
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    )`,
   'CREATE INDEX IF NOT EXISTS idx_command_audit_actor_created ON command_audit_log(actor_id, created_at DESC)',
+  // What a message is: an ordinary message, an /announce announcement, or a /poll
+  "ALTER TABLE messages ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'message'",
+  // The built-in #announcements channel is where /announce works
+  "UPDATE channels SET command_scope = 'announcements' WHERE name = 'announcements' AND command_scope IS NULL AND created_by IS NULL AND is_personal = FALSE",
   // One-time confirmation tokens for shared slash commands (only a hash of the token is stored)
   `CREATE TABLE IF NOT EXISTS command_pending (
      id BIGSERIAL PRIMARY KEY,

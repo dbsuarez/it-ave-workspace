@@ -234,7 +234,7 @@ router.get('/channels/:channelId', async (req, res) => {
       await ensureChannelModerator(query, req.user.userId, channelId);
     }
     const [channel, members, timeouts, reports, auditLog] = await Promise.all([
-      query(`SELECT c.id, c.name, c.slowmode_seconds, c.team_section_id, ts.owner_id AS team_owner_id
+      query(`SELECT c.id, c.name, c.slowmode_seconds, c.command_scope, c.team_section_id, ts.owner_id AS team_owner_id
              FROM channels c LEFT JOIN team_sidebar_sections ts ON ts.id = c.team_section_id
              WHERE c.id = $1`, [channelId]),
       query(
@@ -286,6 +286,7 @@ router.get('/channels/:channelId', async (req, res) => {
         id: row.id,
         name: row.name,
         slowmodeSeconds: row.slowmode_seconds,
+        commandScope: row.command_scope,
         teamSectionId: row.team_section_id,
         teamOwnerId: row.team_owner_id,
       },
@@ -748,6 +749,24 @@ router.post('/channels/:channelId/recover-manager', async (req, res) => {
     res.json({ok:true,channelId,managerId:replacementId});
   } catch(err) { if(client) await client.query('ROLLBACK').catch(()=>{}); sendError(res,err,'Recover channel manager error'); }
   finally { client?.release(); }
+});
+
+// Tag a channel so slash commands that belong to it work there (today: 'announcements' for /announce), or clear the tag.
+router.patch('/channels/:channelId/command-scope', async (req, res) => {
+  try {
+    const channelId = parseId(req.params.channelId);
+    if (!channelId) return res.status(400).json({ error: 'Invalid channel ID' });
+    await requireWorkspacePermission(req.user.userId, 'manage_channels');
+    const scope = req.body ? req.body.scope : undefined;
+    if (scope !== null && scope !== 'announcements') return res.status(400).json({ error: 'Scope must be "announcements" or null' });
+    const channel = (await query('SELECT id, is_personal, command_scope FROM channels WHERE id = $1', [channelId])).rows[0];
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (channel.is_personal) return res.status(409).json({ error: 'Personal channels cannot be tagged' });
+    if (channel.command_scope === 'hr-inquiry') return res.status(409).json({ error: 'The HR Inquiry channel keeps its tag' });
+    await query('UPDATE channels SET command_scope = $2 WHERE id = $1', [channelId, scope]);
+    await audit(channelId, req.user.userId, 'channel_command_scope_changed', null, { scope });
+    res.json({ ok: true, channelId, scope });
+  } catch (err) { sendError(res, err, 'Set channel command scope error'); }
 });
 
 // Archive first; preserve all messages, files, lists, canvases, and memberships.

@@ -10,14 +10,14 @@ async function loadSender(query, userId) {
   return result.rows[0];
 }
 
-async function postChannelMessage(io, query, { userId, channelId, content }) {
+async function postChannelMessage(io, query, { userId, channelId, content, kind = 'message' }) {
   await ensureCanPostToChannel(query, userId, channelId);
   const sender = await loadSender(query, userId);
   const result = await query(
-    `INSERT INTO messages (channel_id, user_id, content)
-     VALUES ($1, $2, $3)
-     RETURNING id, channel_id, user_id, content, reply_to, created_at`,
-    [channelId, userId, content]
+    `INSERT INTO messages (channel_id, user_id, content, kind)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, channel_id, user_id, content, reply_to, created_at, kind`,
+    [channelId, userId, content, kind]
   );
   const message = result.rows[0];
   const messageData = {
@@ -27,6 +27,7 @@ async function postChannelMessage(io, query, { userId, channelId, content }) {
     username: sender.username,
     avatarColor: sender.avatar_color,
     content: message.content,
+    kind: message.kind,
     replyTo: null,
     replyToMessage: null,
     createdAt: message.created_at,

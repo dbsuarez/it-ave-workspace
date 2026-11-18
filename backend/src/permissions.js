@@ -15,6 +15,7 @@ const PERMISSIONS = [
   ['attach_files', 'Attach files'],
   ['add_reactions', 'Add reactions'],
   ['mention_everyone', 'Use @channel, @here and @everyone (reserved: not available yet)'],
+  ['announce', 'Post announcements with /announce in announcement channels'],
   ['create_channels', 'Create channels'],
   ['manage_channels', 'Edit and delete any channel'],
   ['manage_personal_channels', 'Create, rename and delete personal channels without reading their contents'],
