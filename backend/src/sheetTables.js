@@ -60,6 +60,7 @@ const cellText = (row, index) => (row && row[index] !== undefined && row[index] 
 
 // values: the tab as the sheet shows it (rows of cell text, results rather than formulas). -> { rows, problems, problemCount }
 // rows are objects keyed by column name and are empty when there are problems: nothing is published until it is all clean.
+// rowNumbers: the sheet row (header = 1) each kept row came from.
 function validateTable(columns, values, { people } = {}) {
   const problems = [];
   let problemCount = 0;
@@ -76,6 +77,7 @@ function validateTable(columns, values, { people } = {}) {
     });
   }
   const rows = [];
+  const rowNumbers = [];
   for (let r = 1; r < values.length; r += 1) {
     if (columns.every((column, index) => cellText(values[r], index) === '')) continue; // an empty row is skipped
     const row = {};
@@ -85,8 +87,9 @@ function validateTable(columns, values, { people } = {}) {
       else row[column.name] = result.value;
     });
     rows.push(row);
+    rowNumbers.push(r + 1);
   }
-  return { rows: problemCount ? [] : rows, problems, problemCount };
+  return { rows: problemCount ? [] : rows, rowNumbers: problemCount ? [] : rowNumbers, problems, problemCount };
 }
 
 module.exports = { COLUMN_TYPES, cleanTableName, cleanColumns, validateTable };

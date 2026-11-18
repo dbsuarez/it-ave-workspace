@@ -9,6 +9,7 @@ const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { fail, canManageEmployees, requireHr, withRoleAccess, HR_LIKE_SQL } = require('../hr');
 const { parseDay, formatDay, leaveDays } = require('../leaveDays');
+const leaveFeedDb = require('../leaveFeedDb');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -481,7 +482,7 @@ router.get('/holidays', async (req, res) => {
     await member(req.user.userId);
     const year = yearFrom(req.query.year);
     const result = await query("SELECT to_char(day, 'YYYY-MM-DD') AS day, name FROM company_holidays WHERE EXTRACT(YEAR FROM day) = $1 ORDER BY day", [year]);
-    res.json({ year, holidays: result.rows });
+    res.json({ year, holidays: result.rows, managed: await leaveFeedDb.managedYears({ query }, 'holidays') });
   } catch (err) {
     sendError(res, err, 'List holidays error');
   }
@@ -494,6 +495,7 @@ router.post('/holidays', async (req, res) => {
     if (!day) throw fail(400, 'Choose a real date');
     const name = text(req.body.name, 100, 'Name');
     if (!name) throw fail(400, 'A holiday needs a name');
+    await leaveFeedDb.refuseIfManaged({ query }, 'holidays', day.getUTCFullYear(), fail);
     await query('INSERT INTO company_holidays (day, name) VALUES ($1, $2) ON CONFLICT (day) DO UPDATE SET name = EXCLUDED.name', [formatDay(day), name]);
     res.status(201).json({ day: formatDay(day), name });
   } catch (err) {
@@ -506,6 +508,7 @@ router.delete('/holidays/:day', async (req, res) => {
     await requireHr(req.user.userId);
     const day = parseDay(req.params.day);
     if (!day) throw fail(400, 'A date is required');
+    await leaveFeedDb.refuseIfManaged({ query }, 'holidays', day.getUTCFullYear(), fail);
     const result = await query('DELETE FROM company_holidays WHERE day = $1 RETURNING day', [formatDay(day)]);
     if (!result.rows.length) throw fail(404, 'Holiday not found');
     res.json({ day: formatDay(day) });
@@ -523,7 +526,7 @@ router.get('/balances/:userId', async (req, res) => {
     const year = yearFrom(req.query.year);
     const person = (await query("SELECT id FROM users WHERE id = $1 AND account_type = 'member'", [userId])).rows[0];
     if (!person) throw fail(404, 'Person not found');
-    res.json({ year, balances: await balancesFor(userId, year) });
+    res.json({ year, balances: await balancesFor(userId, year), managed: await leaveFeedDb.managedYears({ query }, 'credits') });
   } catch (err) {
     sendError(res, err, 'Balances error');
   }
@@ -540,6 +543,7 @@ router.put('/entitlements', async (req, res) => {
     const adjustment = Number(body.adjustment);
     if (userId === null || typeId === null) throw fail(400, 'userId and typeId are required');
     if (!Number.isFinite(adjustment) || Math.abs(adjustment) > 365 || Math.round(adjustment * 2) !== adjustment * 2) throw fail(400, 'The adjustment must be a number of days in halves, from -365 to 365');
+    await leaveFeedDb.refuseIfManaged({ query }, 'credits', year, fail);
     if (!(await query("SELECT 1 FROM users WHERE id = $1 AND account_type = 'member'", [userId])).rows.length) throw fail(404, 'Person not found');
     if (!(await query('SELECT 1 FROM leave_types WHERE id = $1', [typeId])).rows.length) throw fail(404, 'Leave type not found');
     await query(

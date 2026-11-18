@@ -1,11 +1,13 @@
 // Sheets API (docs/superpowers/specs/2026-11-19-sheets-design.md). Creating needs the Manage sheets permission; everything else
 // depends on the person's role on that sheet (owner, editor, viewer). Saves carry the revision they were based on.
 const express = require('express');
-const { query } = require('../db');
+const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { can } = require('../permissions');
 const sheets = require('../sheets');
 const sheetTables = require('../sheetTables');
+const leaveFeeds = require('../leaveFeeds');
+const leaveFeedDb = require('../leaveFeedDb');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -52,6 +54,36 @@ router.post('/', async (req, res) => {
     const { sheet, role } = await sheets.sheetAccess(query, userId, created.id);
     res.status(201).json({ sheet: sheets.serializeSheet(sheet, role) });
   } catch (err) { sendError(res, err, 'Create sheet error'); }
+});
+
+// POST { year } (Manage sheets): a "Holidays <year>" sheet from the holidays of the year before, moved to `year`, declared as the table
+// `holidays` and, when no table feeds holidays yet, connected to Leave. -> { sheet, feeds: whether it is connected }
+router.post('/holidays-from-year', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    await needManageSheets(userId);
+    const year = req.body && req.body.year;
+    if (!Number.isInteger(year) || year < 2001 || year > 2100) throw sheets.fail(400, 'Choose a year from 2001 to 2100');
+    const last = (await query("SELECT to_char(day, 'YYYY-MM-DD') AS day, name FROM company_holidays WHERE EXTRACT(YEAR FROM day) = $1 ORDER BY day", [year - 1])).rows;
+    if (!last.length) throw sheets.fail(400, `There are no holidays in ${year - 1} to copy`);
+    const rows = [['date', 'name'], ...leaveFeeds.shiftHolidays(last, year).map((h) => [h.day, h.name])];
+    const data = sheets.cleanSheetData({ tabs: [{ name: 'Holidays', rows }] });
+    const client = await pool.connect();
+    let sheetId; let connected = false;
+    try {
+      await client.query('BEGIN');
+      sheetId = (await client.query('INSERT INTO sheets (title, owner_id, data, updated_by) VALUES ($1, $2, $3::jsonb, $2) RETURNING id', [`Holidays ${year}`, userId, JSON.stringify(data)])).rows[0].id;
+      connected = !(await client.query("SELECT 1 FROM sheet_tables WHERE feeds = 'holidays'")).rows.length;
+      await client.query('INSERT INTO sheet_tables (sheet_id, name, tab_id, columns, feeds) VALUES ($1, $2, $3, $4::jsonb, $5)',
+        [sheetId, 'holidays', data.tabs[0].id, JSON.stringify(leaveFeeds.FEEDS.holidays.columns), connected ? 'holidays' : null]);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally { client.release(); }
+    const { sheet, role } = await sheets.sheetAccess(query, userId, sheetId);
+    res.status(201).json({ sheet: sheets.serializeSheet(sheet, role), feeds: connected });
+  } catch (err) { sendError(res, err, 'Holidays sheet error'); }
 });
 
 router.get('/:id', async (req, res) => {
@@ -144,7 +176,7 @@ router.delete('/:id/members/:userId', async (req, res) => {
 const MAX_TABLES = 30;
 
 async function loadTable(sheetId, name) {
-  const table = (await query('SELECT id, name, tab_id, columns FROM sheet_tables WHERE sheet_id = $1 AND name = $2', [sheetId, sheetTables.cleanTableName(name)])).rows[0];
+  const table = (await query('SELECT id, name, tab_id, columns, feeds FROM sheet_tables WHERE sheet_id = $1 AND name = $2', [sheetId, sheetTables.cleanTableName(name)])).rows[0];
   if (!table) throw sheets.fail(404, 'No table with that name in this sheet');
   return table;
 }
@@ -164,9 +196,18 @@ async function peopleFor(columns, values) {
   return new Map(rows.map((row) => [row.username, row.id]));
 }
 
+// The ordinary check, plus the extra rules of a table that feeds Leave (reported by row too).
 async function runCheck(table, rawValues) {
   const values = sheets.cleanValues(rawValues);
-  return sheetTables.validateTable(table.columns, values, { people: await peopleFor(table.columns, values) });
+  const result = sheetTables.validateTable(table.columns, values, { people: await peopleFor(table.columns, values) });
+  if (!table.feeds || result.problemCount) return result;
+  const extra = leaveFeeds.feedProblems(table.feeds, result.rows, result.rowNumbers, { leaveTypes: await leaveFeedDb.leaveTypeNames({ query }) });
+  if (!extra.length) return result;
+  return { rows: [], rowNumbers: [], problems: extra.slice(0, 50), problemCount: extra.length };
+}
+
+async function needManageSheets(userId) {
+  if (!(await can(query, userId, 'manage_sheets'))) throw sheets.fail(403, 'Only people who can manage sheets can connect a table to Leave or publish one that feeds it');
 }
 
 router.get('/:id/tables', async (req, res) => {
@@ -175,12 +216,12 @@ router.get('/:id/tables', async (req, res) => {
     const { sheet } = await sheets.sheetAccess(query, req.user.userId, id);
     const data = (await query('SELECT data FROM sheets WHERE id = $1', [id])).rows[0].data;
     const rows = (await query(
-      `SELECT t.name, t.tab_id, t.columns, t.published_at, t.published_revision, u.username AS published_by,
+      `SELECT t.name, t.tab_id, t.columns, t.feeds, t.published_at, t.published_revision, u.username AS published_by,
               CASE WHEN t.published IS NULL THEN NULL ELSE jsonb_array_length(t.published->'rows') END AS row_count
        FROM sheet_tables t LEFT JOIN users u ON u.id = t.published_by WHERE t.sheet_id = $1 ORDER BY t.name`, [id])).rows;
     res.json({
       tables: rows.map((row) => ({
-        name: row.name, tabId: row.tab_id, tabName: (data.tabs.find((tab) => tab.id === row.tab_id) || {}).name || null, columns: row.columns,
+        name: row.name, feeds: row.feeds, tabId: row.tab_id, tabName: (data.tabs.find((tab) => tab.id === row.tab_id) || {}).name || null, columns: row.columns,
         published: row.published_at ? { at: row.published_at, by: row.published_by || null, rowCount: row.row_count, stale: Number(row.published_revision) < Number(sheet.revision) } : null,
       })),
     });
@@ -199,10 +240,43 @@ router.put('/:id/tables/:name', async (req, res) => {
     if (typeof tabId !== 'string' || !data.tabs.some((tab) => tab.id === tabId)) throw sheets.fail(400, 'Choose one of the tabs of this sheet');
     const exists = (await query('SELECT 1 FROM sheet_tables WHERE sheet_id = $1 AND name = $2', [id, name])).rows.length > 0;
     if (!exists && (await query('SELECT COUNT(*)::int AS n FROM sheet_tables WHERE sheet_id = $1', [id])).rows[0].n >= MAX_TABLES) throw sheets.fail(400, `A sheet can have at most ${MAX_TABLES} tables`);
-    await query(
-      `INSERT INTO sheet_tables (sheet_id, name, tab_id, columns) VALUES ($1, $2, $3, $4::jsonb)
-       ON CONFLICT (sheet_id, name) DO UPDATE SET tab_id = EXCLUDED.tab_id, columns = EXCLUDED.columns`, [id, name, tabId, JSON.stringify(columns)]);
-    res.json({ name, tabId, columns });
+    // feeds: omitted keeps what the table had; null or '' lets go; 'holidays' / 'credits' connects it to Leave
+    const previous = (await query('SELECT feeds FROM sheet_tables WHERE sheet_id = $1 AND name = $2', [id, name])).rows[0];
+    let feeds = previous ? previous.feeds : null;
+    const asked = req.body && Object.prototype.hasOwnProperty.call(req.body, 'feeds');
+    if (asked) {
+      feeds = req.body.feeds || null;
+      if (feeds !== null) {
+        await needManageSheets(req.user.userId);
+        const problem = leaveFeeds.feedColumnsProblem(feeds, columns);
+        if (problem) throw sheets.fail(400, problem);
+      }
+    } else if (feeds) {
+      const problem = leaveFeeds.feedColumnsProblem(feeds, columns);
+      if (problem) throw sheets.fail(400, problem);
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (feeds) {
+        const taken = (await client.query(
+          `SELECT t.id, t.name, s.id AS sheet_id, s.title FROM sheet_tables t JOIN sheets s ON s.id = t.sheet_id
+           WHERE t.feeds = $1 AND NOT (t.sheet_id = $2 AND t.name = $3)`, [feeds, id, name])).rows[0];
+        if (taken && !(req.body && req.body.replace === true)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: `Another table already feeds ${leaveFeeds.FEEDS[feeds].label.toLowerCase()}`, takenBy: { sheetId: taken.sheet_id, title: taken.title, table: taken.name } });
+        }
+        if (taken) await client.query('UPDATE sheet_tables SET feeds = NULL WHERE id = $1', [taken.id]);
+      }
+      await client.query(
+        `INSERT INTO sheet_tables (sheet_id, name, tab_id, columns, feeds) VALUES ($1, $2, $3, $4::jsonb, $5)
+         ON CONFLICT (sheet_id, name) DO UPDATE SET tab_id = EXCLUDED.tab_id, columns = EXCLUDED.columns, feeds = EXCLUDED.feeds`, [id, name, tabId, JSON.stringify(columns), feeds]);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally { client.release(); }
+    res.json({ name, tabId, columns, feeds });
   } catch (err) { sendError(res, err, 'Define table error'); }
 });
 
@@ -235,12 +309,27 @@ router.post('/:id/tables/:name/publish', async (req, res) => {
     const { role, sheet } = await sheets.sheetAccess(query, req.user.userId, id);
     if (role !== 'editor') throw sheets.fail(403, 'You can only look at this sheet');
     const table = await loadTable(id, req.params.name);
+    if (table.feeds) await needManageSheets(req.user.userId);
     const result = await runCheck(table, req.body && req.body.values);
     if (result.problemCount) return res.status(400).json({ error: 'The table has problems, so nothing was published', problems: result.problems, problemCount: result.problemCount });
-    const saved = (await query(
-      'UPDATE sheet_tables SET published = $2::jsonb, published_at = NOW(), published_by = $3, published_revision = $4 WHERE id = $1 RETURNING published_at',
-      [table.id, JSON.stringify({ rows: result.rows }), req.user.userId, sheet.revision])).rows[0];
-    res.json({ ok: true, rowCount: result.rows.length, publishedAt: saved.published_at });
+    const confirmed = Boolean(req.body && req.body.confirm === true);
+    if (table.feeds && !confirmed) {
+      return res.json({ needsConfirm: true, feeds: table.feeds, preview: await leaveFeedDb.buildPreview({ query }, table.feeds, result.rows) });
+    }
+    const client = await pool.connect();
+    let saved; let applied = null;
+    try {
+      await client.query('BEGIN');
+      if (table.feeds) applied = await leaveFeedDb.applyFeed(client, table.feeds, result.rows);
+      saved = (await client.query(
+        'UPDATE sheet_tables SET published = $2::jsonb, published_at = NOW(), published_by = $3, published_revision = $4 WHERE id = $1 RETURNING published_at',
+        [table.id, JSON.stringify({ rows: result.rows }), req.user.userId, sheet.revision])).rows[0];
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally { client.release(); }
+    res.json({ ok: true, rowCount: result.rows.length, publishedAt: saved.published_at, ...(applied ? { applied } : {}) });
   } catch (err) { sendError(res, err, 'Publish table error'); }
 });
 

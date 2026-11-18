@@ -1000,4 +1000,7 @@ $$`,
      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
      UNIQUE (sheet_id, name)
    )`,
+  // A published table can feed Leave (company holidays or leave credits); one table per kind
+  `ALTER TABLE sheet_tables ADD COLUMN IF NOT EXISTS feeds VARCHAR(12) CHECK (feeds IN ('holidays', 'credits'))`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_sheet_tables_feeds ON sheet_tables (feeds) WHERE feeds IS NOT NULL`,
 ];
