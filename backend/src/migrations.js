@@ -938,4 +938,31 @@ $$`,
   // The picture shown on a drawing's card: a small PNG the editing client saves after changes.
   `ALTER TABLE drawings ADD COLUMN IF NOT EXISTS preview BYTEA`,
   `ALTER TABLE drawings ADD COLUMN IF NOT EXISTS preview_at TIMESTAMPTZ`,
+  // Notes, Keep style: colour, pin, archive, trash, checklist notes, labels, pictures, and a reminder through the reminders table.
+  `ALTER TABLE notes ADD COLUMN IF NOT EXISTS kind VARCHAR(10) NOT NULL DEFAULT 'text'`,
+  `ALTER TABLE notes ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE notes ADD COLUMN IF NOT EXISTS color VARCHAR(12) NOT NULL DEFAULT 'default'`,
+  `ALTER TABLE notes ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+  `ALTER TABLE notes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `CREATE TABLE IF NOT EXISTS note_labels (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     name VARCHAR(30) NOT NULL
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_note_labels_name ON note_labels (user_id, LOWER(name))`,
+  `CREATE TABLE IF NOT EXISTS note_label_links (
+     note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+     label_id INTEGER NOT NULL REFERENCES note_labels(id) ON DELETE CASCADE,
+     PRIMARY KEY (note_id, label_id)
+   )`,
+  `CREATE TABLE IF NOT EXISTS note_images (
+     id SERIAL PRIMARY KEY,
+     note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+     mime VARCHAR(40) NOT NULL,
+     bytes BYTEA NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_note_images_note ON note_images (note_id)`,
+  `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS note_id INTEGER REFERENCES notes(id) ON DELETE CASCADE`,
 ];
