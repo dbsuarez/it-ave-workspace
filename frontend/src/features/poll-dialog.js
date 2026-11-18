@@ -20,13 +20,16 @@ function closePollDialog() {
   pollDialogState.busy = false;
 }
 
-function openPollDialog() {
+// Opens the dialog to make a new poll in the open channel, or (given a draft from pollDraftFromPoll) to edit an existing one.
+function openPollDialog(editDraft = null) {
   if (pollDialogOverlay()) return;
-  const channel = (state.channels || []).find((candidate) => Number(candidate.id) === Number(state.currentChannelId));
-  if (!state.currentChannelId || !channel) { showToast('Open a channel to add a poll.', 'info'); return; }
-  if (channel.kind === 'forum') { showToast('Polls are not available in forums.', 'info'); return; }
-  pollDialogState.channelId = Number(state.currentChannelId);
-  pollDialogState.draft = { question: '', options: ['', ''], multiple: false, anonymous: false, closes: '' };
+  if (!editDraft) {
+    const channel = (state.channels || []).find((candidate) => Number(candidate.id) === Number(state.currentChannelId));
+    if (!state.currentChannelId || !channel) { showToast('Open a channel to add a poll.', 'info'); return; }
+    if (channel.kind === 'forum') { showToast('Polls are not available in forums.', 'info'); return; }
+    pollDialogState.channelId = Number(state.currentChannelId);
+  }
+  pollDialogState.draft = editDraft || { question: '', options: ['', ''], multiple: false, anonymous: false, closes: '' };
   const overlay = document.createElement('div');
   overlay.id = 'poll-dialog-overlay';
   overlay.className = 'modal-overlay open';
@@ -39,6 +42,17 @@ function openPollDialog() {
 }
 
 // Only the Create button changes while someone types, so the box they are typing in keeps its place.
+// The poll maker's Edit button on a poll message: loads the poll as it is now and opens the dialog to change it.
+async function openPollEditor(pollId) {
+  try {
+    const response = await api(`/api/polls/${Number(pollId)}`);
+    const poll = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(poll.error || 'Could not open the poll.');
+    if (poll.closed) { showToast('This poll is closed, so it cannot be edited.', 'info'); return; }
+    openPollDialog(pollDraftFromPoll(poll));
+  } catch (err) { showToast(err.message || 'Could not open the poll.', 'error'); }
+}
+
 function syncPollCreateButton() {
   const button = document.querySelector('#poll-dialog-overlay [data-poll-create]');
   if (button) button.disabled = !pollDraftValid(pollDialogState.draft) || pollDialogState.busy;
@@ -68,11 +82,18 @@ function handlePollDialogKeydown(event) {
   event.preventDefault();
   const index = Number(option.dataset.pollOption);
   if (index === draft.options.length - 1 && draft.options.length < POLL_MAX_OPTIONS && option.value.trim()) {
-    draft.options.push('');
+    addPollOption(draft);
     renderPollDialog(`[data-poll-option="${draft.options.length - 1}"]`);
   } else {
     document.querySelector(`#poll-dialog-overlay [data-poll-option="${index + 1}"]`)?.focus();
   }
+}
+
+// Keeps the lists that go with the options (ids and vote counts when editing) the same length.
+function addPollOption(draft) {
+  draft.options.push('');
+  if (draft.optionIds) draft.optionIds.push(null);
+  if (draft.optionVotes) draft.optionVotes.push(0);
 }
 
 async function submitPoll() {
@@ -81,14 +102,21 @@ async function submitPoll() {
   pollDialogState.busy = true;
   syncPollCreateButton();
   try {
-    const response = await api('/api/polls', { method: 'POST', body: JSON.stringify(pollDraftRequest(draft, pollDialogState.channelId)) });
+    const editing = Boolean(draft.pollId);
+    const response = editing
+      ? await api(`/api/polls/${draft.pollId}`, { method: 'PUT', body: JSON.stringify(pollEditRequest(draft)) })
+      : await api('/api/polls', { method: 'POST', body: JSON.stringify(pollDraftRequest(draft, pollDialogState.channelId)) });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Could not create the poll.');
+    if (!response.ok) throw new Error(data.error || (editing ? 'Could not save the poll.' : 'Could not create the poll.'));
     closePollDialog();
+    if (editing) {
+      refreshPollCard(draft.pollId);
+      showToast('Poll updated.', 'success');
+    }
   } catch (err) {
     pollDialogState.busy = false;
     syncPollCreateButton();
-    showToast(err.message || 'Could not create the poll.', 'error');
+    showToast(err.message || 'Could not save the poll.', 'error');
   }
 }
 
@@ -98,12 +126,15 @@ function handlePollDialogClick(event) {
   if (!draft) return;
   if (target === pollDialogOverlay() || target.closest('[data-poll-cancel]')) { closePollDialog(); return; }
   if (target.closest('[data-poll-add-option]')) {
-    if (draft.options.length < POLL_MAX_OPTIONS) { draft.options.push(''); renderPollDialog(`[data-poll-option="${draft.options.length - 1}"]`); }
+    if (draft.options.length < POLL_MAX_OPTIONS) { addPollOption(draft); renderPollDialog(`[data-poll-option="${draft.options.length - 1}"]`); }
     return;
   }
   const remove = target.closest('[data-poll-remove-option]');
   if (remove && draft.options.length > POLL_MIN_OPTIONS) {
-    draft.options.splice(Number(remove.dataset.pollRemoveOption), 1);
+    const index = Number(remove.dataset.pollRemoveOption);
+    draft.options.splice(index, 1);
+    if (draft.optionIds) draft.optionIds.splice(index, 1);
+    if (draft.optionVotes) draft.optionVotes.splice(index, 1);
     renderPollDialog();
     return;
   }

@@ -27,7 +27,7 @@ function sendError(res, err, label) {
 async function loadOwnMessage(messageId, userId) {
   if (!messageId) throw Object.assign(new Error('A valid message ID is required'), { status: 400 });
   const result = await query(
-    'SELECT id, channel_id, user_id, content FROM messages WHERE id = $1',
+    'SELECT id, channel_id, user_id, content, kind FROM messages WHERE id = $1',
     [messageId]
   );
   if (!result.rows.length) throw Object.assign(new Error('Message not found'), { status: 404 });
@@ -37,6 +37,7 @@ async function loadOwnMessage(messageId, userId) {
   if (Number(message.user_id) !== Number(userId)) {
     throw Object.assign(new Error('You can only change your own messages'), { status: 403 });
   }
+  if (message.kind === 'poll') throw Object.assign(new Error('Edit a poll with the Edit button on the poll itself'), { status: 400 });
   return message;
 }
 

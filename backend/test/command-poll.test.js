@@ -40,6 +40,7 @@ test.before(async () => {
   app.use('/api/commands', require('../src/routes/commands'));
   app.use('/api/polls', require('../src/routes/polls'));
   app.use('/api/messages', require('../src/routes/messages'));
+  app.use('/api/messages', require('../src/routes/messageEdits'));
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -411,4 +412,115 @@ test('the dialog follows the same rules as /poll: members only, no guests, not i
   await admin.query('UPDATE channels SET archived_at = NOW() WHERE id = $1', [ch]);
   assert.equal((await create(ids.alice, body)).status, 409, 'archived');
   assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM polls WHERE channel_id = $1', [ch])).rows[0].n, 0);
+});
+
+// ------------------------------------------------------------------------------------------------------------ editing a poll
+// Polls for these tests are made through the dialog's endpoint: creating many with /poll runs into the command rate limit.
+const quick = async (ch, question, labels, extra = {}) => {
+  const made = await create(ids.alice, { channelId: ch, question, options: labels, ...extra });
+  assert.equal(made.status, 201, JSON.stringify(made.json));
+  return made.json.message.poll.id;
+};
+
+const edit = (userId, pollId, body) => call(userId, 'PUT', `/api/polls/${pollId}`, body);
+const opt = (rows) => rows.map((row) => ({ id: Number(row.id), label: row.label }));
+
+test('the poll maker edits the question, renames and adds options, and changes the switches and end time while nobody has voted', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const poll = await quick(ch, 'Lunch?', ['Pizza', 'Sushi']);
+  const [a, b] = opt(await options(poll));
+  const before = emitted.length;
+  const saved = await edit(ids.alice, poll, { question: '  Lunch on Friday?  ', options: [{ id: a.id, label: 'Pizza place' }, { id: b.id, label: 'Sushi' }, { label: 'Salad' }], multiple: true, anonymous: true, closes: '1d' });
+  assert.equal(saved.status, 200, JSON.stringify(saved.json));
+  assert.equal(saved.json.question, 'Lunch on Friday?');
+  assert.deepEqual([saved.json.multiple, saved.json.anonymous], [true, true]);
+  assert.deepEqual(saved.json.options.map((o) => o.label), ['Pizza place', 'Sushi', 'Salad']);
+  assert.equal(saved.json.options[0].id, a.id, 'a renamed option keeps its id');
+  assert.ok(saved.json.closesAt);
+  const message = (await admin.query("SELECT m.content, m.edited_at FROM messages m JOIN polls p ON p.message_id = m.id WHERE p.id = $1", [poll])).rows[0];
+  assert.equal(message.content, 'Lunch on Friday?', 'the message text follows the question');
+  assert.ok(message.edited_at, 'and the message shows as edited');
+  assert.ok(emitted.slice(before).some((e) => e.event === 'poll_updated' && e.payload.pollId === Number(poll)), 'the channel is told to refresh the card');
+});
+
+test('options can be reordered, and the end time can be cleared or left alone', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const poll = await quick(ch, 'Q?', ['one', 'two', 'three'], { closes: '2h' });
+  const [a, b, c] = opt(await options(poll));
+  const kept = await edit(ids.alice, poll, { question: 'Q?', options: [c, a, b] });
+  assert.deepEqual(kept.json.options.map((o) => o.id), [c.id, a.id, b.id], 'new order');
+  assert.ok(kept.json.closesAt, 'no closes means unchanged');
+  const cleared = await edit(ids.alice, poll, { question: 'Q?', options: [c, a, b], closes: '' });
+  assert.equal(cleared.json.closesAt, null);
+  const set = await edit(ids.alice, poll, { question: 'Q?', options: [c, a, b], closes: '3d' });
+  assert.ok(set.json.closesAt);
+});
+
+test('only the poll maker can edit: not another member, not a moderator, not a guest or an outsider', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const poll = await quick(ch, 'Q?', ['a', 'b']);
+  const body = { question: 'Hijacked?', options: opt(await options(poll)) };
+  for (const user of [ids.bob, ids.mod, ids.guest, ids.outsider]) assert.equal((await edit(user, poll, body)).status, 403, `user ${user}`);
+  assert.equal((await admin.query('SELECT question FROM polls WHERE id = $1', [poll])).rows[0].question, 'Q?');
+});
+
+test('once people have voted, votes are protected: an option with votes cannot be removed and the switches are locked, but wording can change', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const poll = await quick(ch, 'Q?', ['a', 'b', 'c']);
+  const [a, b, c] = opt(await options(poll));
+  await vote(ids.bob, poll, [a.id]);
+  assert.equal((await edit(ids.alice, poll, { question: 'Q?', options: [b, c] })).status, 409, 'a has a vote');
+  assert.equal((await edit(ids.alice, poll, { question: 'Q?', options: [a, b, c], multiple: true })).status, 409, 'the answer type is locked');
+  assert.equal((await edit(ids.alice, poll, { question: 'Q?', options: [a, b, c], anonymous: true })).status, 409, 'anonymity is locked');
+  const fine = await edit(ids.alice, poll, { question: 'Better question?', options: [{ id: a.id, label: 'Option A' }, b], multiple: false, anonymous: false });
+  assert.equal(fine.status, 200, JSON.stringify(fine.json));
+  assert.deepEqual(fine.json.options.map((o) => [o.label, o.count]), [['Option A', 1], ['b', 0]], 'the vote stayed with its option, and c (no votes) was removed');
+  assert.deepEqual(await votesOf(poll, ids.bob), [a.id]);
+});
+
+test('a closed poll or an archived channel cannot be edited', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const poll = await quick(ch, 'Q?', ['a', 'b']);
+  const body = { question: 'Q2?', options: opt(await options(poll)) };
+  await call(ids.alice, 'POST', `/api/polls/${poll}/close`);
+  assert.equal((await edit(ids.alice, poll, body)).status, 409);
+  const ch2 = await channel();
+  const poll2 = await quick(ch2, 'Q?', ['a', 'b']);
+  await admin.query('UPDATE channels SET archived_at = NOW() WHERE id = $1', [ch2]);
+  assert.equal((await edit(ids.alice, poll2, { question: 'Q2?', options: opt(await options(poll2)) })).status, 409);
+});
+
+test('bad edits are refused and change nothing', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const poll = await quick(ch, 'Q?', ['a', 'b']);
+  const other = await quick(ch, 'Other?', ['x', 'y']);
+  const [a, b] = opt(await options(poll));
+  const [x] = opt(await options(other));
+  const bad = [
+    { question: '', options: [a, b] }, { question: 'x'.repeat(201), options: [a, b] }, { options: [a, b] },
+    { question: 'Q?', options: [a] }, { question: 'Q?', options: 'a,b' }, { question: 'Q?' },
+    { question: 'Q?', options: [a, { label: '  ' }] }, { question: 'Q?', options: [a, { label: 'x'.repeat(101) }] },
+    { question: 'Q?', options: [a, b, ...Array.from({ length: 9 }, (_, i) => ({ label: `n${i}` }))] },
+    { question: 'Q?', options: [a, x] }, { question: 'Q?', options: [a, a] }, { question: 'Q?', options: [a, b], closes: '2 weeks' },
+  ];
+  for (const body of bad) assert.equal((await edit(ids.alice, poll, body)).status, 400, JSON.stringify(body).slice(0, 70));
+  assert.equal((await edit(ids.alice, 999999, { question: 'Q?', options: [a, b] })).status, 404);
+  assert.deepEqual((await options(poll)).map((o) => o.label), ['a', 'b']);
+  assert.equal((await admin.query('SELECT question FROM polls WHERE id = $1', [poll])).rows[0].question, 'Q?');
+});
+
+test('the ordinary message editor refuses a poll, which is edited with its own button', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const poll = await quick(ch, 'Q?', ['a', 'b']);
+  const messageId = (await admin.query('SELECT message_id FROM polls WHERE id = $1', [poll])).rows[0].message_id;
+  const result = await call(ids.alice, 'PATCH', `/api/messages/${messageId}`, { content: 'sneaky' });
+  assert.equal(result.status, 400);
+  assert.match(result.json.error, /poll/i);
 });

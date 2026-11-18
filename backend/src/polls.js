@@ -186,11 +186,84 @@ async function replaceVotes(userId, pollId, optionIds) {
   }
 }
 
+// Checks an edit request: { question, options: [{ id?, label }], multiple?, anonymous?, closes? }. Returns the cleaned values.
+// `closes`: left out = unchanged, '' or null = no closing time, a duration like 1d = that long from now.
+function validatePollEdit(input) {
+  const body = input && typeof input === 'object' ? input : {};
+  const items = Array.isArray(body.options) ? body.options : null;
+  const valid = validateNewPoll({ question: body.question, options: items ? items.map((item) => (item && typeof item === 'object' ? item.label : '')) : null });
+  const ids = items.map((item) => (item.id === undefined || item.id === null ? null : Number(item.id)));
+  if (ids.some((id) => id !== null && (!Number.isSafeInteger(id) || id < 1))) throw fail(400, 'Choose from the options of this poll');
+  const kept = ids.filter((id) => id !== null);
+  if (new Set(kept).size !== kept.length) throw fail(400, 'An option can only appear once');
+  for (const flag of ['multiple', 'anonymous']) {
+    if (body[flag] !== undefined && typeof body[flag] !== 'boolean') throw fail(400, `${flag} must be true or false`);
+  }
+  let closesAt;
+  if (body.closes !== undefined) {
+    if (body.closes === null || body.closes === '') closesAt = null;
+    else if (typeof body.closes === 'string') closesAt = new Date(Date.now() + parseDuration(body.closes));
+    else throw fail(400, 'closes needs a time like 30m, 2h or 3d');
+  }
+  return { question: valid.question, options: valid.options.map((label, index) => ({ id: ids[index], label })), multiple: body.multiple, anonymous: body.anonymous, closesAt };
+}
+
+// The poll maker changes the question, options, switches and closing time of a poll that is still open. Votes are protected: an
+// option that already has votes cannot be removed, and once anyone has voted the switches (one or many answers, anonymous)
+// cannot change. Renaming keeps an option's id, so its votes stay with it. The message text follows the question.
+async function editPoll(query, userId, pollId, input) {
+  const clean = validatePollEdit(input);
+  const poll = await loadPoll(query, pollId);
+  await ensureChannelMembership(query, userId, poll.channel_id);
+  await ensureNotGuest(query, userId, 'Guests cannot edit polls');
+  if (Number(poll.created_by) !== Number(userId)) throw fail(403, 'Only the person who made the poll can edit it');
+  await ensureChannelNotArchived(query, poll.channel_id);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const locked = (await client.query(
+      `SELECT id, message_id, multiple, anonymous, (closed_at IS NOT NULL OR (closes_at IS NOT NULL AND closes_at <= NOW())) AS closed
+       FROM polls WHERE id = $1 FOR UPDATE`, [pollId])).rows[0];
+    if (!locked) throw fail(404, 'Poll not found');
+    if (locked.closed) throw fail(409, 'This poll is closed, so it cannot be edited');
+    const existing = (await client.query(
+      `SELECT o.id, COUNT(v.user_id)::int AS votes FROM poll_options o LEFT JOIN poll_votes v ON v.option_id = o.id
+       WHERE o.poll_id = $1 GROUP BY o.id`, [pollId])).rows;
+    const byId = new Map(existing.map((row) => [Number(row.id), row.votes]));
+    const totalVotes = existing.reduce((sum, row) => sum + row.votes, 0);
+    if (clean.options.some((option) => option.id !== null && !byId.has(option.id))) throw fail(400, 'Choose from the options of this poll');
+    const kept = new Set(clean.options.map((option) => option.id).filter((id) => id !== null));
+    const removed = existing.filter((row) => !kept.has(Number(row.id)));
+    if (removed.some((row) => row.votes > 0)) throw fail(409, 'An option that already has votes cannot be removed');
+    const changesSwitch = (clean.multiple !== undefined && clean.multiple !== locked.multiple) || (clean.anonymous !== undefined && clean.anonymous !== locked.anonymous);
+    if (changesSwitch && totalVotes > 0) throw fail(409, 'Voting has started, so one-or-many answers and anonymous votes can no longer change');
+
+    await client.query(
+      `UPDATE polls SET question = $2, multiple = COALESCE($3, multiple), anonymous = COALESCE($4, anonymous),
+              closes_at = CASE WHEN $5::boolean THEN $6 ELSE closes_at END WHERE id = $1`,
+      [pollId, clean.question, clean.multiple ?? null, clean.anonymous ?? null, clean.closesAt !== undefined, clean.closesAt === undefined ? null : clean.closesAt]);
+    if (removed.length) await client.query('DELETE FROM poll_options WHERE poll_id = $1 AND id = ANY($2::bigint[])', [pollId, removed.map((row) => row.id)]);
+    for (let index = 0; index < clean.options.length; index += 1) {
+      const option = clean.options[index];
+      if (option.id !== null) await client.query('UPDATE poll_options SET label = $3, position = $4 WHERE id = $1 AND poll_id = $2', [option.id, pollId, option.label, index + 1]);
+      else await client.query('INSERT INTO poll_options (poll_id, position, label) VALUES ($1, $2, $3)', [pollId, index + 1, option.label]);
+    }
+    await client.query('UPDATE messages SET content = $2, edited_at = NOW() WHERE id = $1', [locked.message_id, clean.question]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+  return { poll: await loadPoll(query, pollId), serialized: await serializePoll(query, pollId, userId) };
+}
+
 async function closePoll(query, pollId) {
   await query('UPDATE polls SET closed_at = COALESCE(closed_at, NOW()) WHERE id = $1', [pollId]);
 }
 
 module.exports = {
   parseDuration, validateNewPoll, loadPoll, serializePoll, serializePolls, pollsForMessages, createPoll,
-  authorizeVoter, replaceVotes, closePoll, closeIfExpired,
+  authorizeVoter, replaceVotes, closePoll, closeIfExpired, editPoll, validatePollEdit,
 };

@@ -185,3 +185,65 @@ test('the end-time choices start with never and all fit what the server accepts'
   assert.equal(POLL_CLOSE_CHOICES[0].value, '');
   for (const choice of POLL_CLOSE_CHOICES.slice(1)) assert.match(choice.value, /^\d{1,4}[mhd]$/);
 });
+
+// ------------------------------------------------------------------------------------------------ editing a poll in the dialog
+const { pollDraftFromPoll, pollEditRequest } = require('../src/features/polls');
+
+const livePoll = (extra = {}) => ({
+  id: 9, question: 'Lunch?', multiple: false, anonymous: false, closed: false, closesAt: null, totalVoters: 0, myOptionIds: [],
+  options: [{ id: 11, label: 'Pizza', count: 0 }, { id: 12, label: 'Sushi', count: 0 }], ...extra,
+});
+
+test('a poll becomes a draft to edit: its question, options with their ids and votes, and the switches', () => {
+  const d = pollDraftFromPoll(livePoll({ multiple: true, anonymous: true, totalVoters: 3, options: [{ id: 11, label: 'Pizza', count: 2 }, { id: 12, label: 'Sushi', count: 1 }] }));
+  assert.equal(d.pollId, 9);
+  assert.deepEqual(d.options, ['Pizza', 'Sushi']);
+  assert.deepEqual(d.optionIds, [11, 12]);
+  assert.deepEqual(d.optionVotes, [2, 1]);
+  assert.deepEqual([d.multiple, d.anonymous, d.locked, d.closes], [true, true, true, 'keep']);
+  assert.equal(pollDraftFromPoll(livePoll()).locked, false, 'nobody has voted, so the switches are free');
+});
+
+test('the edit dialog says Edit poll and Save changes, and keeps the question and options as they are', () => {
+  const html = pollDialogHtml(pollDraftFromPoll(livePoll()));
+  assert.match(html, /<h3>Edit poll<\/h3>/);
+  assert.match(html, /Save changes/);
+  assert.doesNotMatch(html, />Create poll</);
+  assert.match(html, /value="Lunch\?"/);
+  assert.match(html, /value="Pizza"/);
+  assert.match(html, /<option value="keep" selected>/);
+});
+
+test('in the edit dialog an option with votes cannot be removed, and the switches lock once anyone has voted', () => {
+  const voted = pollDialogHtml(pollDraftFromPoll(livePoll({ totalVoters: 2, options: [{ id: 11, label: 'Pizza', count: 2 }, { id: 12, label: 'Sushi', count: 0 }, { id: 13, label: 'Soup', count: 0 }] })));
+  assert.equal((voted.match(/data-poll-remove-option="/g) || []).length, 2, 'the two without votes can go');
+  assert.doesNotMatch(voted, /data-poll-remove-option="0"/);
+  assert.match(voted, /data-poll-multiple[^>]*disabled/);
+  assert.match(voted, /data-poll-anonymous[^>]*disabled/);
+  assert.match(voted, /Voting has started/);
+  const fresh = pollDialogHtml(pollDraftFromPoll(livePoll({ options: [{ id: 11, label: 'a', count: 0 }, { id: 12, label: 'b', count: 0 }, { id: 13, label: 'c', count: 0 }] })));
+  assert.doesNotMatch(fresh, /data-poll-multiple[^>]*disabled/);
+  assert.doesNotMatch(fresh, /Voting has started/);
+});
+
+test('the edit request keeps ids for old options, leaves new ones without an id, skips blank boxes, and translates the end time', () => {
+  const d = pollDraftFromPoll(livePoll());
+  d.options = ['Pizza place', '', 'Sushi', 'Salad'];
+  d.optionIds = [11, 99, 12, null];
+  d.question = '  Lunch on Friday?  ';
+  assert.deepEqual(pollEditRequest(d), { question: 'Lunch on Friday?', options: [{ id: 11, label: 'Pizza place' }, { id: 12, label: 'Sushi' }, { label: 'Salad' }], multiple: false, anonymous: false });
+  d.closes = 'none';
+  assert.equal(pollEditRequest(d).closes, '');
+  d.closes = '1d';
+  assert.equal(pollEditRequest(d).closes, '1d');
+  d.closes = 'keep';
+  assert.equal('closes' in pollEditRequest(d), false);
+});
+
+test('adding and removing boxes in an edit keeps the ids lined up with the options', () => {
+  const d = pollDraftFromPoll(livePoll());
+  d.options.push(''); d.optionIds.push(null); d.optionVotes.push(0);
+  assert.equal(d.options.length, d.optionIds.length);
+  assert.equal(d.options.length, d.optionVotes.length);
+  assert.match(pollDialogHtml(d), /data-poll-option="2"/);
+});

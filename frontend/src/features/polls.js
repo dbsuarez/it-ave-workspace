@@ -67,6 +67,9 @@ const POLL_CLOSE_CHOICES = [
   { value: '7d', label: 'In 1 week' },
 ];
 
+// When editing, the first choice leaves the current closing time as it is.
+const POLL_EDIT_CLOSE_CHOICES = [{ value: 'keep', label: 'Keep as it is' }, { value: 'none', label: 'Never' }, ...POLL_CLOSE_CHOICES.slice(1)];
+
 const pollFilledOptions = (draft) => (draft.options || []).map((option) => String(option).trim()).filter(Boolean);
 
 // A question up to 200 characters and 2 to 10 options of up to 100 (boxes left empty do not count).
@@ -87,13 +90,44 @@ function pollDraftRequest(draft, channelId) {
   return request;
 }
 
+// A draft to edit an existing poll (the serialized poll from GET /api/polls/:id). Each option keeps its id and its vote count.
+function pollDraftFromPoll(poll) {
+  return {
+    pollId: Number(poll.id), question: poll.question, options: poll.options.map((option) => option.label), optionIds: poll.options.map((option) => Number(option.id)),
+    optionVotes: poll.options.map((option) => Number(option.count) || 0), multiple: Boolean(poll.multiple), anonymous: Boolean(poll.anonymous),
+    locked: (Number(poll.totalVoters) || 0) > 0, closes: 'keep',
+  };
+}
+
+// What is sent to PUT /api/polls/:id. Old options keep their id; new ones have none; closes is left out to keep the time as it is.
+function pollEditRequest(draft) {
+  const options = [];
+  (draft.options || []).forEach((label, index) => {
+    const text = String(label).trim();
+    if (!text) return;
+    const id = draft.optionIds ? draft.optionIds[index] : null;
+    options.push(id ? { id, label: text } : { label: text });
+  });
+  const request = { question: String(draft.question || '').trim(), options, multiple: Boolean(draft.multiple), anonymous: Boolean(draft.anonymous) };
+  if (draft.closes === 'none') request.closes = '';
+  else if (draft.closes && draft.closes !== 'keep') request.closes = draft.closes;
+  return request;
+}
+
 function pollDialogHtml(draft) {
+  const editing = Boolean(draft.pollId);
   const options = draft.options && draft.options.length ? draft.options : ['', ''];
-  const rows = options.map((option, index) => `<div class="poll-option-row"><input type="text" class="poll-field" data-poll-option="${index}" maxlength="${POLL_MAX_OPTION}" placeholder="Option ${index + 1}" aria-label="Option ${index + 1}" value="${pollEscape(option)}">${options.length > POLL_MIN_OPTIONS ? `<button type="button" class="poll-remove" data-poll-remove-option="${index}" title="Remove option" aria-label="Remove option ${index + 1}">&times;</button>` : ''}</div>`).join('');
-  const closes = POLL_CLOSE_CHOICES.map((choice) => `<option value="${choice.value}"${choice.value === (draft.closes || '') ? ' selected' : ''}>${choice.label}</option>`).join('');
-  return `<div class="modal open poll-modal" role="dialog" aria-modal="true" aria-label="Create poll"><div class="modal-header"><h3>Create poll</h3><button class="modal-close" type="button" data-poll-cancel aria-label="Close">&times;</button></div><div class="modal-body"><label class="poll-field-label" for="poll-question">Question</label><input id="poll-question" type="text" class="poll-field" data-poll-question maxlength="${POLL_MAX_QUESTION}" placeholder="Ask a question..." value="${pollEscape(draft.question || '')}"><div class="poll-field-label">Options</div>${rows}${options.length < POLL_MAX_OPTIONS ? '<button type="button" class="poll-add-option" data-poll-add-option>+ Add option</button>' : ''}<div class="poll-settings"><label class="poll-switch"><input type="checkbox" data-poll-multiple${draft.multiple ? ' checked' : ''}><span>Allow multiple answers</span></label><label class="poll-switch"><input type="checkbox" data-poll-anonymous${draft.anonymous ? ' checked' : ''}><span>Anonymous votes</span></label><label class="poll-end"><span>Poll ends</span><select data-poll-closes>${closes}</select></label></div></div><div class="modal-footer"><button type="button" class="btn" data-poll-cancel>Cancel</button><button type="button" class="btn primary" data-poll-create${pollDraftValid(draft) ? '' : ' disabled'}>Create poll</button></div></div>`;
+  const hasVotes = (index) => editing && draft.optionVotes && Number(draft.optionVotes[index]) > 0;
+  const rows = options.map((option, index) => `<div class="poll-option-row"><input type="text" class="poll-field" data-poll-option="${index}" maxlength="${POLL_MAX_OPTION}" placeholder="Option ${index + 1}" aria-label="Option ${index + 1}" value="${pollEscape(option)}">${options.length > POLL_MIN_OPTIONS && !hasVotes(index) ? `<button type="button" class="poll-remove" data-poll-remove-option="${index}" title="Remove option" aria-label="Remove option ${index + 1}">&times;</button>` : ''}</div>`).join('');
+  const choices = editing ? POLL_EDIT_CLOSE_CHOICES : POLL_CLOSE_CHOICES;
+  const current = draft.closes || (editing ? 'keep' : '');
+  const closes = choices.map((choice) => `<option value="${choice.value}"${choice.value === current ? ' selected' : ''}>${choice.label}</option>`).join('');
+  const lock = editing && draft.locked ? ' disabled' : '';
+  const lockNote = editing && draft.locked ? '<div class="poll-lock-note">Voting has started, so these two can no longer change.</div>' : '';
+  const heading = editing ? 'Edit poll' : 'Create poll';
+  return `<div class="modal open poll-modal" role="dialog" aria-modal="true" aria-label="${heading}"><div class="modal-header"><h3>${heading}</h3><button class="modal-close" type="button" data-poll-cancel aria-label="Close">&times;</button></div><div class="modal-body"><label class="poll-field-label" for="poll-question">Question</label><input id="poll-question" type="text" class="poll-field" data-poll-question maxlength="${POLL_MAX_QUESTION}" placeholder="Ask a question..." value="${pollEscape(draft.question || '')}"><div class="poll-field-label">Options</div>${rows}${options.length < POLL_MAX_OPTIONS ? '<button type="button" class="poll-add-option" data-poll-add-option>+ Add option</button>' : ''}<div class="poll-settings"><label class="poll-switch"><input type="checkbox" data-poll-multiple${draft.multiple ? ' checked' : ''}${lock}><span>Allow multiple answers</span></label><label class="poll-switch"><input type="checkbox" data-poll-anonymous${draft.anonymous ? ' checked' : ''}${lock}><span>Anonymous votes</span></label>${lockNote}<label class="poll-end"><span>Poll ends</span><select data-poll-closes>${closes}</select></label></div></div><div class="modal-footer"><button type="button" class="btn" data-poll-cancel>Cancel</button><button type="button" class="btn primary" data-poll-create${pollDraftValid(draft) ? '' : ' disabled'}>${editing ? 'Save changes' : 'Create poll'}</button></div></div>`;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { pollCardHtml, pollDialogHtml, pollDraftValid, pollDraftRequest, POLL_CLOSE_CHOICES };
+  module.exports = { pollCardHtml, pollDialogHtml, pollDraftValid, pollDraftRequest, pollDraftFromPoll, pollEditRequest, POLL_CLOSE_CHOICES };
 }

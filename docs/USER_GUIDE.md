@@ -32,6 +32,7 @@ Type **/** in a channel to see what you can use.
 - **/help** lists the commands available to you.
 - **/search words** searches, with the answer shown only to you.
 - **The poll button** (the little bars icon in the message box) opens a **Create poll** window: type the question, fill in the options (press Enter for the next one, **+ Add option** for more, up to 10), choose **Allow multiple answers**, **Anonymous votes** and when the poll ends, then press **Create poll**. Once a poll has ended, voters show as small round pictures instead of names.
+- **To change a poll you made**, open the menu on its message and choose **Edit**: the same window opens with the poll filled in. You can reword the question, rename, add and reorder options, and change when it ends. Once anyone has voted, an option that has votes cannot be removed and "multiple answers" and "anonymous" are locked. Only the person who made a poll can edit it, and only while it is open.
 - **/poll "Question?" "Option A" "Option B"** does the same from the keyboard. Add `--multi` to let people pick several, `--anonymous` to hide who voted, and `--closes 2h` to close it automatically.
 - **/announce text** posts an announcement. It only works in channels marked as announcement channels, and only for people who have the Announce permission. You see a preview first and confirm.
 

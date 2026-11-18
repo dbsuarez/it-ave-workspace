@@ -73,6 +73,17 @@ router.delete('/:pollId/vote', async (req, res) => {
   } catch (err) { sendError(res, err, 'Withdraw vote error'); }
 });
 
+// The poll maker edits an open poll: { question, options: [{ id?, label }], multiple?, anonymous?, closes? } (see polls.editPoll).
+router.put('/:pollId', async (req, res) => {
+  try {
+    const pollId = parseId(req.params.pollId);
+    if (!pollId) return res.status(400).json({ error: 'A valid poll is required' });
+    const { poll, serialized } = await polls.editPoll(query, req.user.userId, pollId, req.body);
+    announceChange(req, poll);
+    res.json(serialized);
+  } catch (err) { sendError(res, err, 'Edit poll error'); }
+});
+
 // The creator or a channel moderator closes a poll.
 router.post('/:pollId/close', async (req, res) => {
   try {
