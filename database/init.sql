@@ -533,6 +533,7 @@ ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS prelaunch_password BOOL
 ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS go_live BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS owner_private_channel_access BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'message';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_prefs JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS workspace_sidebar_layout JSONB NOT NULL DEFAULT '{"sections": []}'::jsonb;
 -- Employee management; mirrors backend/src/migrations.js.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hr BOOLEAN NOT NULL DEFAULT false;

@@ -141,6 +141,8 @@ someone else, or after a minute, is a new entry. A failure to record history nev
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/people` | The directory (members only, no guests or bots); each person carries `managerId`, so it is also the org chart. Email, phone and location are blank when the person hides them |
+| GET | `/api/people?status=inactive` | Former (deactivated) employees with their old `managerId`, for HR and Owners only (403 for anyone else). The default list is active people only. |
+| GET, PUT | `/api/people/preferences` | The remembered People view: `{ view: "card" \| "list", status: "active" \| "inactive", canSeeInactive }`, stored per person (`users.ui_prefs`). `PUT` takes `view` and/or `status`; `inactive` is refused for anyone who may not see inactive people. |
 | GET | `/api/people/:id` | One employee page (about, sections, links, contact) plus `manager`, `reports` and `canSetManager` |
 | PUT | `/api/people/me` | Customize my own page: `jobTitle`, `department`, `location`, `phone`, `about`, `sections` (max 8), `links` (max 8, http/https only) and `hide` (email, phone, location); a partial update changes only what is sent |
 | PUT | `/api/people/:id/manager` | Superadmin: `{ managerId }` or `{ managerId: null }`; refuses themselves, loops and non-members |

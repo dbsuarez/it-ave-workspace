@@ -7,6 +7,8 @@
 
 const peopleState = {
   list: [], loaded: false, error: '', tab: 'directory', query: '', department: '',
+  // remembered per person on the server (GET/PUT /api/people/preferences); inactive people are for HR and Owners only
+  prefs: { view: 'card', status: 'active', canSeeInactive: false }, inactive: [], inactiveLoaded: false,
   pageId: null, page: null, editLines: false, collapsed: new Set(),
   view: null, // the org chart's pan and zoom: { x, y, k }; null until the first fit
 };
@@ -36,14 +38,54 @@ function personLine(person) {
   return [person.jobTitle, person.department].filter(Boolean).join(' · ');
 }
 
+async function loadPeoplePrefs() {
+  try {
+    const res = await api('/api/people/preferences');
+    const prefs = await res.json().catch(() => ({}));
+    if (res.ok) peopleState.prefs = { view: prefs.view === 'list' ? 'list' : 'card', status: prefs.status === 'inactive' ? 'inactive' : 'active', canSeeInactive: Boolean(prefs.canSeeInactive) };
+  } catch (_) { /* keep the defaults: cards, active */ }
+}
+
+async function loadInactivePeople() {
+  try {
+    const res = await api('/api/people?status=inactive');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not load former employees');
+    peopleState.inactive = data.people;
+    peopleState.inactiveLoaded = true;
+  } catch (err) {
+    peopleState.inactive = [];
+    showToast(err.message || 'Could not load former employees.', 'error');
+  }
+}
+
+// Saves one choice on the server. The screen already shows it; a failure is reported but does not undo it.
+async function savePeoplePref(change) {
+  Object.assign(peopleState.prefs, change);
+  if (peopleState.prefs.status === 'inactive' && !peopleState.inactiveLoaded) await loadInactivePeople();
+  renderPeople();
+  try {
+    const res = await api('/api/people/preferences', { method: 'PUT', body: JSON.stringify(change) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save your choice');
+  } catch (err) {
+    showToast(err.message || 'Could not save your choice.', 'error');
+  }
+}
+
+const peopleViewHelpers = {
+  escape: (value) => escapeText(value), name: (person) => personName(person), avatar: (person, size) => peopleAvatar(person, size), presence: (person) => presenceDot(person),
+};
+
 async function loadPeople(force = false) {
   if (peopleState.loaded && !force) { renderPeople(); return; }
   try {
+    await loadPeoplePrefs();
     const res = await api('/api/people');
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not load people');
     peopleState.list = data.people;
     peopleState.error = '';
+    if (peopleState.prefs.status === 'inactive' && peopleState.prefs.canSeeInactive) await loadInactivePeople();
   } catch (err) {
     peopleState.list = [];
     peopleState.error = err.message || 'Could not load people';
@@ -91,6 +133,7 @@ function renderPeople() {
   const showSearch = !['leave', 'attendance'].includes(peopleState.tab); // those two tabs have no list to search
   actions.innerHTML = `
     ${showSearch ? `<input type="search" id="people-search" class="pp-search" placeholder="Search name, title, department…" value="${escapeText(peopleState.query)}" aria-label="Search people">` : ''}
+    ${['directory', 'team'].includes(peopleState.tab) ? peopleTogglesHtml(peopleState.prefs) : ''}
     ${peopleState.tab === 'directory' && departments.length ? `<select id="people-department" class="pp-select" aria-label="Department">
       <option value="">All departments</option>${departments.map((d) => `<option value="${escapeText(d)}"${d === peopleState.department ? ' selected' : ''}>${escapeText(d)}</option>`).join('')}</select>` : ''}
     ${peopleState.tab === 'chart' && canManageEmployees()
@@ -116,38 +159,43 @@ function matchesPeopleQuery(person, query) {
   return !q || [person.username, personFullName(person), person.jobTitle, person.department, person.location].some((v) => String(v || '').toLowerCase().includes(q));
 }
 
+// The people a list tab shows: active people, or (HR and Owners who chose it) former employees.
+function peopleSource() {
+  return peopleState.prefs.status === 'inactive' && peopleState.prefs.canSeeInactive ? peopleState.inactive : peopleState.list;
+}
+
+function renderPeopleCollection(people) {
+  return peopleState.prefs.view === 'list' ? peopleListHtml(people, peopleViewHelpers) : peopleCardsHtml(people, peopleViewHelpers);
+}
+
 function renderDirectory(body) {
-  const people = peopleState.list.slice()
+  const former = peopleSource() === peopleState.inactive && peopleState.prefs.status === 'inactive';
+  const people = peopleSource().slice()
     .sort((a, b) => personName(a).localeCompare(personName(b), undefined, { sensitivity: 'base' })) // name order
     .filter((p) => matchesPeopleQuery(p, peopleState.query))
     .filter((p) => !peopleState.department || p.department === peopleState.department);
   if (!people.length) {
-    body.innerHTML = emptyRecordMarkup(peopleState.list.length ? 'No one matches' : 'No people yet', peopleState.list.length ? 'Try a different search.' : 'Workspace members will appear here.');
+    body.innerHTML = former
+      ? emptyRecordMarkup(peopleState.inactive.length ? 'No one matches' : 'No former employees', peopleState.inactive.length ? 'Try a different search or department.' : 'People who are deactivated appear here for HR and Owners.')
+      : emptyRecordMarkup(peopleState.list.length ? 'No one matches' : 'No people yet', peopleState.list.length ? 'Try a different search or department.' : 'People appear here once they have an account.');
     return;
   }
-  body.innerHTML = `<div class="pp-grid">${people.map((p) => `
-    <button type="button" class="pp-card" data-person="${p.id}">
-      ${peopleAvatar(p, 'lg')}
-      <span class="pp-card-body">
-        <span class="pp-card-name">${escapeText(personName(p))} ${presenceDot(p)}</span>
-        <span class="pp-card-title">${escapeText(p.jobTitle) || '<span class="pp-muted">No title yet</span>'}</span>
-        ${p.department ? `<span class="pp-card-meta">${escapeText(p.department)}</span>` : ''}
-        ${p.location ? `<span class="pp-card-meta">${escapeText(p.location)}</span>` : ''}
-      </span>
-    </button>`).join('')}</div>`;
+  body.innerHTML = renderPeopleCollection(people);
 }
 
 function renderMyTeam(body) {
   const myId = Number(state.user?.id);
-  const team = peopleState.list.filter((person) => Number(person.managerId) === myId
+  const former = peopleState.prefs.status === 'inactive' && peopleState.prefs.canSeeInactive;
+  const team = peopleSource().filter((person) => Number(person.managerId) === myId
     || (person.secondaryManagerIds || []).map(Number).includes(myId));
   const help = `<section class="pp-team-help"><h3>How My team is managed</h3><p>My team follows the workspace reporting lines. HR or the Superadmin can update a person's manager in People → Org chart → Edit reporting lines, or from the employee's page.</p></section>`;
   if (!team.length) {
-    body.innerHTML = `${help}${emptyRecordMarkup('No team members assigned', 'Ask HR or the Superadmin to update reporting lines if someone should appear here.')}`;
+    body.innerHTML = `${help}${former
+      ? emptyRecordMarkup('No former team members', 'People who used to report to you and have since left appear here.')
+      : emptyRecordMarkup('No team members assigned', 'Ask HR or the Superadmin to update reporting lines if someone should appear here.')}`;
     return;
   }
-  body.innerHTML = `${help}<div class="pp-grid">${team.sort((a, b) => personName(a).localeCompare(personName(b))).map((person) => `
-    <button type="button" class="pp-card" data-person="${person.id}">${peopleAvatar(person, 'lg')}<span class="pp-card-body"><span class="pp-card-name">${escapeText(personName(person))} ${presenceDot(person)}</span><span class="pp-card-title">${escapeText(person.jobTitle) || 'No title yet'}</span><span class="pp-card-meta">${Number(person.managerId) === myId ? 'Direct report' : 'Dotted-line report'}</span></span></button>`).join('')}</div>`;
+  body.innerHTML = `${help}${renderPeopleCollection(team.sort((a, b) => personName(a).localeCompare(personName(b))))}`;
 }
 
 // ---- org chart ---------------------------------------------------------------------------------
@@ -553,6 +601,10 @@ if (typeof document !== 'undefined') {
     if (!t.closest) return;
     const tab = t.closest('[data-people-tab]');
     if (tab) { peopleState.tab = tab.dataset.peopleTab; renderPeople(); return; }
+    const viewButton = t.closest('[data-people-view]');
+    if (viewButton) { savePeoplePref({ view: viewButton.dataset.peopleView === 'list' ? 'list' : 'card' }); return; }
+    const statusButton = t.closest('[data-people-status]');
+    if (statusButton) { savePeoplePref({ status: statusButton.dataset.peopleStatus === 'inactive' ? 'inactive' : 'active' }); return; }
     const toggle = t.closest('[data-org-toggle]');
     if (toggle) {
       const id = Number(toggle.dataset.orgToggle);

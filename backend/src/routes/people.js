@@ -6,7 +6,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { canManageEmployees } = require('../hr');
+const { canManageEmployees, requireHr } = require('../hr');
 const { syncReportTeamChannels } = require('../teamSections');
 
 const router = express.Router();
@@ -141,10 +141,33 @@ function mapPerson(row, viewerId, { full = false } = {}) {
 // The built-in 'admin' account is a service login, not a person: it never shows in the directory or the org chart.
 const MEMBERS_ONLY = "u.account_type = 'member' AND u.deactivated_at IS NULL AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')";
 
-// GET /api/people - everyone in the directory (and so the whole org chart)
+// HR and Owners (and anyone holding manage_people) may see people who no longer work here.
+async function maySeeInactive(userId) {
+  try {
+    await requireHr(userId);
+    return true;
+  } catch (err) {
+    if (err.status === 403) return false;
+    throw err;
+  }
+}
+
+// GET /api/people - everyone in the directory (and so the whole org chart).
+// ?status=inactive lists people who were deactivated (resigned), for HR and Owners only.
 router.get('/', async (req, res) => {
   try {
     await requireMember(req.user.userId);
+    const status = req.query.status === undefined ? 'active' : String(req.query.status);
+    if (!['active', 'inactive'].includes(status)) throw fail(400, 'status must be active or inactive');
+    if (status === 'inactive') {
+      if (!(await maySeeInactive(req.user.userId))) throw fail(403, 'Only HR and Owners can see inactive people');
+      const former = await query(
+        `SELECT ${PERSON_COLUMNS} FROM users u
+         WHERE u.account_type = 'member' AND u.deactivated_at IS NOT NULL AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')
+         ORDER BY LOWER(u.username)`
+      );
+      return res.json({ people: former.rows.map((row) => ({ ...mapPerson(row, req.user.userId), inactive: true })) });
+    }
     const result = await query(`SELECT ${PERSON_COLUMNS} FROM users u WHERE ${MEMBERS_ONLY} ORDER BY LOWER(u.username)`);
     res.json({ people: result.rows.map((row) => mapPerson(row, req.user.userId)) });
   } catch (err) {
@@ -176,6 +199,56 @@ router.put('/me', async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Update my page error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// The remembered People view choices. Stored per person (users.ui_prefs.people) so they follow them to any computer.
+// Inactive is shown only to people who may see inactive employees; anyone else is shown Active.
+async function readPeoplePrefs(userId) {
+  const stored = (await query('SELECT ui_prefs FROM users WHERE id = $1', [userId])).rows[0];
+  const people = stored && stored.ui_prefs && stored.ui_prefs.people ? stored.ui_prefs.people : {};
+  const canSeeInactive = await maySeeInactive(userId);
+  return {
+    stored: { view: people.view === 'list' ? 'list' : 'card', status: people.status === 'inactive' ? 'inactive' : 'active' },
+    canSeeInactive,
+  };
+}
+const shownPrefs = ({ stored, canSeeInactive }) => ({
+  view: stored.view, status: stored.status === 'inactive' && canSeeInactive ? 'inactive' : 'active', canSeeInactive,
+});
+
+// GET /api/people/preferences -> { view: 'card' | 'list', status: 'active' | 'inactive', canSeeInactive }
+router.get('/preferences', async (req, res) => {
+  try {
+    await requireMember(req.user.userId);
+    res.json(shownPrefs(await readPeoplePrefs(req.user.userId)));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('People preferences error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/people/preferences { view?, status? } - saves what was sent, keeps the other field as it was
+router.put('/preferences', async (req, res) => {
+  try {
+    await requireMember(req.user.userId);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    if (body.view === undefined && body.status === undefined) throw fail(400, 'Send a view or a status to save');
+    if (body.view !== undefined && !['card', 'list'].includes(body.view)) throw fail(400, 'view must be card or list');
+    if (body.status !== undefined && !['active', 'inactive'].includes(body.status)) throw fail(400, 'status must be active or inactive');
+    const current = await readPeoplePrefs(req.user.userId);
+    if (body.status === 'inactive' && !current.canSeeInactive) throw fail(403, 'Only HR and Owners can see inactive people');
+    const next = { view: body.view || current.stored.view, status: body.status || current.stored.status };
+    await query(
+      `UPDATE users SET ui_prefs = jsonb_set(COALESCE(ui_prefs, '{}'::jsonb), '{people}', $2::jsonb, true) WHERE id = $1`,
+      [req.user.userId, JSON.stringify(next)]
+    );
+    res.json(shownPrefs({ stored: next, canSeeInactive: current.canSeeInactive }));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Save people preferences error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

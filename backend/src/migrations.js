@@ -67,6 +67,8 @@ module.exports = [
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    )`,
   'CREATE INDEX IF NOT EXISTS idx_command_audit_actor_created ON command_audit_log(actor_id, created_at DESC)',
+  // Per-person interface choices that should follow them to any computer (today: People > Directory view and status)
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_prefs JSONB NOT NULL DEFAULT '{}'::jsonb",
   // What a message is: an ordinary message, an /announce announcement, or a /poll
   "ALTER TABLE messages ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'message'",
   // The built-in #announcements channel is where /announce works
