@@ -31,18 +31,35 @@ function forumBadgesHtml(topic) {
   return badges.map(([kind, label]) => `<span class="forum-badge forum-badge-${kind}">${label}</span>`).join('');
 }
 
+// Action icons (24x24, stroke): the buttons carry no text, only a tooltip and an accessible name.
+const FORUM_ACTION_ICONS = {
+  rename: '<path d="M17 3a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>',
+  pin: '<path d="m16 3 5 5-4 1-5 5-1 5-2-2-2 2 1-5 5-5z"/><path d="m9 15-6 6"/>',
+  unpin: '<path d="m16 3 5 5-4 1-5 5-1 5-2-2-2 2 1-5 5-5z"/><path d="m9 15-6 6"/><path d="M3 3l18 18"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  unlock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/>',
+  unarchive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M12 17v-5m-2.5 2.5L12 12l2.5 2.5"/>',
+  delete: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M9 7V4h6v3"/>',
+};
+
+function forumActionButton({ attr, id, set, icon, label, danger = false }) {
+  const safe = forumEscape(label);
+  const data = set === undefined ? '' : ` data-set="${set}"`;
+  return `<button type="button" class="icon-btn forum-action${danger ? ' danger' : ''}" data-topic-${attr}="${id}"${data} title="${safe}" aria-label="${safe}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${FORUM_ACTION_ICONS[icon]}</svg></button>`;
+}
+
 // Rename (when allowed), then pin, lock, archive (each sets the opposite of what the topic is now) and delete.
 function forumModerationHtml(topic, { moderate = true, rename = true } = {}) {
   const id = Number(topic.id);
-  const button = (name, set, label) => `<button type="button" class="btn forum-action" data-topic-${name}="${id}" data-set="${set}">${label}</button>`;
   const parts = [];
-  if (rename) parts.push(`<button type="button" class="btn forum-action" data-topic-rename="${id}">Rename</button>`);
+  if (rename) parts.push(forumActionButton({ attr: 'rename', id, icon: 'rename', label: 'Rename' }));
   if (moderate) {
     parts.push(
-      button('pin', !topic.pinnedAt, topic.pinnedAt ? 'Unpin' : 'Pin'),
-      button('lock', !topic.lockedAt, topic.lockedAt ? 'Unlock' : 'Lock'),
-      button('archive', !topic.archivedAt, topic.archivedAt ? 'Unarchive' : 'Archive'),
-      `<button type="button" class="btn danger forum-action" data-topic-delete="${id}">Delete</button>`
+      forumActionButton({ attr: 'pin', id, set: !topic.pinnedAt, icon: topic.pinnedAt ? 'unpin' : 'pin', label: topic.pinnedAt ? 'Unpin' : 'Pin' }),
+      forumActionButton({ attr: 'lock', id, set: !topic.lockedAt, icon: topic.lockedAt ? 'unlock' : 'lock', label: topic.lockedAt ? 'Unlock' : 'Lock' }),
+      forumActionButton({ attr: 'archive', id, set: !topic.archivedAt, icon: topic.archivedAt ? 'unarchive' : 'archive', label: topic.archivedAt ? 'Unarchive' : 'Archive' }),
+      forumActionButton({ attr: 'delete', id, icon: 'delete', label: 'Delete', danger: true })
     );
   }
   return `<div class="forum-actions">${parts.join('')}</div>`;

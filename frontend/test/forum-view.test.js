@@ -90,16 +90,26 @@ test('relative times: just now, minutes, hours, days, then a date', () => {
   assert.equal(forumRelativeTime(new Date(now + 60000).toISOString(), now), 'just now', 'a clock a little ahead is still just now');
 });
 
-test('buttons are labelled for what they will do: Pin/Unpin, Lock/Unlock, Archive/Unarchive, Delete', () => {
+test('actions are icon buttons: a tooltip and an accessible name say what they do, with no text on the button', () => {
+  // the button for `name`: its title, which must equal its aria-label, and it must hold an icon rather than text
+  const label = (html, name) => {
+    const tag = new RegExp(`<button[^>]*data-topic-${name}="5"[^>]*>`).exec(html)[0];
+    const title = /title="([^"]+)"/.exec(tag)[1];
+    assert.equal(/aria-label="([^"]+)"/.exec(tag)[1], title);
+    assert.match(html.slice(html.indexOf(tag) + tag.length, html.indexOf(tag) + tag.length + 5), /^<svg/);
+    return [null, title];
+  };
   const open = forumTopicListHtml([topic()], { canModerate: true });
-  assert.match(open, />Pin<\/button>/);
-  assert.match(open, />Lock<\/button>/);
-  assert.match(open, />Archive<\/button>/);
-  assert.match(open, />Delete<\/button>/);
+  assert.equal(label(open, 'pin')[1], 'Pin');
+  assert.equal(label(open, 'lock')[1], 'Lock');
+  assert.equal(label(open, 'archive')[1], 'Archive');
+  assert.equal(label(open, 'delete')[1], 'Delete');
+  assert.equal(label(open, 'rename')[1], 'Rename');
   const done = forumTopicListHtml([topic({ pinnedAt: 'x', lockedAt: 'x', archivedAt: 'x' })], { canModerate: true });
-  assert.match(done, />Unpin<\/button>/);
-  assert.match(done, />Unlock<\/button>/);
-  assert.match(done, />Unarchive<\/button>/);
+  assert.equal(label(done, 'pin')[1], 'Unpin');
+  assert.equal(label(done, 'lock')[1], 'Unlock');
+  assert.equal(label(done, 'archive')[1], 'Unarchive');
+  assert.doesNotMatch(open, />(Pin|Lock|Archive|Delete|Rename)<\/button>/, 'no text on the buttons');
 });
 
 test('moderators can rename from the list; the author or a moderator from the header', () => {

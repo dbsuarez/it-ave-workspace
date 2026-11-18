@@ -8046,7 +8046,9 @@ body.view-as .input-area { opacity: 0.45; pointer-events: none; }
 .forum-badge-locked { background: var(--muted-bg); color: var(--text-muted); border: 1px solid var(--border); }
 .forum-badge-archived { background: var(--muted-bg); color: var(--text-muted); border: 1px solid var(--border); }
 .forum-actions { display: flex; gap: 6px; padding-right: 12px; flex-shrink: 0; }
-.forum-action { padding: 4px 10px; font-size: 12px; }
+.forum-action { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.forum-action.danger { color: var(--danger); }
+.forum-action.danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .forum-empty { color: var(--text-muted); padding: 28px 8px; text-align: center; }
 .forum-more { display: flex; justify-content: center; }
 .forum-topic-bar { flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--surface); padding: 10px 24px; display: flex; flex-direction: column; gap: 8px; }
