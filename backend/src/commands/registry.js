@@ -1,4 +1,5 @@
 const leave = require('./handlers/leave');
+const general = require('./handlers/general');
 
 // Where a command may run. A definition lists one or more of:
 //   { type: 'global' }                              any channel, including personal ones
@@ -57,12 +58,21 @@ hrCommand('leave-cancel', 'Cancel an eligible leave request by request number', 
 
 const hrCommands = definitions.slice();
 register({
-  name: 'hr-help', aliases: ['help'], category: 'hr', description: 'List HR commands available here',
+  name: 'hr-help', category: 'hr', description: 'List HR commands available here',
   scopes: hrScope, permission: hrPermission,
   handler: async () => ({
     visibility: 'private', kind: 'command-help', title: 'HR commands',
     data: { commands: hrCommands.map(({ name, description }) => ({ name, description })) }, actions: [],
   }),
+});
+
+register({
+  name: 'help', category: 'general', usage: '/help [command]', description: 'List the commands you can use here',
+  scopes: [{ type: 'global' }], handler: general.help,
+});
+register({
+  name: 'search', category: 'search', usage: '/search <keywords>', description: 'Search messages, people and files you can see',
+  scopes: [{ type: 'global' }], handler: general.search,
 });
 
 function publicDefinition(definition) {

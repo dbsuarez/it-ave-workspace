@@ -22,10 +22,12 @@ async function commandContext(userId, channelId, io) {
   );
   const row = result.rows[0];
   if (!row) throw fail(404, 'Account or channel not found');
-  return {
+  const context = {
     userId, channelId: id, channelScope: row.command_scope, isPersonal: Boolean(row.is_personal),
     accountType: row.account_type, io, query,
   };
+  context.available = () => availableDefinitions(context); // what /help may list: in scope and permitted right now
+  return context;
 }
 
 function inScope(definition, context) {
@@ -40,7 +42,7 @@ const lacksPermission = async (definition, context) => Boolean(definition.permis
 // Throws unless this person may run this command in this channel right now. Server-side and authoritative.
 async function authorize(definition, context) {
   if (!definition || !inScope(definition, context)) {
-    throw fail(404, 'That command is not available here. Try /hr-help.', 'COMMAND_NOT_AVAILABLE');
+    throw fail(404, 'That command is not available here. Try /help.', 'COMMAND_NOT_AVAILABLE');
   }
   if (context.accountType !== 'member' && !definition.allowGuests) throw fail(403, 'Commands are for workspace members');
   if (await lacksPermission(definition, context)) throw fail(403, 'You do not have permission to use that command', 'COMMAND_FORBIDDEN');
@@ -60,16 +62,21 @@ function parseFor(definition, input) {
   return parseCommand(input, { maxLength: Math.min(limit, HARD_MAX_LENGTH), flagsFor: () => definition.options });
 }
 
-async function listCommands({ userId, channelId }) {
-  const context = await commandContext(userId, channelId);
-  if (context.accountType !== 'member') throw fail(403, 'Commands are for workspace members');
+async function availableDefinitions(context) {
   const visible = [];
   for (const definition of definitions) {
     if (!inScope(definition, context)) continue;
+    if (context.accountType !== 'member' && !definition.allowGuests) continue;
     if (await lacksPermission(definition, context)) continue;
-    visible.push(publicDefinition(definition));
+    visible.push(definition);
   }
   return visible;
+}
+
+async function listCommands({ userId, channelId }) {
+  const context = await commandContext(userId, channelId);
+  if (context.accountType !== 'member') throw fail(403, 'Commands are for workspace members');
+  return (await availableDefinitions(context)).map(publicDefinition);
 }
 
 const safeId = (requestId) => (typeof requestId === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(requestId) ? requestId : crypto.randomUUID());

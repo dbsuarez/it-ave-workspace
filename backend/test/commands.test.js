@@ -76,7 +76,7 @@ test('only the immutable HR channel scope exposes commands', async (t) => {
   const available = await call(ids.ann, 'GET', `/?channelId=${ids.hrChannel}`);
   assert.equal(available.status, 200);
   assert.ok(available.json.commands.some((item) => item.name === 'leave-remaining'));
-  assert.equal((await call(ids.ann, 'GET', `/?channelId=${ids.fakeChannel}`)).json.commands.length, 0);
+  assert.equal((await call(ids.ann, 'GET', `/?channelId=${ids.fakeChannel}`)).json.commands.filter((item) => item.category === 'hr').length, 0, 'no HR commands outside the HR channel (global ones such as /help appear everywhere)');
   assert.equal((await call(ids.guest, 'GET', `/?channelId=${ids.hrChannel}`)).status, 403);
   await admin.query("UPDATE channels SET name = 'people-help' WHERE id = $1", [ids.hrChannel]);
   assert.ok((await call(ids.ann, 'GET', `/?channelId=${ids.hrChannel}`)).json.commands.length > 0, 'renaming does not remove the immutable scope');

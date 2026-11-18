@@ -2379,6 +2379,17 @@ async function handleCommandResponseClick(event) {
     event.target.closest('.command-private-card')?.remove();
     return;
   }
+  const searchButton = event.target.closest('[data-command-route="search"]');
+  if (searchButton) {
+    // "Open all results" from /search: run the same query in the Search box
+    const query = searchButton.dataset.commandQuery || '';
+    if (els.globalSearch && query) {
+      els.globalSearch.value = query;
+      els.globalSearch.focus();
+      handleGlobalSearchInput();
+    }
+    return;
+  }
   if (event.target.closest('[data-command-route="leave"]')) {
     if (typeof peopleState !== 'undefined') {
       peopleState.tab = 'leave';
