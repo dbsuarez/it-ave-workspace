@@ -8140,3 +8140,13 @@ body .ttd-dialog .ttd-dialog-panel { min-height: 0; min-width: 0; }
 body .ttd-dialog .ttd-dialog-panel textarea.ttd-dialog-input { flex: 1 1 0; width: 100%; height: auto !important; max-height: none !important; min-height: 0; font-size: 14px; }
 body .ttd-dialog .ttd-dialog-output-wrapper { flex: 1 1 0; width: 100%; height: auto; min-height: 0; }
 body .ttd-dialog .ttd-dialog-panel:first-child .ttd-dialog-panel-button-container:not(.invisible) { margin-bottom: 0.5rem; }
+
+/* Mermaid dialog: the template gallery row */
+body .ttd-dialog .ttd-templates { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 0.75rem; }
+body .ttd-dialog .ttd-templates-title { font-size: 14px; font-weight: 600; }
+body .ttd-dialog .ttd-template-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+body .ttd-dialog .ttd-template-kind { font-size: 12px; color: #6b6b7a; }
+body .ttd-dialog .ttd-template, body .ttd-dialog .ttd-template-restore { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid #c9c9d6; background: #fff; color: inherit; cursor: pointer; }
+body .ttd-dialog .ttd-template:hover, body .ttd-dialog .ttd-template-restore:hover { background: #f0efff; border-color: #6965db; }
+body .ttd-dialog .ttd-template-restore { border-style: dashed; }
+body .ttd-dialog .ttd-template-restore[hidden] { display: none; }

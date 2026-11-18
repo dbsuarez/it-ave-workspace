@@ -340,6 +340,7 @@ async function handleDrawingShareChange(event) {
 
 // ------------------------------------------------------------------------------------------------------------- wiring
 function setupDrawings() {
+  installMermaidTemplates();
   document.addEventListener('click', (event) => {
     const target = event.target;
     const opener = target.closest && target.closest('[data-drawing-open]');
