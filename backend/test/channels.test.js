@@ -34,7 +34,7 @@ const API = () => (sql, params = []) => {
   if (sql.includes('SELECT COUNT(*)::integer AS count FROM channels')) return { rows: [{ count: 0 }] };
   if (sql.includes('INSERT INTO channels')) {
     const channel = { id: 43, name: params[0], topic: params[1], is_private: params[2], is_personal: params[3],
-      team_section_id: params[4], available_to_all: params[5], created_by: params[6] };
+      available_to_all: params[4], created_by: params[5] };
     channels.set(channel.id, channel);
     return { rows: [channel] };
   }

@@ -14,7 +14,7 @@ const DEFAULT_CHANNEL_NAMES = DEFAULT_CHANNELS.map(([name]) => name);
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.archived_at, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.available_to_all, c.archived_at, c.created_at, c.created_by,
              c.kind, c.forum_department_id,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
@@ -48,7 +48,6 @@ router.get('/', authenticateToken, async (req, res) => {
         topic: ch.topic,
         isPrivate: ch.is_private,
         isPersonal: ch.is_personal,
-        teamSectionId: ch.team_section_id,
         kind: ch.kind || 'channel',
         forumDepartmentId: ch.forum_department_id || null,
         availableToAll: ch.available_to_all,
@@ -74,7 +73,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/my', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.archived_at, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.available_to_all, c.archived_at, c.created_at, c.created_by,
              c.kind, c.forum_department_id,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
@@ -114,7 +113,6 @@ router.get('/my', authenticateToken, async (req, res) => {
         topic: ch.topic,
         isPrivate: ch.is_private,
         isPersonal: ch.is_personal,
-        teamSectionId: ch.team_section_id,
         kind: ch.kind || 'channel',
         forumDepartmentId: ch.forum_department_id || null,
         availableToAll: ch.available_to_all,
@@ -254,11 +252,11 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
       return res.status(409).json({ error: 'Built-in channels must remain visible to all' });
     }
     const result = await query(
-      `UPDATE channels SET available_to_all = $1 WHERE id = $2 AND is_personal = FALSE AND team_section_id IS NULL
+      `UPDATE channels SET available_to_all = $1 WHERE id = $2 AND is_personal = FALSE
        RETURNING id, available_to_all`,
       [availableToAll, channelId]
     );
-    if (!result.rows.length) return res.status(400).json({ error: 'Personal and team channels cannot be made available to everyone' });
+    if (!result.rows.length) return res.status(400).json({ error: 'Personal channels cannot be made available to everyone' });
     if (availableToAll) {
       await query(
         `INSERT INTO channel_members (channel_id, user_id)
@@ -279,10 +277,12 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, topic, isPrivate, availableToAll, isPersonal, teamSectionId, departmentId } = req.body;
+    if (teamSectionId !== undefined && teamSectionId !== null) {
+      return res.status(400).json({ error: 'Team channels no longer exist. Use your department forum, or create an ordinary private channel.' });
+    }
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
-    const isTeamChannel = teamSectionId !== undefined && teamSectionId !== null;
     const creationPermission = isPersonal ? 'manage_personal_channels' : 'create_channels';
-    if (!isTeamChannel && !(await can(query, req.user.userId, creationPermission))) {
+    if (!(await can(query, req.user.userId, creationPermission))) {
       return res.status(403).json({
         error: isPersonal
           ? 'Manage personal channels permission is required'
@@ -302,7 +302,7 @@ router.post('/', authenticateToken, async (req, res) => {
     let department = null;
     if (departmentId !== undefined && departmentId !== null && departmentId !== '') {
       const id = Number(departmentId);
-      if (!Number.isSafeInteger(id) || id < 1 || isPersonal || availableToAll || teamSectionId !== undefined && teamSectionId !== null) {
+      if (!Number.isSafeInteger(id) || id < 1 || isPersonal || availableToAll) {
         return res.status(400).json({ error: 'A department channel must be a private shared channel' });
       }
       department = (await query('SELECT id, name FROM departments WHERE id = $1', [id])).rows[0];
@@ -314,17 +314,6 @@ router.post('/', authenticateToken, async (req, res) => {
           return res.status(403).json({ error: 'You can create a department channel only for your own department' });
         }
       }
-    }
-    let teamSection = null;
-    if (teamSectionId !== undefined && teamSectionId !== null) {
-      const id = Number(teamSectionId);
-      if (!Number.isSafeInteger(id) || id < 1 || isPersonal || availableToAll) {
-        return res.status(400).json({ error: 'A valid private team section is required' });
-      }
-      teamSection = (await query('SELECT id FROM team_sidebar_sections WHERE id = $1 AND owner_id = $2', [id, req.user.userId])).rows[0];
-      if (!teamSection) return res.status(403).json({ error: 'Only the team leader can create channels in this section' });
-      const report = await query("SELECT 1 FROM users WHERE manager_id = $1 AND account_type = 'member' AND deactivated_at IS NULL LIMIT 1", [req.user.userId]);
-      if (!report.rows.length) return res.status(403).json({ error: 'This team no longer has any direct reports' });
     }
     if (isPersonal) {
       const personalCount = await query(
@@ -349,10 +338,10 @@ router.post('/', authenticateToken, async (req, res) => {
     const policy = await query('SELECT default_slowmode_seconds FROM moderation_settings WHERE id = 1');
     const slowmode = policy.rows[0] && Number.isInteger(policy.rows[0].default_slowmode_seconds) ? policy.rows[0].default_slowmode_seconds : 5;
     const result = await query(
-      `INSERT INTO channels (name, topic, is_private, is_personal, team_section_id, available_to_all, created_by, slowmode_seconds)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, name, topic, is_private, is_personal, team_section_id, available_to_all, created_at`,
-      [name, topic || '', Boolean(isPersonal || teamSection || department || isPrivate), Boolean(isPersonal), teamSection?.id || null, Boolean(availableToAll), req.user.userId, slowmode]
+      `INSERT INTO channels (name, topic, is_private, is_personal, available_to_all, created_by, slowmode_seconds)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, topic, is_private, is_personal, available_to_all, created_at`,
+      [name, topic || '', Boolean(isPersonal || department || isPrivate), Boolean(isPersonal), Boolean(availableToAll), req.user.userId, slowmode]
     );
 
     const channel = result.rows[0];
@@ -383,16 +372,6 @@ router.post('/', authenticateToken, async (req, res) => {
         [channel.id, department.id]
       );
     }
-    if (teamSection) {
-      await query(
-        `INSERT INTO channel_members (channel_id, user_id, role, membership_source)
-         SELECT $1, id, 'member', 'team' FROM users
-         WHERE manager_id = $2 AND account_type = 'member' AND deactivated_at IS NULL
-         ON CONFLICT (channel_id, user_id) DO NOTHING`,
-        [channel.id, req.user.userId]
-      );
-    }
-
     res.status(201).json({
       message: 'Channel created successfully',
       channel: {
@@ -401,7 +380,6 @@ router.post('/', authenticateToken, async (req, res) => {
         topic: channel.topic,
         isPrivate: channel.is_private,
         isPersonal: channel.is_personal,
-        teamSectionId: channel.team_section_id,
         availableToAll: channel.available_to_all,
         createdAt: channel.created_at,
       },

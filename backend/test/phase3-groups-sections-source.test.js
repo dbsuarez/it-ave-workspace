@@ -13,9 +13,9 @@ test('superadmin groups inventory uses authenticated admin API and metadata only
  assert.match(ui, /id="admin-workspace-groups"/);
  assert.match(ui, /'admin-workspace-groups': 'groups'/);
 });
-test('shared ordinary channel section projection excludes personal and team channels', () => {
+test('shared ordinary channel section projection excludes personal channels', () => {
  const server=read('src/routes/settings.js');
- assert.match(server, /c\.is_personal = FALSE AND c\.team_section_id IS NULL/);
+ assert.match(server, /c\.is_personal = FALSE/);
  assert.match(server, /inheritedSections/);
  const ui=fs.readFileSync(path.resolve(__dirname,'../../frontend/src/features/workspace.js'),'utf8');
  assert.match(ui, /layout\.inheritedSections/);

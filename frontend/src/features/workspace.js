@@ -115,7 +115,7 @@ async function handleScheduledFailed({ error }) {
 // Personal sidebar sections
 // ============================================================
 function sidebarLayout() {
-  if (!state.sidebarLayout) state.sidebarLayout = { sections: [], workspaceSections: [], teamSections: [], workspaceCollapsed: [], canManageWorkspaceSections: false };
+  if (!state.sidebarLayout) state.sidebarLayout = { sections: [], workspaceSections: [], workspaceCollapsed: [], canManageWorkspaceSections: false };
   return state.sidebarLayout;
 }
 
@@ -124,9 +124,9 @@ async function loadSidebarLayout() {
     const res = await api('/api/settings/sidebar');
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not load your sidebar sections');
-    state.sidebarLayout = data.layout || { sections: [], workspaceSections: [], teamSections: [], workspaceCollapsed: [], canManageWorkspaceSections: false };
+    state.sidebarLayout = data.layout || { sections: [], workspaceSections: [], workspaceCollapsed: [], canManageWorkspaceSections: false };
     const layout = state.sidebarLayout;
-    const placed = new Set([...(layout.workspaceSections || []), ...(layout.teamSections || []), ...(layout.sections || [])]
+    const placed = new Set([...(layout.workspaceSections || []), ...(layout.sections || [])]
       .flatMap((section) => (section.channelIds || []).map(Number)));
     const ownUnplaced = (state.channels || []).filter((channel) => !channel.isPersonal && Number(channel.createdBy) === Number(state.user?.id)
       && !placed.has(Number(channel.id))).map((channel) => Number(channel.id));
@@ -177,15 +177,12 @@ function renderChannelNav() {
   const inheritedSections = (layout.inheritedSections || [])
     .filter((section) => Array.isArray(section.channelIds))
     .map((section) => ({ ...section, inherited: true, collapsed: collapsedWorkspace.has(section.id) }));
-  const teamSections = (layout.teamSections || [])
-    .filter((section) => Array.isArray(section.channelIds))
-    .map((section) => ({ ...section, collapsed: collapsedWorkspace.has(section.id), team: true }));
   const personalChannels = state.channels.filter((channel) => isPersonalChannel(channel, state.user?.id));
   const personalIds = new Set(personalChannels.map((channel) => Number(channel.id)));
-  // Only the owner manages sections; other members see the shared workspace/team sections
+  // Only the owner manages sections; other members see the shared workspace sections
   // plus their own personal channels, and unassigned channels fall to the top-level list.
   const canManageSections = Boolean(sidebarLayout().canManageWorkspaceSections);
-  const sections = [...workspaceSections, ...teamSections, ...inheritedSections, ...(canManageSections ? layout.sections.filter((section) => Array.isArray(section.channelIds)) : [])]
+  const sections = [...workspaceSections, ...inheritedSections, ...(canManageSections ? layout.sections.filter((section) => Array.isArray(section.channelIds)) : [])]
     .map((section) => ({ ...section, channelIds: section.channelIds.filter((id) => !personalIds.has(Number(id))) }));
   const placed = new Set();
   const paneHome = document.getElementById('pane-home');
@@ -201,7 +198,7 @@ function renderChannelNav() {
     label.type = 'button';
     label.className = 'nav-label nav-section-label';
     label.dataset.sectionId = section.id;
-    label.dataset.workspaceSection = section.workspace || section.team ? '1' : '0';
+    label.dataset.workspaceSection = section.workspace ? '1' : '0';
     label.setAttribute('aria-expanded', String(!section.collapsed));
     label.innerHTML = `<span class="nav-section-caret">${section.collapsed ? '▸' : '▾'}</span><span class="nav-section-name">${escapeHtml(section.name)}</span>${section.workspace ? '<span class="nav-section-lock" title="Workspace section" aria-label="Workspace section">◆</span>' : section.team ? '<span class="nav-section-lock" title="Team section" aria-label="Team section">&#128101;</span>' : ''}${section.collapsed && unread ? `<span class="unread-badge">${unread}</span>` : ''}`;
     const row = document.createElement('div');
@@ -210,16 +207,14 @@ function renderChannelNav() {
     const canCreate = state.moderation.canCreateChannels || state.moderation.isSuperadmin;
     const canManageSections = Boolean(sidebarLayout().canManageWorkspaceSections);
     const canAddWorkspace = section.workspace && canManageSections && canCreate;
-    const canAddPersonal = !section.workspace && !section.team && canManageSections && canCreate;
-    const canAddTeam = section.team && section.editable;
-    if (canAddWorkspace || canAddPersonal || canAddTeam) {
+    const canAddPersonal = !section.workspace && canManageSections && canCreate;
+    if (canAddWorkspace || canAddPersonal) {
       const add = document.createElement('button');
       add.type = 'button';
       add.className = 'nav-section-add';
       add.dataset.addChannelToSection = '';
-      add.dataset.sectionKind = section.workspace ? 'workspace' : section.team ? 'team' : 'personal';
+      add.dataset.sectionKind = section.workspace ? 'workspace' : 'personal';
       add.dataset.sectionId = section.id;
-      if (section.team) add.dataset.sectionTeamId = section.teamSectionId;
       add.setAttribute('aria-label', `Add channel to ${section.name}`);
       add.title = `Add channel to ${section.name}`;
       add.textContent = '+';
@@ -258,8 +253,7 @@ function renderChannelNav() {
 async function toggleSidebarSection(sectionId) {
   const layout = JSON.parse(JSON.stringify(sidebarLayout()));
   const workspace = (layout.workspaceSections || []).find((item) => item.id === sectionId);
-  const team = (layout.teamSections || []).find((item) => item.id === sectionId);
-  if (workspace || team) {
+  if (workspace) {
     const collapsed = new Set(layout.workspaceCollapsed || []);
     if (collapsed.has(sectionId)) collapsed.delete(sectionId); else collapsed.add(sectionId);
     layout.workspaceCollapsed = [...collapsed];
@@ -286,7 +280,6 @@ const BUILT_IN_CHANNEL_NAMES = new Set(['welcome', 'announcements', 'general']);
 function openSidebarModal() {
   state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
   state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
-  state.teamSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().teamSections || [])) };
   state.sidebarAvailabilityDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, Boolean(channel.availableToAll)]));
   state.sidebarChannelNameDraft = Object.fromEntries(state.channels.map((channel) => [channel.id, channel.name]));
   state.sidebarOrganizerFilter = state.sidebarOrganizerFilter || 'all';
@@ -299,7 +292,6 @@ function openSidebarModal() {
 function renderSidebarModal() {
   const draft = state.sidebarDraft;
   const workspaceDraft = state.workspaceSidebarDraft || { sections: [] };
-  const teamDraft = state.teamSidebarDraft || { sections: [] };
   const canManageWorkspace = Boolean(draft.canManageWorkspaceSections);
   const configurableTitleRow = document.getElementById('sidebar-configurable-title-row');
   if (configurableTitleRow) configurableTitleRow.hidden = !canManageWorkspace;
@@ -309,8 +301,7 @@ function renderSidebarModal() {
   const workspaceChannelIds = new Set(workspaceDraft.sections.flatMap((section) => section.channelIds.map(Number)));
   const builtInWorkspaceChannelIds = new Set(workspaceDraft.sections.filter((section) => section.builtIn)
     .flatMap((section) => section.channelIds.map(Number)));
-  const teamChannelIds = new Set(teamDraft.sections.flatMap((section) => section.channelIds.map(Number)));
-  const assignedChannelIds = new Set([...workspaceDraft.sections, ...teamDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
+  const assignedChannelIds = new Set([...workspaceDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
   const canRenameChannel = (channel, readOnly) => !readOnly && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
@@ -374,30 +365,6 @@ function renderSidebarModal() {
       </div>`).join('')
     : '<p class="form-note">No workspace sections yet.</p>';
 
-  document.getElementById('btn-add-team-sidebar-section').hidden = !draft.canCreateTeamSections;
-  document.getElementById('team-sidebar-note').textContent = draft.canCreateTeamSections
-    ? 'Shared with your direct reports. They see these sections read-only.'
-    : (teamDraft.sections.length ? 'Your team leader manages these sections.' : 'Team sections become available when someone reports directly to you.');
-  document.getElementById('team-sidebar-sections').innerHTML = teamDraft.sections.length
-    ? teamDraft.sections.map((section, index) => `
-      <div class="sidebar-section-card team${section.editable ? '' : ' locked'}" data-team-section-index="${index}">
-        <div class="sidebar-section-card-head">
-          <span class="personal-channel-lock" title="Team section" aria-hidden="true">&#128101;</span>
-          ${section.editable
-    ? `<input type="text" maxlength="40" value="${escapeHtml(section.name)}" data-team-section-name aria-label="Team section name">`
-    : `<span class="sidebar-section-name-readonly">${escapeHtml(section.name)}</span>`}
-          <span class="sidebar-section-badge">${section.editable ? 'My team' : escapeHtml(section.ownerUsername || 'Team')}</span>
-          ${section.editable ? '<button class="icon-btn sidebar-section-add" type="button" data-add-team-channel title="Create a team channel" aria-label="Create team channel">+</button>' : ''}
-          ${section.editable ? '<button class="icon-btn sidebar-section-delete" type="button" data-team-section-delete title="Delete team section" aria-label="Delete team section">&times;</button>' : ''}
-        </div>
-        <div class="sidebar-section-dropzone">
-          ${section.channelIds.map((id) => channelById.get(Number(id))).filter(Boolean).map((channel) => section.editable
-    ? `<div class="sidebar-channel-card personal-channel-card"><span>#</span><input class="sidebar-channel-name" data-channel-name="${channel.id}" value="${escapeHtml(state.sidebarChannelNameDraft[channel.id] || channel.name)}" aria-label="Team channel name"><button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete team channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button></div>`
-    : `<div class="sidebar-section-channel locked"><span>#${escapeHtml(channel.name)}</span></div>`).join('') || '<p class="sidebar-drop-hint">No team channels yet.</p>'}
-        </div>
-      </div>`).join('')
-    : '<p class="form-note">No team sections yet.</p>';
-
   document.getElementById('sidebar-sections').innerHTML = draft.sections.length
     ? draft.sections.map((section, index) => `
       <div class="sidebar-section-card personal" data-section-index="${index}">
@@ -431,7 +398,7 @@ function renderSidebarModal() {
   state.sidebarOrganizerFilter = filter;
   const query = String(state.sidebarOrganizerQuery || '').trim().toLowerCase();
   const poolChannels = state.channels.filter((channel) => {
-    if (channel.isPersonal || teamChannelIds.has(Number(channel.id))) return false;
+    if (channel.isPersonal) return false;
     const matchesFilter = filter === 'all'
       || (filter === 'workspace' && (workspaceChannelIds.has(Number(channel.id)) || Boolean(channel.availableToAll)))
       || (filter === 'mine' && Number(channel.createdBy) === Number(state.user?.id));
@@ -462,11 +429,6 @@ function syncSidebarDraft() {
     const section = workspaceDraft.sections[Number(row.dataset.workspaceSectionIndex)];
     const input = row.querySelector('[data-workspace-section-name]');
     if (section && input) section.name = input.value;
-  });
-  document.querySelectorAll('#team-sidebar-sections [data-team-section-index]').forEach((row) => {
-    const section = state.teamSidebarDraft.sections[Number(row.dataset.teamSectionIndex)];
-    const input = row.querySelector('[data-team-section-name]');
-    if (section && input) section.name = input.value.trim();
   });
   document.querySelectorAll('#modal-sidebar [data-channel-available-all]').forEach((input) => {
     state.sidebarAvailabilityDraft[input.dataset.channelAvailableAll] = input.checked;
@@ -559,20 +521,6 @@ async function handleSidebarModalClick(event) {
     openCreateChannelModal({ personal: true });
     return;
   }
-  if (event.target.closest('#btn-add-team-sidebar-section')) {
-    try {
-      const response = await api('/api/settings/sidebar/team', { method: 'POST', body: JSON.stringify({ name: 'New team section' }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not create a team section');
-      await loadSidebarLayout();
-      state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
-      state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
-      state.teamSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().teamSections || [])) };
-      renderSidebarModal();
-      document.querySelector('#team-sidebar-sections [data-team-section-index]:last-child [data-team-section-name]')?.select();
-    } catch (err) { showToast(err.message || 'Could not create a team section.', 'error'); }
-    return;
-  }
   const addToSection = event.target.closest('[data-add-channel-to-section]');
   if (addToSection) {
     syncSidebarDraft();
@@ -582,28 +530,6 @@ async function handleSidebarModalClick(event) {
       ? { kind: 'workspace', id: state.workspaceSidebarDraft.sections[Number(workspaceRow.dataset.workspaceSectionIndex)].id }
       : { kind: 'personal', id: draft.sections[Number(personalRow.dataset.sectionIndex)].id };
     openCreateChannelModal();
-    return;
-  }
-  const addTeamChannel = event.target.closest('[data-add-team-channel]');
-  if (addTeamChannel) {
-    syncSidebarDraft();
-    const row = addTeamChannel.closest('[data-team-section-index]');
-    const section = state.teamSidebarDraft.sections[Number(row.dataset.teamSectionIndex)];
-    state.channelCreationSectionTarget = { kind: 'team', id: section.teamSectionId };
-    openCreateChannelModal({ team: true });
-    return;
-  }
-  const deleteTeam = event.target.closest('[data-team-section-delete]');
-  if (deleteTeam) {
-    const row = deleteTeam.closest('[data-team-section-index]');
-    const section = state.teamSidebarDraft.sections[Number(row.dataset.teamSectionIndex)];
-    if (!(await confirmAction({ title: `Delete ${section.name}?`, message: 'Only an empty section can be deleted. Channels are never removed with it: archive and delete them first.', confirmLabel: 'Delete team section', danger: true }))) return;
-    try {
-      const response = await api(`/api/settings/sidebar/team/${section.teamSectionId}`, { method: 'DELETE' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not delete the team section');
-      await loadChannels(); await loadSidebarLayout(); openSidebarModal();
-    } catch (err) { showToast(err.message || 'Could not delete the team section.', 'error'); }
     return;
   }
   const deleteChannel = event.target.closest('[data-organizer-delete-channel]');
@@ -698,13 +624,6 @@ async function saveSidebarModal(event) {
       if (!response.ok) throw new Error(data.error || `Could not rename #${channel.name}`);
       channel.name = data.channel.name;
     }
-    for (const section of state.teamSidebarDraft.sections.filter((item) => item.editable)) {
-      const original = (state.sidebarLayout.teamSections || []).find((item) => Number(item.teamSectionId) === Number(section.teamSectionId));
-      if (!original || original.name === section.name) continue;
-      const response = await api(`/api/settings/sidebar/team/${section.teamSectionId}`, { method: 'PATCH', body: JSON.stringify({ name: section.name }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not rename the team section');
-    }
     if (state.sidebarDraft.canManageWorkspaceSections) {
       const changed = state.channels.filter((channel) => Boolean(channel.availableToAll) !== Boolean(state.sidebarAvailabilityDraft[channel.id]));
       for (const channel of changed) {
@@ -742,9 +661,6 @@ async function deleteChannelFromOrganizer(channelId) {
     if (!response.ok) throw new Error(data.error || 'Could not delete the channel');
     state.channels = state.channels.filter((item) => Number(item.id) !== Number(channelId));
     [...state.sidebarDraft.sections, ...state.workspaceSidebarDraft.sections].forEach((section) => {
-      section.channelIds = section.channelIds.filter((id) => Number(id) !== Number(channelId));
-    });
-    (state.teamSidebarDraft?.sections || []).forEach((section) => {
       section.channelIds = section.channelIds.filter((id) => Number(id) !== Number(channelId));
     });
     renderSidebarModal();
@@ -997,10 +913,7 @@ function setupWorkspaceFeatures() {
     if (addButton) {
       event.stopPropagation();
       const kind = addButton.dataset.sectionKind;
-      if (kind === 'team') {
-        state.channelCreationSectionTarget = { kind: 'team', id: Number(addButton.dataset.sectionTeamId) };
-        openCreateChannelModal({ team: true });
-      } else if (kind === 'workspace') {
+      if (kind === 'workspace') {
         state.channelCreationSectionTarget = { kind: 'workspace', id: addButton.dataset.sectionId };
         openCreateChannelModal({});
       } else {

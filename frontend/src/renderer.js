@@ -1026,14 +1026,6 @@ function connectSocket() {
     }, 400);
   });
   state.socket.on('workspace_sections_updated', () => loadSidebarLayout());
-  state.socket.on('team_sections_updated', async () => {
-    await loadChannels();
-    if (state.currentChannelId && !state.channels.some((channel) => Number(channel.id) === Number(state.currentChannelId))) {
-      state.currentChannelId = null;
-      if (state.view === 'channel' && state.channels.length) await openChannel(state.channels[0].id);
-    }
-    await loadSidebarLayout();
-  });
   state.socket.on('channel_access_revoked', async ({ channelId }) => {
     state.channels = state.channels.filter((channel) => Number(channel.id) !== Number(channelId));
     delete state.messages[channelId];
@@ -2137,7 +2129,7 @@ function channelIntroEl() {
   intro.className = 'channel-intro';
   intro.dataset.channelIntro = String(channel.id);
   const accessLabel = channel.isPersonal ? 'Personal'
-    : channel.teamSectionId ? 'Team'
+    : channel.kind === 'forum' ? 'Forum'
       : channel.isPrivate ? 'Private' : channel.availableToAll ? 'Visible to all' : 'Channel';
   const canConfigure = state.moderation.canManageChannels || canModerateChannel(channel.id);
   intro.innerHTML = `
@@ -2160,8 +2152,7 @@ function handleChannelIntroClick(event) {
   const button = event.target.closest('[data-channel-intro-action]');
   if (!button) return;
   const channel = state.channels.find((item) => Number(item.id) === Number(state.currentChannelId));
-  const accessTab = channel?.teamSectionId ? 'overview' : 'permissions';
-  openChannelSettings(state.currentChannelId, button.dataset.channelIntroAction === 'access' ? accessTab : 'overview');
+  openChannelSettings(state.currentChannelId, button.dataset.channelIntroAction === 'access' ? 'permissions' : 'overview');
 }
 
 function renderMessages(containerId, messages) {
@@ -3650,21 +3641,8 @@ async function loadModerationChannel(channelId) {
     const ownerAvatarHtml = selectedChannel?.createdBy
       ? `<button type="button" class="avatar-mini" data-user-id="${selectedChannel.createdBy}" data-moderation-owner style="background:${escapeHtml(selectedChannel.creatorAvatarColor || '#64748b')}" title="${escapeHtml(ownerName)}" aria-label="Open ${escapeHtml(ownerName)}'s menu">${escapeHtml(ownerName.charAt(0).toUpperCase())}</button>`
       : '<span class="avatar-mini moderation-built-in-avatar" aria-hidden="true">#</span>';
-    const teamMembers = members.filter((member) => member.membershipSource === 'team');
-    const invitedMembers = members.filter((member) => member.membershipSource === 'invited');
-    const eligibleEmployees = data.eligibleEmployees || [];
-    const teamAccessCard = data.channel.teamSectionId ? `<div class="moderation-card" data-channel-config-section="overview">
-      <h2>Team channel access</h2>
-      <p class="admin-help">Direct reports are included automatically. Invite other employees to this channel only; they will not join the whole team section.</p>
-      ${eligibleEmployees.length ? `<div class="moderation-inline"><label>Invite an employee<select id="team-channel-invite-user">${eligibleEmployees.map((person) => `<option value="${person.id}">${escapeHtml(person.name)} (${escapeHtml(person.username)})</option>`).join('')}</select></label><button class="btn primary" type="button" data-action="invite-team-member">Invite</button></div>` : '<p class="form-note">Every eligible employee already has access.</p>'}
-      <div class="moderation-list team-channel-member-list">
-        ${teamMembers.map((member) => `<div class="moderation-row"><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.username)}</small></span><span class="sidebar-section-badge">Team member</span></div>`).join('')}
-        ${invitedMembers.map((member) => `<div class="moderation-row"><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.username)}</small></span><div class="moderation-row-actions"><span class="sidebar-section-badge">Invited</span><button class="btn danger-outline" type="button" data-action="remove-member" data-member-id="${member.id}">Remove</button></div></div>`).join('')}
-      </div>
-    </div>` : '';
     dataContainer.innerHTML = `
       ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card moderation-channel-owner" data-channel-config-section="overview"><h2>Channel ownership</h2><div class="moderation-owner-row">${ownerAvatarHtml}<span><strong>${escapeHtml(ownerName)}</strong><small>${selectedChannel.createdBy ? `Owner of #${escapeHtml(selectedChannel.name)}` : 'Created by the workspace'}</small></span></div></div>` : ''}
-      ${teamAccessCard}
       <div class="moderation-card" data-channel-config-section="overview">
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
@@ -3861,14 +3839,6 @@ async function handleModerationClick(event) {
       return;
     }
     if (action === 'refresh-channel') return loadModerationChannel(channelId);
-    if (action === 'invite-team-member') {
-      const userId = Number(document.getElementById('team-channel-invite-user')?.value);
-      if (!userId) return;
-      await checkedApi(`/api/moderation/channels/${channelId}/members/${userId}`, 'PUT', { role: 'member' });
-      showToast('Employee invited to this team channel.', 'success');
-      await loadModerationChannel(channelId);
-      return;
-    }
     if (action === 'save-role') {
       const role = document.querySelector(`[data-member-role="${userId}"]`).value;
       await checkedApi(`/api/moderation/channels/${channelId}/members/${userId}`, 'PUT', { role });
@@ -5780,9 +5750,8 @@ function renderMarkdown(markdown) {
 // ============================================================
 // Channel Creation Modal
 // ============================================================
-async function openCreateChannelModal({ personal = false, team = false } = {}) {
-  const allowed = team
-    || (personal ? state.moderation.canManagePersonalChannels : state.moderation.canCreateChannels);
+async function openCreateChannelModal({ personal = false } = {}) {
+  const allowed = personal ? state.moderation.canManagePersonalChannels : state.moderation.canCreateChannels;
   if (!allowed) {
     showToast(personal
       ? 'You do not have permission to manage personal channels.'
@@ -5792,12 +5761,12 @@ async function openCreateChannelModal({ personal = false, team = false } = {}) {
   const personalInput = document.getElementById('new-channel-personal');
   state.channelCreationFromOrganizer = document.getElementById('modal-sidebar')?.classList.contains('open') || false;
   personalInput.checked = personal;
-  document.getElementById('new-channel-personal-row').hidden = team || !state.moderation.canManagePersonalChannels;
-  document.getElementById('new-channel-available-row').hidden = personal || team || !state.moderation.canManageWorkspace;
+  document.getElementById('new-channel-personal-row').hidden = !state.moderation.canManagePersonalChannels;
+  document.getElementById('new-channel-available-row').hidden = personal || !state.moderation.canManageWorkspace;
   document.getElementById('new-channel-available-all').checked = false;
   const departmentRow = document.getElementById('new-channel-department-row');
   const departmentSelect = document.getElementById('new-channel-department');
-  const canChooseDepartment = !personal && !team && state.moderation.canCreateChannels;
+  const canChooseDepartment = !personal && state.moderation.canCreateChannels;
   departmentRow.hidden = !canChooseDepartment;
   departmentSelect.innerHTML = '<option value="">No department restriction</option>';
   if (canChooseDepartment) {
@@ -5868,8 +5837,6 @@ async function saveCreateChannel() {
   const topic = document.getElementById('new-channel-topic').value.trim();
   const isPersonal = document.getElementById('new-channel-personal').checked;
   const departmentId = Number(document.getElementById('new-channel-department')?.value) || null;
-  const teamSectionId = state.channelCreationSectionTarget?.kind === 'team'
-    ? Number(state.channelCreationSectionTarget.id) : null;
   const availableToAll = Boolean(!isPersonal && !departmentId && state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
 
   if (!name) return;
@@ -5877,7 +5844,7 @@ async function saveCreateChannel() {
   try {
     const res = await api('/api/channels', {
       method: 'POST',
-      body: JSON.stringify({ name, topic, availableToAll, isPersonal, teamSectionId, departmentId }),
+      body: JSON.stringify({ name, topic, availableToAll, isPersonal, departmentId }),
     });
 
     const data = await res.json();
@@ -5890,24 +5857,10 @@ async function saveCreateChannel() {
     if (state.channelCreationSectionTarget && !state.channelCreationFromOrganizer) {
       const target = state.channelCreationSectionTarget;
       state.channelCreationSectionTarget = null;
-      if (target.kind === 'team') {
-        // The server already placed the channel in the team section; refresh so the sidebar shows it.
-        await loadSidebarLayout();
-        openChannel(data.channel.id);
-      } else {
-        const placed = await placeChannelInSidebarSection(data.channel.id, target);
-        await loadSidebarLayout();
-        if (!placed) showToast('Channel created, but it could not be added to that section.', 'error');
-        openChannel(data.channel.id);
-      }
-    } else if (teamSectionId && state.channelCreationFromOrganizer && state.sidebarDraft) {
-      state.channelCreationSectionTarget = null;
+      const placed = await placeChannelInSidebarSection(data.channel.id, target);
       await loadSidebarLayout();
-      state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
-      state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
-      state.teamSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().teamSections || [])) };
-      renderSidebarModal();
-      openSettingsModal(document.getElementById('modal-sidebar'));
+      if (!placed) showToast('Channel created, but it could not be added to that section.', 'error');
+      openChannel(data.channel.id);
     } else if (!isPersonal && state.channelCreationSectionTarget && state.sidebarDraft) {
       const target = state.channelCreationSectionTarget.kind === 'workspace'
         ? state.workspaceSidebarDraft.sections.find((section) => section.id === state.channelCreationSectionTarget.id)

@@ -22,33 +22,18 @@ module.exports = [
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT FALSE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS archived_by INTEGER REFERENCES users(id) ON DELETE SET NULL',
-  `CREATE TABLE IF NOT EXISTS team_sidebar_sections (
-     id SERIAL PRIMARY KEY,
-     name VARCHAR(40) NOT NULL,
-     owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   )`,
-  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS team_section_id INTEGER REFERENCES team_sidebar_sections(id) ON DELETE SET NULL',
-  // Older databases cascaded here, so removing a team section deleted its channels and messages. Replace that
-  // constraint with SET NULL (idempotent: it only acts while the cascading constraint still exists).
+  // Team Channels and Team Sections were replaced by department forums. Their channels stay as ordinary channels:
+  // nothing is deleted, team-sourced members become plain invited members, and only the section table and the
+  // channel column go. Safe to run again (it acts only while the table or the column still exists).
+  "UPDATE channel_members SET membership_source = 'invited' WHERE membership_source = 'team'",
   `DO $$
-   DECLARE old_constraint text;
    BEGIN
-     SELECT conname INTO old_constraint FROM pg_constraint
-      WHERE conrelid = 'channels'::regclass AND contype = 'f'
-        AND confrelid = 'team_sidebar_sections'::regclass AND confdeltype = 'c';
-     IF old_constraint IS NOT NULL THEN
-       EXECUTE format('ALTER TABLE channels DROP CONSTRAINT %I', old_constraint);
-       ALTER TABLE channels ADD CONSTRAINT channels_team_section_id_fkey
-         FOREIGN KEY (team_section_id) REFERENCES team_sidebar_sections(id) ON DELETE SET NULL;
+     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'channels' AND column_name = 'team_section_id') THEN
+       UPDATE channels SET team_section_id = NULL WHERE team_section_id IS NOT NULL;
+       ALTER TABLE channels DROP COLUMN team_section_id;
      END IF;
+     DROP TABLE IF EXISTS team_sidebar_sections;
    END $$`,
-  'CREATE INDEX IF NOT EXISTS idx_team_sections_owner ON team_sidebar_sections(owner_id)',
-  'CREATE INDEX IF NOT EXISTS idx_channels_team_section ON channels(team_section_id)',
-  `UPDATE channel_members cm SET membership_source = 'team'
-   FROM channels c, team_sidebar_sections ts, users u
-   WHERE cm.channel_id = c.id AND c.team_section_id = ts.id AND cm.user_id = u.id
-     AND u.manager_id = ts.owner_id AND cm.membership_source = 'manual'`,
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS command_scope VARCHAR(50)',
   `INSERT INTO channels (name, topic, is_private, available_to_all, command_scope)
    VALUES ('hr-inquiry', 'Ask HR questions or use private self-service commands. Ordinary messages remain visible to channel members.', FALSE, TRUE, 'hr-inquiry')

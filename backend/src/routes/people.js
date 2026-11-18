@@ -7,7 +7,6 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { canManageEmployees, requireHr } = require('../hr');
-const { syncReportTeamChannels } = require('../teamSections');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -381,10 +380,8 @@ router.put('/:id/manager', async (req, res) => {
       }
     }
     await query('UPDATE users SET manager_id = $1 WHERE id = $2', [managerId, id]);
-    await syncReportTeamChannels(query, id, person.manager_id, managerId);
     // the main manager is not also an extra one
     if (managerId !== null) await query('DELETE FROM user_secondary_managers WHERE user_id = $1 AND manager_id = $2', [id, managerId]);
-    req.io?.emit('team_sections_updated');
     res.json({ id, managerId });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });

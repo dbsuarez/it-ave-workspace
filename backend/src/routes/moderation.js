@@ -234,9 +234,7 @@ router.get('/channels/:channelId', async (req, res) => {
       await ensureChannelModerator(query, req.user.userId, channelId);
     }
     const [channel, members, timeouts, reports, auditLog] = await Promise.all([
-      query(`SELECT c.id, c.name, c.slowmode_seconds, c.command_scope, c.team_section_id, ts.owner_id AS team_owner_id
-             FROM channels c LEFT JOIN team_sidebar_sections ts ON ts.id = c.team_section_id
-             WHERE c.id = $1`, [channelId]),
+      query('SELECT c.id, c.name, c.slowmode_seconds, c.command_scope FROM channels c WHERE c.id = $1', [channelId]),
       query(
         `SELECT u.id, u.username, u.first_name, u.middle_name, u.last_name, cm.role, cm.membership_source
          FROM channel_members cm JOIN users u ON u.id = cm.user_id
@@ -273,31 +271,17 @@ router.get('/channels/:channelId', async (req, res) => {
     ]);
     if (!channel.rows.length) return res.status(404).json({ error: 'Channel not found' });
     const row = channel.rows[0];
-    const eligible = row.team_section_id ? (await query(
-      `SELECT u.id, u.username, u.first_name, u.middle_name, u.last_name
-       FROM users u WHERE u.account_type = 'member' AND u.deactivated_at IS NULL
-         AND u.id <> $2 AND NOT EXISTS (
-           SELECT 1 FROM channel_members cm WHERE cm.channel_id = $1 AND cm.user_id = u.id
-         ) ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), u.username)), LOWER(u.username)`,
-      [channelId, row.team_owner_id]
-    )).rows : [];
     res.json({
       channel: {
         id: row.id,
         name: row.name,
         slowmodeSeconds: row.slowmode_seconds,
         commandScope: row.command_scope,
-        teamSectionId: row.team_section_id,
-        teamOwnerId: row.team_owner_id,
       },
       members: members.rows.map((member) => ({
         id: member.id, username: member.username,
         name: [member.first_name, member.middle_name, member.last_name].filter(Boolean).join(' ') || member.username,
         role: member.role, membershipSource: member.membership_source || 'manual',
-      })),
-      eligibleEmployees: eligible.map((person) => ({
-        id: person.id, username: person.username,
-        name: [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ') || person.username,
       })),
       timeouts: timeouts.rows.map((timeout) => ({
         id: timeout.id, userId: timeout.user_id, username: timeout.username,
@@ -328,33 +312,17 @@ router.put('/channels/:channelId/members/:userId', async (req, res) => {
       return res.status(400).json({ error: 'Role must be member or moderator' });
     }
     await ownerChannelAccess.refuseOwnerSelfGrant(query, req.user.userId, channelId, { userIds: [userId] });
-    const teamChannel = (await query(
-      `SELECT c.team_section_id, ts.owner_id FROM channels c
-       LEFT JOIN team_sidebar_sections ts ON ts.id = c.team_section_id WHERE c.id = $1`, [channelId]
-    )).rows[0];
-    const isTeam = Boolean(teamChannel?.team_section_id);
-    if (isTeam) {
-      const allowed = Number(teamChannel.owner_id) === Number(req.user.userId)
-        || await can(query, req.user.userId, 'manage_channels');
-      if (!allowed) return res.status(403).json({ error: 'Only the team leader can invite employees to this channel' });
-      const automatic = await query(
-        "SELECT 1 FROM users WHERE id = $1 AND manager_id = $2 AND account_type = 'member' AND deactivated_at IS NULL",
-        [userId, teamChannel.owner_id]
-      );
-      if (automatic.rows.length) return res.status(409).json({ error: 'This employee already belongs through the reporting line' });
-    } else {
-      await requireWorkspacePermission(req.user.userId, 'manage_channels');
-    }
+    await requireWorkspacePermission(req.user.userId, 'manage_channels');
     const result = await query(
       `INSERT INTO channel_members (channel_id, user_id, role, membership_source)
        SELECT c.id, u.id, $3, $4 FROM channels c CROSS JOIN users u
        WHERE c.id = $1 AND u.id = $2 AND u.account_type = 'member' AND u.deactivated_at IS NULL
        ON CONFLICT (channel_id, user_id) DO UPDATE SET role = EXCLUDED.role
        RETURNING user_id, role`,
-      [channelId, userId, role, isTeam ? 'invited' : 'manual']
+      [channelId, userId, role, 'manual']
     );
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
-    await audit(channelId, req.user.userId, isTeam ? 'team_channel_member_invited' : 'member_role_changed', userId, { role });
+    await audit(channelId, req.user.userId, 'member_role_changed', userId, { role });
     res.json({ userId: result.rows[0].user_id, role: result.rows[0].role });
   } catch (err) {
     sendError(res, err, 'Update channel role error');
@@ -366,27 +334,15 @@ router.delete('/channels/:channelId/members/:userId', async (req, res) => {
     const channelId = parseId(req.params.channelId);
     const userId = parseId(req.params.userId);
     if (!channelId || !userId) return res.status(400).json({ error: 'Valid channel and user IDs are required' });
-    const channel = (await query(
-      `SELECT c.available_to_all, c.team_section_id, ts.owner_id,
-              (SELECT membership_source FROM channel_members WHERE channel_id = c.id AND user_id = $2) AS membership_source
-       FROM channels c LEFT JOIN team_sidebar_sections ts ON ts.id = c.team_section_id WHERE c.id = $1`,
-      [channelId, userId]
-    )).rows[0];
-    if (channel?.team_section_id) {
-      const allowed = Number(channel.owner_id) === Number(req.user.userId)
-        || await can(query, req.user.userId, 'manage_channels');
-      if (!allowed) return res.status(403).json({ error: 'Only the team leader can remove invited employees' });
-      if (channel.membership_source === 'team') return res.status(409).json({ error: 'Automatic team members follow the reporting line and cannot be removed here' });
-    } else {
-      await requireWorkspacePermission(req.user.userId, 'manage_channels');
-    }
+    await requireWorkspacePermission(req.user.userId, 'manage_channels');
+    const channel = (await query('SELECT c.available_to_all FROM channels c WHERE c.id = $1', [channelId])).rows[0];
     if (channel?.available_to_all) return res.status(409).json({ error: 'This channel is available to all and its members cannot be removed' });
     const result = await query(
       'DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2 RETURNING user_id',
       [channelId, userId]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Channel membership not found' });
-    await audit(channelId, req.user.userId, channel?.team_section_id ? 'team_channel_invite_removed' : 'member_removed', userId);
+    await audit(channelId, req.user.userId, 'member_removed', userId);
     if (req.io?.in) {
       req.io.in(`channel_${channelId}`).fetchSockets().then((sockets) => {
         sockets.filter((socket) => Number(socket.data.userId) === userId)
