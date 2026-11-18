@@ -276,7 +276,7 @@ async function toggleSidebarSection(sectionId) {
 }
 
 // ---- Organize dialog ----
-const BUILT_IN_CHANNEL_NAMES = new Set(['welcome', 'announcements', 'general']);
+const BUILT_IN_CHANNEL_NAMES = new Set(['welcome', 'rules', 'announcements', 'general']);
 
 function openSidebarModal() {
   state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));

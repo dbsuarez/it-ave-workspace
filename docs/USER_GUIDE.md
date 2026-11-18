@@ -8,6 +8,9 @@ Short answers to the things people ask most. Use the search box at the top of He
 ### Where is everything?
 The strip on the left has the main places: **Home** (channels and forums), **DMs**, **Activity** (mentions, replies and reactions to you), **Later** (saved items and reminders), **Files**, **Notes**, **Canvas**, **People**, **Huddle** (audio calls) and **More** (Lists and Canvases). **Moderation** appears only if you are allowed to moderate or manage the workspace.
 
+### Which channels does everyone have?
+The **OFFICIAL** section at the top of the sidebar holds four channels everyone is in: **#welcome**, **#rules** (the workspace rules and code of conduct, so read it first), **#announcements** and **#general**. They cannot be renamed, archived or deleted.
+
 ### Keyboard shortcuts
 - **Ctrl+K** searches messages, people and files.
 - **Ctrl+N** starts a new message.

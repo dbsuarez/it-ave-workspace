@@ -1,5 +1,6 @@
 const DEFAULT_CHANNELS = [
   ['welcome', 'Start here for workspace guidance and onboarding information.'],
+  ['rules', 'The workspace rules and code of conduct. Read them before you start.'],
   ['announcements', 'Official company announcements.'],
   ['general', 'Company-wide discussion.'],
 ];
@@ -12,8 +13,9 @@ function withDefaultSection(layout, channelIds) {
   const stored = layout?.sections || [];
   const claimed = stored.filter((section) => RETIRED_SECTION_IDS.has(section.id)
     || String(section.name || '').trim().toLowerCase() === 'official');
+  // anything else an Owner placed in OFFICIAL keeps its place first; the built-in channels follow in the order of DEFAULT_CHANNELS
   const officialChannelIds = [...new Set([
-    ...claimed.flatMap((section) => section.channelIds || []).map(Number),
+    ...claimed.flatMap((section) => section.channelIds || []).map(Number).filter((id) => !locked.has(id)),
     ...channelIds.map(Number),
   ])];
   const sections = stored
