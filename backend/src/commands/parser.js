@@ -34,7 +34,7 @@ function tokenize(rest) {
 
 // parseCommand('/poll "Q?" "A" "B" --closes 2h', { flagsFor }) -> { name: 'poll', args: ['Q?', 'A', 'B'], options: { closes: '2h' } }
 // flagsFor(name) returns { flagName: takesValue } for that command, or undefined when it has no options.
-function parseCommand(input, { maxLength = MAX_COMMAND_LENGTH, flagsFor } = {}) {
+function parseCommand(input, { maxLength = MAX_COMMAND_LENGTH, flagsFor, rawText = false } = {}) {
   if (typeof input !== 'string') throw fail('Command must be text');
   const text = input.trim();
   if (!text.startsWith('/')) throw fail('Commands start with /');
@@ -42,8 +42,11 @@ function parseCommand(input, { maxLength = MAX_COMMAND_LENGTH, flagsFor } = {}) 
   const head = text.match(/^\/(\S*)/);
   const name = head[1].toLowerCase();
   if (!name) throw fail('Choose a command');
+  const raw = text.slice(head[0].length).replace(/^\s+/, ''); // the text after the name, exactly as typed
+  // rawText commands (such as /announce) take everything after the name as plain text: no quotes, no --flags
+  if (rawText) return { name, args: raw ? [raw] : [], options: {}, text: raw };
   const spec = (typeof flagsFor === 'function' && flagsFor(name)) || {};
-  const tokens = tokenize(text.slice(head[0].length));
+  const tokens = tokenize(raw);
   const args = [];
   const options = {};
   for (let index = 0; index < tokens.length; index += 1) {
@@ -61,7 +64,7 @@ function parseCommand(input, { maxLength = MAX_COMMAND_LENGTH, flagsFor } = {}) 
     options[flag] = next.text;
     index += 1;
   }
-  return { name, args, options };
+  return { name, args, options, text: raw };
 }
 
 module.exports = { MAX_COMMAND_LENGTH, parseCommand };

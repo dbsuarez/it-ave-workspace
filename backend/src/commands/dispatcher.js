@@ -60,7 +60,7 @@ function nameOf(input) {
 
 function parseFor(definition, input) {
   const limit = definition.maxLength || MAX_COMMAND_LENGTH;
-  return parseCommand(input, { maxLength: Math.min(limit, HARD_MAX_LENGTH), flagsFor: () => definition.options });
+  return parseCommand(input, { maxLength: Math.min(limit, HARD_MAX_LENGTH), flagsFor: () => definition.options, rawText: Boolean(definition.rawText) });
 }
 
 async function availableDefinitions(context) {
@@ -91,7 +91,7 @@ async function audit(userId, channelId, definition, requestId, outcome) {
 
 async function runHandler(definition, context, parsed, requestId) {
   try {
-    const response = await definition.handler(context, parsed.args, parsed.options);
+    const response = await definition.handler(context, parsed.args, parsed.options, parsed.text);
     await audit(context.userId, context.channelId, definition, requestId, 'success');
     return { requestId, category: definition.category, ...response };
   } catch (error) {
@@ -107,7 +107,7 @@ async function dispatch({ userId, channelId, input, requestId, io }) {
   const parsed = parseFor(definition, input);
   const safeRequestId = safeId(requestId);
   if (definition.visibility === 'shared' && definition.confirm) {
-    const preview = await definition.confirm.preview(context, parsed.args, parsed.options);
+    const preview = await definition.confirm.preview(context, parsed.args, parsed.options, parsed.text);
     const token = crypto.randomBytes(24).toString('base64url');
     await query('DELETE FROM command_pending WHERE expires_at < NOW()');
     await query(

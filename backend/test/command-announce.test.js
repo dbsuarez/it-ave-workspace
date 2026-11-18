@@ -124,6 +124,31 @@ test('an Owner or a role holder gets a preview with the audience size, and confi
   assert.equal(event.payload.kind, 'announcement');
 });
 
+test('line breaks and spacing in an announcement are kept exactly as typed', async (t) => {
+  if (skip(t)) return;
+  const channel = await taggedChannel([ids.owner]);
+  const text = 'Line one\n\nLine  two with  double spaces\n- bullet';
+  const preview = await run(ids.owner, channel, `/announce ${text}`);
+  assert.equal(preview.json.kind, 'confirm');
+  assert.ok(preview.json.data.message.endsWith(text), 'the preview shows it as typed');
+  await confirm(ids.owner, channel, preview.json.token);
+  assert.equal((await announcements(channel))[0].content, text);
+});
+
+test('previewing an announcement does not use up the slow-mode slot, so confirming right away works', async (t) => {
+  if (skip(t)) return;
+  const channel = await taggedChannel([ids.owner, ids.announcer]);
+  await admin.query('UPDATE channels SET slowmode_seconds = 30 WHERE id = $1', [channel]);
+  const preview = await run(ids.announcer, channel, '/announce Slow mode is on here');
+  assert.equal(preview.json.kind, 'confirm');
+  const done = await confirm(ids.announcer, channel, preview.json.token);
+  assert.equal(done.status, 200, 'confirmed immediately: ' + JSON.stringify(done.json));
+  assert.equal((await announcements(channel)).length, 1);
+  const second = await run(ids.announcer, channel, '/announce Another one straight away');
+  const again = await confirm(ids.announcer, channel, second.json.token);
+  assert.equal(again.status, 429, 'but slow mode still applies to the announcement itself');
+});
+
 test('empty and over-long announcements are refused before any preview', async (t) => {
   if (skip(t)) return;
   const channel = await taggedChannel([ids.owner]);
@@ -158,7 +183,7 @@ test('announcement text is stored verbatim and history carries kind', async (t) 
   if (skip(t)) return;
   const channel = await taggedChannel([ids.owner]);
   const text = '<script>alert(1)</script> & "quotes"';
-  const preview = await run(ids.owner, channel, `/announce "${text.replace(/"/g, '\\"')}"`);
+  const preview = await run(ids.owner, channel, `/announce ${text}`);
   await confirm(ids.owner, channel, preview.json.token);
   assert.equal((await announcements(channel))[0].content, text);
   const history = await call(ids.owner, 'GET', `/api/messages/${channel}`);

@@ -16,7 +16,8 @@ const pollHandler = require('./handlers/poll');
 //   confirm     { preview(ctx, args, options) -> { title, message, confirmLabel } } makes a shared command show a preview and
 //               run only after POST /api/commands/confirm,
 //   options     { flagName: takesValue } for --flags, maxLength (default 300), allowGuests (default false),
-//   handler(ctx, args, options) -> response, ctx = { userId, channelId, channelScope, isPersonal, accountType, io, query }.
+//   rawText     true: everything after the name is one plain-text argument (no quotes or --flags), passed as the 4th argument,
+//   handler(ctx, args, options, text) -> response, ctx = { userId, channelId, channelScope, isPersonal, accountType, io, query }.
 const definitions = [];
 const byName = new Map();
 
@@ -79,7 +80,7 @@ register({
 
 register({
   name: 'announce', category: 'announcements', usage: '/announce <text>', description: 'Post an announcement to this channel',
-  scopes: [{ type: 'channel-scope', value: 'announcements' }], permission: 'announce', visibility: 'shared', maxLength: 2000,
+  scopes: [{ type: 'channel-scope', value: 'announcements' }], permission: 'announce', visibility: 'shared', maxLength: 2000, rawText: true,
   confirm: { preview: announce.preview }, handler: announce.announce,
 });
 

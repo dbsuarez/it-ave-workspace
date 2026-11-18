@@ -10,8 +10,8 @@ const status400 = (fn, pattern) => assert.throws(fn, (error) => {
 });
 
 test('plain commands keep their shape: name, positional args, empty options', () => {
-  assert.deepEqual(parseCommand('/leave-remaining sick'), { name: 'leave-remaining', args: ['sick'], options: {} });
-  assert.deepEqual(parseCommand('  /HELP  '), { name: 'help', args: [], options: {} });
+  assert.deepEqual(parseCommand('/leave-remaining sick'), { name: 'leave-remaining', args: ['sick'], options: {}, text: 'sick' });
+  assert.deepEqual(parseCommand('  /HELP  '), { name: 'help', args: [], options: {}, text: '' });
 });
 
 test('double quotes group words and keep inner spaces', () => {
@@ -57,6 +57,19 @@ test('length is capped at 300 by default and at the per-command maxLength when g
   status400(() => parseCommand('/x ' + 'a'.repeat(300)), /300/);
   assert.equal(parseCommand('/announce ' + 'a'.repeat(1990), { maxLength: 2000 }).args[0].length, 1990);
   status400(() => parseCommand('/announce ' + 'a'.repeat(2000), { maxLength: 2000 }), /2000/);
+});
+
+test('text is the raw remainder after the command name: line breaks, spacing and quotes untouched', () => {
+  assert.equal(parseCommand('/announce  Line one\n\nLine  two "quoted"').text, 'Line one\n\nLine  two "quoted"');
+  assert.equal(parseCommand('/help').text, '');
+  assert.equal(parseCommand('  /poll "Q?" "A" "B"  ').text, '"Q?" "A" "B"');
+});
+
+test('rawText commands are not tokenized: an unbalanced quote or a leading -- is just text', () => {
+  const parsed = parseCommand('/announce He said "hi and left --soon', { rawText: true });
+  assert.equal(parsed.text, 'He said "hi and left --soon');
+  assert.deepEqual(parsed.options, {});
+  assert.deepEqual(parseCommand('/announce', { rawText: true }).args, []);
 });
 
 test('input that is not text, does not start with a slash, or has no name is refused', () => {
