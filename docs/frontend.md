@@ -101,6 +101,7 @@ Drawings sit beside Canvas in the rail, in a channel's Drawings tab, and as card
 | `features/drawing-store.js` | The copy kept on this computer (IndexedDB `ita-drawings`, memory fallback) |
 | `features/drawing-session.js` | One open drawing: local save, live send/receive, reconnect merge, drafts made offline |
 | `features/drawing-templates.js` | Template buttons added to Excalidraw's Mermaid dialog when it opens (a MutationObserver fills the box through the browser's own value setter) |
+| `features/org-chart-export.js` | Saves the org chart as SVG or PNG: `orgChartLayout` (places the cards: the search filter and collapsed teams apply) and `orgChartSvg` (a standalone SVG with photos embedded as data URLs, dashed secondary-manager lines, a caption) are pure and tested; the PNG is the SVG drawn on a canvas at 2x (at most 8000 px a side) |
 | `features/polls.js` | The poll card (no whitespace between tags, because chat text keeps whitespace and it made polls tall) and the Create poll dialog markup and rules (`pollDialogHtml`, `pollDraftValid`, `pollDraftRequest`) |
 | `features/poll-dialog.js` | The Create / Edit poll dialog: draft, add/remove options, Enter moves on, sends `POST /api/polls`, or `PUT /api/polls/:id` when opened from a poll message's Edit (`openPollEditor`) |
 | `features/notes-view.js` | Notes, Keep style: markup for cards, side menu, floating editor and pickers, the colours, and the rules for what each view and search shows (pure, tested) |

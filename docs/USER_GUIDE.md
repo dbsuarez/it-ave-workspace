@@ -135,6 +135,9 @@ The person who made it, and moderators of the conversation it belongs to. Deleti
 ### Where do I see who works here?
 **People** has the **Directory** (switch between cards and a list, and show active or inactive people), **My team** (your direct reports), the **Org chart**, **Leave**, and **Attendance**. **Manage** appears for HR and Owners.
 
+### How do I save the org chart as a picture?
+Open **People > Org chart** and press **SVG** or **PNG** under **Save as** in the chart's toolbar. The picture shows the chart as it is on screen: the search filter is applied, and a team you have collapsed stays collapsed and shows "+N hidden" (expand everyone first to save the whole company). It includes photos, titles, departments and the dotted "also reports to" lines, with the date underneath. **SVG** is the best choice: it stays sharp at any size, even on a poster, and opens in a browser, Word, PowerPoint or Inkscape. **PNG** is for places that only take pictures; it is saved twice as sharp as the screen, and PNG keeps text and lines crisp, which JPG would blur.
+
 ### Who is the head of a department?
 Open **People > Manage > Departments**: each department shows its head. Ask HR or an Owner to change it.
 

@@ -255,6 +255,10 @@ function renderOrgChart(body) {
         <button type="button" data-org-zoom="reset" id="org-zoom-label" title="Back to 100%">100%</button>
         <button type="button" data-org-zoom="in" aria-label="Zoom in" title="Zoom in">+</button>
         <button type="button" data-org-zoom="fit" title="Fit the whole chart">Fit</button>
+        <span class="org-tools-sep" aria-hidden="true"></span>
+        <span class="org-save-label">Save as</span>
+        <button type="button" data-org-export="svg" title="Save the chart as an SVG image: sharp at any size, opens in a browser, Word, PowerPoint or Inkscape">SVG</button>
+        <button type="button" data-org-export="png" title="Save the chart as a PNG image">PNG</button>
         ${hasDotted ? '<span class="org-legend"><i></i> also reports to</span>' : ''}
       </div>
       <div class="org-canvas" id="org-canvas">
@@ -746,6 +750,8 @@ if (typeof document !== 'undefined') {
   }, { passive: false });
 
   document.addEventListener('click', (event) => {
+    const save = event.target.closest && event.target.closest('[data-org-export]');
+    if (save) { exportOrgChart(save.dataset.orgExport); return; }
     const button = event.target.closest && event.target.closest('[data-org-zoom]');
     if (!button) return;
     const action = button.dataset.orgZoom;
