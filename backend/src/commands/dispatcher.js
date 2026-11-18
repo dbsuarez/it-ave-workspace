@@ -1,59 +1,136 @@
 const crypto = require('crypto');
 const { query } = require('../db');
 const { ensureChannelMembership } = require('../security');
-const { parseCommand } = require('./parser');
+const { can, isPermission } = require('../permissions');
+const { parseCommand, MAX_COMMAND_LENGTH } = require('./parser');
 const { byName, definitions, publicDefinition } = require('./registry');
 
-async function commandContext(userId, channelId) {
+const HARD_MAX_LENGTH = 2000;
+const CONFIRM_MINUTES = 5;
+const fail = (status, message, code) => Object.assign(new Error(message), { status, code });
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+async function commandContext(userId, channelId, io) {
   const id = Number(channelId);
-  if (!Number.isSafeInteger(id) || id <= 0) throw Object.assign(new Error('A valid channel is required'), { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) throw fail(400, 'A valid channel is required');
   await ensureChannelMembership(query, userId, id);
   const result = await query(
-    `SELECT c.id, c.command_scope, u.account_type
+    `SELECT c.id, c.command_scope, c.is_personal, u.account_type
      FROM channels c CROSS JOIN users u
      WHERE c.id = $1 AND u.id = $2 AND u.deactivated_at IS NULL`,
     [id, userId]
   );
   const row = result.rows[0];
-  if (!row) throw Object.assign(new Error('Account or channel not found'), { status: 404 });
-  if (row.account_type !== 'member') throw Object.assign(new Error('HR self-service commands are for workspace members'), { status: 403 });
-  return { userId, channelId: id, channelScope: row.command_scope };
+  if (!row) throw fail(404, 'Account or channel not found');
+  return {
+    userId, channelId: id, channelScope: row.command_scope, isPersonal: Boolean(row.is_personal),
+    accountType: row.account_type, io, query,
+  };
 }
 
-function allowed(definition, context) {
-  return definition.enabled && definition.scopes.some((entry) => entry.type === 'channel-scope' && entry.value === context.channelScope);
+function inScope(definition, context) {
+  return definition.enabled && definition.scopes.some((scope) => scope.type === 'global'
+    || (scope.type === 'any-channel' && !context.isPersonal)
+    || (scope.type === 'channel-scope' && scope.value === context.channelScope));
+}
+
+const lacksPermission = async (definition, context) => Boolean(definition.permission && isPermission(definition.permission)
+  && !(await can(query, context.userId, definition.permission, { channelId: context.channelId })));
+
+// Throws unless this person may run this command in this channel right now. Server-side and authoritative.
+async function authorize(definition, context) {
+  if (!definition || !inScope(definition, context)) {
+    throw fail(404, 'That command is not available here. Try /hr-help.', 'COMMAND_NOT_AVAILABLE');
+  }
+  if (context.accountType !== 'member' && !definition.allowGuests) throw fail(403, 'Commands are for workspace members');
+  if (await lacksPermission(definition, context)) throw fail(403, 'You do not have permission to use that command', 'COMMAND_FORBIDDEN');
+}
+
+function nameOf(input) {
+  if (typeof input === 'string') {
+    const match = input.trim().match(/^\/(\S+)/);
+    if (match) return match[1].toLowerCase();
+  }
+  parseCommand(input); // throws the right 400 for non-text, a missing slash, or an empty name
+  throw fail(400, 'Choose a command');
+}
+
+function parseFor(definition, input) {
+  const limit = definition.maxLength || MAX_COMMAND_LENGTH;
+  return parseCommand(input, { maxLength: Math.min(limit, HARD_MAX_LENGTH), flagsFor: () => definition.options });
 }
 
 async function listCommands({ userId, channelId }) {
   const context = await commandContext(userId, channelId);
-  return definitions.filter((definition) => allowed(definition, context)).map(publicDefinition);
+  const visible = [];
+  for (const definition of definitions) {
+    if (!inScope(definition, context)) continue;
+    if (context.accountType !== 'member' && !definition.allowGuests) continue;
+    if (await lacksPermission(definition, context)) continue;
+    visible.push(publicDefinition(definition));
+  }
+  return visible;
 }
 
-async function dispatch({ userId, channelId, input, requestId }) {
-  const context = await commandContext(userId, channelId);
-  const parsed = parseCommand(input);
-  const definition = byName.get(parsed.name);
-  if (!definition || !allowed(definition, context)) {
-    throw Object.assign(new Error('That command is not available here. Try /hr-help.'), { status: 404, code: 'COMMAND_NOT_AVAILABLE' });
-  }
-  const safeRequestId = typeof requestId === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(requestId)
-    ? requestId : crypto.randomUUID();
+const safeId = (requestId) => (typeof requestId === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(requestId) ? requestId : crypto.randomUUID());
+
+async function audit(userId, channelId, definition, requestId, outcome) {
+  await query(
+    `INSERT INTO command_audit_log (actor_id, channel_id, command_name, request_id, outcome) VALUES ($1, $2, $3, $4, $5)`,
+    [userId, channelId, definition.name, requestId, outcome]
+  );
+}
+
+async function runHandler(definition, context, parsed, requestId) {
   try {
-    const response = await definition.handler(context, parsed.args);
-    await query(
-      `INSERT INTO command_audit_log (actor_id, channel_id, command_name, request_id, outcome)
-       VALUES ($1, $2, $3, $4, 'success')`,
-      [userId, channelId, definition.name, safeRequestId]
-    );
-    return { requestId: safeRequestId, ...response };
+    const response = await definition.handler(context, parsed.args, parsed.options);
+    await audit(context.userId, context.channelId, definition, requestId, 'success');
+    return { requestId, ...response };
   } catch (error) {
-    await query(
-      `INSERT INTO command_audit_log (actor_id, channel_id, command_name, request_id, outcome)
-       VALUES ($1, $2, $3, $4, 'error')`,
-      [userId, channelId, definition.name, safeRequestId]
-    ).catch(() => {});
+    await audit(context.userId, context.channelId, definition, requestId, 'error').catch(() => {});
     throw error;
   }
 }
 
-module.exports = { dispatch, listCommands };
+async function dispatch({ userId, channelId, input, requestId, io }) {
+  const context = await commandContext(userId, channelId, io);
+  const definition = byName.get(nameOf(input));
+  await authorize(definition, context);
+  const parsed = parseFor(definition, input);
+  const safeRequestId = safeId(requestId);
+  if (definition.visibility === 'shared' && definition.confirm) {
+    const preview = await definition.confirm.preview(context, parsed.args, parsed.options);
+    const token = crypto.randomBytes(24).toString('base64url');
+    await query('DELETE FROM command_pending WHERE expires_at < NOW()');
+    await query(
+      `INSERT INTO command_pending (token_hash, user_id, channel_id, input, expires_at)
+       VALUES ($1, $2, $3, $4, NOW() + ($5 || ' minutes')::interval)`,
+      [sha256(token), userId, context.channelId, input.trim(), String(CONFIRM_MINUTES)]
+    );
+    return {
+      requestId: safeRequestId, visibility: 'private', kind: 'confirm', title: preview.title,
+      confirmLabel: preview.confirmLabel || 'Confirm', data: { message: preview.message }, token, actions: [],
+    };
+  }
+  return runHandler(definition, context, parsed, safeRequestId);
+}
+
+// Runs a previewed shared command. The token is single use and bound to the person and channel; every check
+// (membership, scope, permission, plus whatever the handler enforces such as archive, bans and timeouts) runs again now.
+async function confirmPending({ userId, channelId, token, requestId, io }) {
+  if (typeof token !== 'string' || token.length < 20 || token.length > 200) {
+    throw fail(400, 'This confirmation is not valid. Run the command again.', 'CONFIRM_INVALID');
+  }
+  const context = await commandContext(userId, channelId, io);
+  const pending = await query(
+    `DELETE FROM command_pending WHERE token_hash = $1 AND user_id = $2 AND channel_id = $3 AND expires_at > NOW() RETURNING input`,
+    [sha256(token), userId, context.channelId]
+  );
+  if (!pending.rows.length) throw fail(400, 'This confirmation expired or was already used. Run the command again.', 'CONFIRM_INVALID');
+  const input = pending.rows[0].input;
+  const definition = byName.get(nameOf(input));
+  await authorize(definition, context);
+  return runHandler(definition, context, parseFor(definition, input), safeId(requestId));
+}
+
+module.exports = { dispatch, listCommands, confirmPending };

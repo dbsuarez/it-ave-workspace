@@ -67,6 +67,16 @@ module.exports = [
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    )`,
   'CREATE INDEX IF NOT EXISTS idx_command_audit_actor_created ON command_audit_log(actor_id, created_at DESC)',
+  // One-time confirmation tokens for shared slash commands (only a hash of the token is stored)
+  `CREATE TABLE IF NOT EXISTS command_pending (
+     id BIGSERIAL PRIMARY KEY,
+     token_hash TEXT NOT NULL UNIQUE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     input TEXT NOT NULL,
+     expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_command_pending_expires ON command_pending(expires_at)',
   `
     DO $$ BEGIN
       ALTER TABLE channel_members ADD CONSTRAINT channel_members_role_check

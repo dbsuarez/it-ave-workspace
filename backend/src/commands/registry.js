@@ -1,50 +1,76 @@
 const leave = require('./handlers/leave');
 
-const scope = [{ type: 'channel-scope', value: 'hr-inquiry' }];
-const permission = 'hr.leave.read_self';
-const command = (name, description, handler, options = {}) => ({
-  name, aliases: [], description, scopes: scope, permission, visibility: 'private',
-  arguments: options.arguments || [], enabled: true, auditPolicy: 'metadata-only', handler,
+// Where a command may run. A definition lists one or more of:
+//   { type: 'global' }                              any channel, including personal ones
+//   { type: 'any-channel' }                         any shared channel (not a personal one)
+//   { type: 'channel-scope', value: 'hr-inquiry' }  only channels carrying that immutable tag (channels.command_scope)
+//
+// Definition shape (defaults in `normalize`):
+//   name, aliases, category, usage, description, scopes,
+//   permission  null (any member) or a permissions-catalogue key checked with can() in the channel; a string that is not
+//               in the catalogue (the legacy 'hr.leave.read_self') means "workspace members only",
+//   visibility  'private' (answer only to the caller) or 'shared' (the handler posts into the channel),
+//   confirm     { preview(ctx, args, options) -> { title, message, confirmLabel } } makes a shared command show a preview and
+//               run only after POST /api/commands/confirm,
+//   options     { flagName: takesValue } for --flags, maxLength (default 300), allowGuests (default false),
+//   handler(ctx, args, options) -> response, ctx = { userId, channelId, channelScope, isPersonal, accountType, io, query }.
+const definitions = [];
+const byName = new Map();
+
+function normalize(definition) {
+  return {
+    aliases: [], arguments: [], options: {}, enabled: true, auditPolicy: 'metadata-only', visibility: 'private',
+    permission: null, allowGuests: false, category: 'general',
+    ...definition,
+    usage: definition.usage || `/${definition.name}`,
+  };
+}
+
+function register(definition) {
+  const normalized = normalize(definition);
+  definitions.push(normalized);
+  byName.set(normalized.name, normalized);
+  for (const alias of normalized.aliases) byName.set(alias, normalized);
+  return normalized;
+}
+
+const hrScope = [{ type: 'channel-scope', value: 'hr-inquiry' }];
+const hrPermission = 'hr.leave.read_self';
+const hrCommand = (name, description, handler) => register({
+  name, description, category: 'hr', scopes: hrScope, permission: hrPermission, handler,
 });
 
-const definitions = [
-  command('leave', 'Summarize your leave balances', (ctx, args) => leave.balances(ctx, args)),
-  command('leave-count', 'Show your allocated leave credits', (ctx, args) => leave.balances(ctx, args, 'count')),
-  command('leave-used', 'Show approved leave charged to your balance', (ctx, args) => leave.balances(ctx, args, 'used')),
-  command('leave-remaining', 'Show leave credits still available', (ctx, args) => leave.balances(ctx, args, 'remaining')),
-  command('leave-details', 'Show balances and dated leave records', (ctx, args) => leave.balances(ctx, args, 'details')),
-  command('leave-history', 'Show your leave application history', (ctx, args) => leave.history(ctx, args)),
-  command('leave-pending', 'Show your pending leave applications', (ctx, args) => leave.history(ctx, args, true)),
-  command('leave-status', 'Show recent leave application statuses', (ctx, args) => leave.history(ctx, args)),
-  command('leave-types', 'Show available leave types', leave.leaveTypes),
-  command('leave-request', 'Open the leave request screen', async () => ({
-    visibility: 'private', kind: 'open-route', title: 'Request leave', data: { message: 'Open Leave to submit a request.' },
-    actions: [{ type: 'open-route', route: 'leave' }],
-  })),
-  command('leave-cancel', 'Cancel an eligible leave request by request number', leave.cancelCandidate),
-];
+hrCommand('leave', 'Summarize your leave balances', (ctx, args) => leave.balances(ctx, args));
+hrCommand('leave-count', 'Show your allocated leave credits', (ctx, args) => leave.balances(ctx, args, 'count'));
+hrCommand('leave-used', 'Show approved leave charged to your balance', (ctx, args) => leave.balances(ctx, args, 'used'));
+hrCommand('leave-remaining', 'Show leave credits still available', (ctx, args) => leave.balances(ctx, args, 'remaining'));
+hrCommand('leave-details', 'Show balances and dated leave records', (ctx, args) => leave.balances(ctx, args, 'details'));
+hrCommand('leave-history', 'Show your leave application history', (ctx, args) => leave.history(ctx, args));
+hrCommand('leave-pending', 'Show your pending leave applications', (ctx, args) => leave.history(ctx, args, true));
+hrCommand('leave-status', 'Show recent leave application statuses', (ctx, args) => leave.history(ctx, args));
+hrCommand('leave-types', 'Show available leave types', leave.leaveTypes);
+hrCommand('leave-request', 'Open the leave request screen', async () => ({
+  visibility: 'private', kind: 'open-route', title: 'Request leave', data: { message: 'Open Leave to submit a request.' },
+  actions: [{ type: 'open-route', route: 'leave' }],
+}));
+hrCommand('leave-cancel', 'Cancel an eligible leave request by request number', leave.cancelCandidate);
 
-const help = {
-  name: 'hr-help', aliases: ['help'], description: 'List HR commands available here', scopes: scope,
-  permission, visibility: 'private', arguments: [], enabled: true, auditPolicy: 'metadata-only',
+const hrCommands = definitions.slice();
+register({
+  name: 'hr-help', aliases: ['help'], category: 'hr', description: 'List HR commands available here',
+  scopes: hrScope, permission: hrPermission,
   handler: async () => ({
     visibility: 'private', kind: 'command-help', title: 'HR commands',
-    data: { commands: definitions.map(({ name, description }) => ({ name, description })) }, actions: [],
+    data: { commands: hrCommands.map(({ name, description }) => ({ name, description })) }, actions: [],
   }),
-};
-definitions.push(help);
-
-const byName = new Map();
-for (const definition of definitions) {
-  byName.set(definition.name, definition);
-  for (const alias of definition.aliases) byName.set(alias, definition);
-}
+});
 
 function publicDefinition(definition) {
   return {
     name: definition.name, aliases: definition.aliases, description: definition.description,
     arguments: definition.arguments, visibility: definition.visibility,
+    category: definition.category, usage: definition.usage,
   };
 }
 
-module.exports = { definitions, byName, publicDefinition };
+module.exports = { definitions, byName, publicDefinition, register };
