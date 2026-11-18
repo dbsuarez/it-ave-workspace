@@ -13,6 +13,7 @@ docker-compose.yml  # One-command local development stack
 ROADMAP.md        # Roadmap, progress, and known defects (start here)
 RUNBOOK.md        # How to bring the stack back; secrets; troubleshooting
 REA-GHIDRA-SETUP.md  # Ghidra + REA installation, configuration, and usage
+ELI11_why_we_cant_merge_roles_and_departments.md  # Plain-language answer: departments (where you belong) vs roles (what you may do)
 /docs             # All documentation lives here
 ```
 
