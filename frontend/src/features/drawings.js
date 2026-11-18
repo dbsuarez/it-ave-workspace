@@ -144,7 +144,7 @@ async function openDrawing(id) {
   const readyPromise = new Promise((resolve) => { ready = resolve; });
   const handle = ITADrawing.mount(canvas, {
     initialElements, initialFiles: (local && local.files) || {}, viewOnly: drawing.role !== 'editor', title: drawing.title,
-    onChange: (elements, files) => { if (drawingsState.session) drawingsState.session.localChange(elements, files); },
+    onChange: (elements, files) => { if (drawingsState.session) drawingsState.session.localChange(elements, files); scheduleDrawingPreview(); },
     onPointer: (pointer) => { if (drawingsState.session) drawingsState.session.pointer(pointer.pointer ? { ...pointer.pointer, tool: pointer.pointer.tool || pointer.tool, button: pointer.button } : null); },
     onReady: ready,
   });
@@ -165,6 +165,8 @@ async function openDrawing(id) {
   await session.open(id, { title: drawing.title, kind: drawing.kind, channelId: drawing.channelId, topicId: drawing.topicId });
   if (server) drawingsState.open.drawing = { ...drawing, role: session.state().role || drawing.role, readOnlyReason: server.readOnlyReason };
   renderDrawingBar();
+  // a drawing without a preview (an older one) gets one soon after it is opened by someone who can edit it
+  if (drawingsState.open && drawingsState.open.drawing.role === 'editor' && !drawingsState.open.drawing.previewVersion) scheduleDrawingPreview(2500);
 }
 
 async function handleDrawingNotice(notice) {
@@ -185,6 +187,7 @@ async function handleDrawingNotice(notice) {
 }
 
 async function closeDrawing() {
+  await flushDrawingPreview(); // a preview still waiting is saved before the editor goes
   const session = drawingsState.session;
   const handle = drawingsState.handle;
   drawingsState.session = null; drawingsState.handle = null; drawingsState.open = null; drawingsState.present = [];
@@ -396,6 +399,7 @@ async function handleDrawingShareChange(event) {
 // ------------------------------------------------------------------------------------------------------------- wiring
 function setupDrawings() {
   installMermaidTemplates();
+  installDrawingPreviews();
   document.addEventListener('click', (event) => {
     const target = event.target;
     const opener = target.closest && target.closest('[data-drawing-open]');
@@ -431,4 +435,5 @@ function setupDrawings() {
 function setupDrawingSocketEvents() {
   state.socket.on('authenticated', () => { if (drawingsState.session) drawingsState.session.reconnect(); });
   state.socket.on('disconnect', () => { if (drawingsState.session) drawingsState.session.refresh(); });
+  state.socket.on('drawing_preview', (event) => { if (event) refreshDrawingCards(event.drawingId, event.previewVersion); });
 }

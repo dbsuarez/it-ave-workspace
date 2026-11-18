@@ -40,6 +40,7 @@ The `init.sql` file creates:
 - **department_roles** - Roles given to every member of a department (custom roles only); `user_roles.auto` marks assignments a rule made. Both live in `migrations.js`
 - **channel_links** - Shared web links shown in a channel's Links tab
 - **drawings** - Excalidraw whiteboards: title, `scene` JSONB (shapes), `revision`, owner, and nullable `channel_id` / `topic_id` / `message_id` (standalone when `channel_id` is null). Chat cards are `messages` rows with `kind = 'drawing'`
+- `drawings.preview` / `preview_at` - the card picture (a small PNG) and when it was saved
 - **drawing_members** - Who a standalone drawing is shared with (`editor` or `viewer`)
 - **drawing_files** - Pictures inside a drawing, as `BYTEA` keyed by Excalidraw's file id. The three drawing tables live in `migrations.js`
 - ~~user_groups, user_group_members~~ - removed; the migration turned each group into a zero-permission role (members carried into `user_roles`). Departments are mentionable via `users.department_id`

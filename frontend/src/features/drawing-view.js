@@ -18,9 +18,17 @@ function drawingBadgeHtml(drawing) {
 }
 
 // The card posted into a channel or forum topic.
+// A picture of the drawing that opens it, with the title as a small caption. Until someone has saved a preview it is a plain tile.
+// The picture has no address: drawings.js fetches it with the person's sign-in and fills it in (data-drawing-preview).
 function drawingCardHtml(drawing) {
   const id = Number(drawing.id);
-  return `<div class="drawing-card" data-drawing-card="${id}">${DRAWING_ICON}<span class="drawing-card-title">${drawingEscape(drawing.title)}</span><button type="button" class="btn" data-drawing-open="${id}">Open</button></div>`;
+  const title = drawingEscape(drawing.title);
+  const version = Number(drawing.previewVersion);
+  const hasPreview = Number.isFinite(version) && version > 0;
+  const face = hasPreview
+    ? `<img class="drawing-preview-img" data-drawing-preview="${id}" data-preview-version="${version}" alt="Preview of ${title}" draggable="false">`
+    : `<span class="drawing-preview-empty">${DRAWING_ICON}<span>No preview yet</span></span>`;
+  return `<div class="drawing-card${hasPreview ? ' has-preview' : ''}" data-drawing-card="${id}"><button type="button" class="drawing-preview" data-drawing-open="${id}" aria-label="Open drawing: ${title}">${face}</button><span class="drawing-card-title">${title}</span></div>`;
 }
 
 function drawingCardRemovedHtml() {

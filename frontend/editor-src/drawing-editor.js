@@ -2,7 +2,7 @@
 // src/vendor/drawing-editor.js (global ITADrawing). The rest of the app never touches React or Excalidraw directly.
 //
 //   const handle = ITADrawing.mount(element, { initialElements, initialFiles, viewOnly, userName, onChange, onPointer, onReady });
-//   handle.getElements()  handle.getFiles()  handle.exportPng()  handle.exportSvg()
+//   handle.getElements()  handle.getFiles()  handle.exportPng({ maxWidthOrHeight? })  handle.exportSvg()
 //   handle.updateElements(remoteElements)  handle.setCollaborators(list)  handle.addFiles(files)  handle.setViewOnly(bool)  handle.destroy()
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -50,8 +50,15 @@ function mount(element, options = {}) {
   return {
     getElements: () => need().getSceneElementsIncludingDeleted(),
     getFiles: () => need().getFiles(),
-    exportPng: () => exportToBlob({
+    // maxWidthOrHeight (optional) shrinks a large drawing so it fits that size; a small one is not enlarged (used for card previews)
+    exportPng: (options = {}) => exportToBlob({
       elements: need().getSceneElements(), appState: { ...need().getAppState(), exportBackground: true }, files: need().getFiles(), mimeType: 'image/png',
+      ...(options.maxWidthOrHeight ? {
+        getDimensions: (width, height) => {
+          const scale = Math.min(1, options.maxWidthOrHeight / Math.max(width, height));
+          return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)), scale };
+        },
+      } : {}),
     }),
     exportSvg: async () => {
       const svg = await exportToSvg({ elements: need().getSceneElements(), appState: { ...need().getAppState(), exportBackground: true }, files: need().getFiles() });

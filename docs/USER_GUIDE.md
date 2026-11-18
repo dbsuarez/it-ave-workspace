@@ -80,6 +80,8 @@ Drawings are whiteboards for quick sketches, diagrams and documenting how a syst
 ### How do I start a drawing?
 Three ways. Open **Drawings** in the left rail and press **New drawing** for a drawing of your own. In any channel, open its **Drawings** tab and press **New drawing**. Or, while writing in a channel or a forum topic, press the pencil button beside the paperclip: the drawing is added to the conversation as a card anyone there can open.
 
+A drawing added to a conversation shows as a picture of the drawing, with its name underneath; click the picture to open it. The picture is saved by whoever last edited the drawing, a few seconds after they stop, so it follows the drawing. A drawing nobody has opened since this was added shows a plain tile ("No preview yet") until someone who can edit it opens it.
+
 ### Who can see and change a drawing?
 A drawing in a channel or topic follows that conversation: whoever can open the conversation can open the drawing, and whoever can post there can draw. Guests, and conversations that are archived or locked, are view-only. A drawing of your own is private until you share it: press **Share** in the drawing, add people by name, and choose **Editor** or **Viewer** for each. **Share as a copy** gives someone their own copy instead.
 

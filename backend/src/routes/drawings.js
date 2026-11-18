@@ -208,10 +208,12 @@ router.get('/:id/files/:key', async (req, res) => {
 router.put('/:id/preview', async (req, res) => {
   try {
     const id = needId(req.params.id);
-    await requireDrawingRole(query, req.user.userId, id, 'editor');
+    const { drawing } = await requireDrawingRole(query, req.user.userId, id, 'editor');
     const bytes = drawings.decodePreview(req.body);
     const saved = (await query('UPDATE drawings SET preview = $2, preview_at = NOW() WHERE id = $1 RETURNING preview_at', [id, bytes])).rows[0];
-    res.json({ previewVersion: drawings.previewVersionOf(saved) });
+    const previewVersion = drawings.previewVersionOf(saved);
+    if (drawing.channel_id && req.io) req.io.to(`channel_${drawing.channel_id}`).emit('drawing_preview', { drawingId: id, previewVersion }); // the card in the conversation updates
+    res.json({ previewVersion });
   } catch (err) { sendError(res, err, 'Save drawing preview error'); }
 });
 

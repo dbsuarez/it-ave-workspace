@@ -285,6 +285,7 @@ test('a card preview: an editor saves a small PNG, everyone who can open the dra
   const saved = await call('ann', 'PUT', `drawings/${id}/preview`, { dataBase64: pngBytes(2000).toString('base64') });
   assert.equal(saved.status, 200, JSON.stringify(saved.json));
   assert.equal(typeof saved.json.previewVersion, 'number');
+  assert.ok(emitted.some((e) => e.event === 'drawing_preview' && e.room === `channel_${ids.chan}` && e.payload.drawingId === id && e.payload.previewVersion === saved.json.previewVersion), 'open channels are told, so their card updates');
   const response = await fetch(`${baseUrl}/api/drawings/${id}/preview`, { headers: { Authorization: `Bearer ${token(ids.bob)}` } });
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-type'), 'image/png');

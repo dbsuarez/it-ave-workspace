@@ -4,12 +4,30 @@ const { drawingCardHtml, drawingCardRemovedHtml, drawingListHtml } = require('..
 
 const drawing = (extra = {}) => ({ id: 7, title: 'Network map', ownerUsername: 'ann', updatedText: '5 min ago', kind: 'channel', role: 'editor', readOnlyReason: null, ...extra });
 
-test('a card shows the title and an Open button for the drawing', () => {
+test('a card with no preview yet is a tile you click to open, with the title as its caption', () => {
   const html = drawingCardHtml(drawing());
   assert.match(html, /data-drawing-open="7"/);
   assert.match(html, /Network map/);
-  assert.match(html, /Open/);
   assert.match(html, /class="drawing-card"/);
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /No preview yet/);
+  assert.doesNotMatch(html, />Open</, 'no separate Open button');
+});
+
+test('a card with a preview shows the picture, which opens the drawing, with the title as a small caption', () => {
+  const html = drawingCardHtml(drawing({ previewVersion: 1700000000123 }));
+  assert.match(html, /<img[^>]*data-drawing-preview="7"[^>]*data-preview-version="1700000000123"/);
+  assert.match(html, /alt="Preview of Network map"/);
+  assert.match(html, /class="drawing-card has-preview"/);
+  assert.match(html, /<button[^>]*class="drawing-preview"[^>]*data-drawing-open="7"/);
+  assert.match(html, /class="drawing-card-title">Network map</);
+  assert.doesNotMatch(html, /src=/, 'the picture is fetched with the sign-in, not by address');
+});
+
+test('card values are escaped', () => {
+  const html = drawingCardHtml(drawing({ title: '<img src=x onerror=1>"', previewVersion: 5 }));
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;img src=x/);
 });
 
 test('a removed drawing shows a plain notice with nothing to open', () => {

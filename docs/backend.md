@@ -358,6 +358,7 @@ Excalidraw whiteboards. A drawing belongs to a channel or forum topic (`channel_
 | DELETE | `/api/drawings/:id` | Owner or a moderator of its conversation; the card becomes "Drawing removed" |
 | PUT / DELETE | `/api/drawings/:id/members/:userId` | Share as editor or viewer; remove |
 | POST | `/api/drawings/:id/share` | Share as a copy |
+| PUT / GET | `/api/drawings/:id/preview` | The picture on the card: an editor saves a PNG (`{ dataBase64 }`, at most 300 KB, checked for the PNG signature); anyone who can open the drawing reads it (`nosniff`). Open channels get a `drawing_preview` event `{ drawingId, previewVersion }`. A drawing and its card carry `previewVersion` (milliseconds, or null) |
 | POST / GET | `/api/drawings/:id/files[/:key]` | Pictures in a drawing (served with `nosniff` and a sandbox CSP) |
 
 Merge rule (`drawingMerge.js`, the same as the client's): per shape the higher `version` wins; a tie goes to the lower `versionNonce`, then the smaller JSON text; deleted shapes stay (`isDeleted`). Limits: 20000 shapes, 10 MB per scene, 2 MB per picture, 20 MB of pictures per drawing, 900 KB per live update.
