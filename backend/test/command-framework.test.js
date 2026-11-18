@@ -149,6 +149,14 @@ test('private results never become messages or room broadcasts', async (t) => {
   assert.equal(emitted.length, before, 'nothing was emitted to any room');
 });
 
+test('responses carry the category of the command that produced them', async (t) => {
+  if (skip(t)) return;
+  const user = await fresh();
+  assert.equal((await run(user, ids.general, '/t-global')).json.category, 'general');
+  const preview = await run(user, ids.general, '/t-post category check');
+  assert.equal(preview.json.category, 'general', 'previews too');
+});
+
 test('a shared command previews first, posts exactly once on confirm, and the token is single use', async (t) => {
   if (skip(t)) return;
   const channel = await newChannel();

@@ -2281,11 +2281,17 @@ async function updateCommandMenu() {
     return;
   }
   state.commands.activeIndex = Math.min(state.commands.activeIndex, matches.length - 1);
-  els.commandMenu.innerHTML = matches.map((item, index) => `
-    <button type="button" class="command-option${index === state.commands.activeIndex ? ' active' : ''}"
+  // grouped by category; the keyboard index follows the order shown, so number the options as they are drawn
+  let position = 0;
+  els.commandMenu.innerHTML = groupCommandsByCategory(matches).map((group) => `
+    <div class="command-group">${escapeHtml(commandCategoryLabel(group.category))}</div>
+    ${group.items.map((item) => {
+    const index = position++;
+    return `<button type="button" class="command-option${index === state.commands.activeIndex ? ' active' : ''}"
       role="option" aria-selected="${index === state.commands.activeIndex}" data-command-name="${escapeHtml(item.name)}">
-      <strong>/${escapeHtml(item.name)}</strong><span>${escapeHtml(item.description)}</span>
-    </button>`).join('');
+      <strong>/${escapeHtml(item.name)}</strong><span>${escapeHtml(item.description)}</span>${item.usage && item.usage !== `/${item.name}` ? `<small class="command-usage">${escapeHtml(item.usage)}</small>` : ''}
+    </button>`;
+  }).join('')}`).join('');
   els.commandMenu.hidden = false;
 }
 
@@ -2324,35 +2330,11 @@ function handleCommandMenuKeydown(event) {
   return false;
 }
 
-function commandValue(value) {
-  return value === null ? 'No limit' : String(value ?? '—');
-}
-
 function renderPrivateCommandResponse(response, commandText) {
   if (!els.commandPrivateResponses) return;
   const card = document.createElement('section');
   card.className = 'command-private-card';
-  const data = response.data || {};
-  const balances = (data.leaveTypes || []).map((row) => `
-    <tr><th>${escapeHtml(row.name)}</th><td>${commandValue(row.entitled)}</td><td>${commandValue(row.used)}</td><td>${commandValue(row.pending)}</td><td>${commandValue(row.remaining)}</td></tr>`).join('');
-  const requests = (data.requests || []).map((row) => `
-    <li><strong>${escapeHtml(row.typeName)}</strong> · ${escapeHtml(row.startDate)}${row.endDate !== row.startDate ? ` – ${escapeHtml(row.endDate)}` : ''} · ${escapeHtml(String(row.days))} day${Number(row.days) === 1 ? '' : 's'} <span class="command-status">${escapeHtml(row.status)}</span></li>`).join('');
-  const commands = (data.commands || []).map((row) => `<li><strong>/${escapeHtml(row.name)}</strong> — ${escapeHtml(row.description)}</li>`).join('');
-  card.innerHTML = `
-    <header><div><span class="command-assistant">HR Assistant</span><span class="command-private-label">Only visible to you</span></div><button type="button" class="command-dismiss" aria-label="Dismiss private response">&times;</button></header>
-    <p class="command-echo">You: ${escapeHtml(commandText)}</p>
-    <h3>${escapeHtml(response.title || 'HR response')}</h3>
-    ${response.period ? `<p class="command-period">Period: ${escapeHtml(response.period)}</p>` : ''}
-    ${data.message ? `<p>${escapeHtml(data.message)}</p>` : ''}
-    ${balances ? `<div class="command-table-wrap"><table><thead><tr><th>Type</th><th>Credits</th><th>Used</th><th>Pending</th><th>Available</th></tr></thead><tbody>${balances}</tbody></table></div>` : ''}
-    ${requests ? `<ul class="command-records">${requests}</ul>` : (!balances && 'requests' in data ? '<p>No matching leave requests.</p>' : '')}
-    ${commands ? `<ul class="command-records">${commands}</ul>` : ''}
-    ${data.note ? `<p class="command-note">${escapeHtml(data.note)}</p>` : ''}
-    ${(response.actions || []).map((action) => {
-      if (action.type === 'open-route' && action.route === 'leave') return '<button type="button" class="btn" data-command-route="leave">Open Leave</button>';
-      if (action.type === 'cancel-leave' && Number.isSafeInteger(Number(action.requestId))) return `<button type="button" class="btn danger" data-command-cancel-leave="${Number(action.requestId)}">Cancel request</button>`;
-      return '';
-    }).join('')}`;
+  card.innerHTML = commandCardHtml(response, commandText);
   els.commandPrivateResponses.prepend(card);
 }
 
@@ -2368,6 +2350,20 @@ async function executeSlashCommand(commandText) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Could not run that command');
+    if (data.kind === 'confirm') {
+      // a command that posts for everyone shows what it will do first; cancelling keeps the typed text for editing
+      const channelId = state.currentChannelId;
+      const approved = await confirmAction({ title: data.title, message: (data.data && data.data.message) || '', confirmLabel: data.confirmLabel || 'Confirm', danger: false });
+      if (!approved) return;
+      const done = await api('/api/commands/confirm', {
+        method: 'POST', body: JSON.stringify({ channelId, token: data.token, requestId: data.requestId }),
+      });
+      const result = await done.json().catch(() => ({}));
+      if (!done.ok) throw new Error(result.error || 'Could not run that command');
+      els.messageInput.value = '';
+      renderPrivateCommandResponse(result, commandText);
+      return;
+    }
     els.messageInput.value = '';
     renderPrivateCommandResponse(data, commandText);
   } catch (error) {

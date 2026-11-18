@@ -85,7 +85,7 @@ async function runHandler(definition, context, parsed, requestId) {
   try {
     const response = await definition.handler(context, parsed.args, parsed.options);
     await audit(context.userId, context.channelId, definition, requestId, 'success');
-    return { requestId, ...response };
+    return { requestId, category: definition.category, ...response };
   } catch (error) {
     await audit(context.userId, context.channelId, definition, requestId, 'error').catch(() => {});
     throw error;
@@ -108,7 +108,7 @@ async function dispatch({ userId, channelId, input, requestId, io }) {
       [sha256(token), userId, context.channelId, input.trim(), String(CONFIRM_MINUTES)]
     );
     return {
-      requestId: safeRequestId, visibility: 'private', kind: 'confirm', title: preview.title,
+      requestId: safeRequestId, category: definition.category, visibility: 'private', kind: 'confirm', title: preview.title,
       confirmLabel: preview.confirmLabel || 'Confirm', data: { message: preview.message }, token, actions: [],
     };
   }
