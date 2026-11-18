@@ -20,15 +20,27 @@ function forumBadgesHtml(topic) {
   return badges.map(([kind, label]) => `<span class="forum-badge forum-badge-${kind}">${label}</span>`).join('');
 }
 
-// Pin, lock, archive (each sets the opposite of what the topic is now) and delete.
-function forumModerationHtml(topic) {
+// Rename (when allowed), then pin, lock, archive (each sets the opposite of what the topic is now) and delete.
+function forumModerationHtml(topic, { moderate = true, rename = true } = {}) {
   const id = Number(topic.id);
   const button = (name, set, label) => `<button type="button" class="btn forum-action" data-topic-${name}="${id}" data-set="${set}">${label}</button>`;
-  return `<div class="forum-actions">${[
-    button('pin', !topic.pinnedAt, topic.pinnedAt ? 'Unpin' : 'Pin'),
-    button('lock', !topic.lockedAt, topic.lockedAt ? 'Unlock' : 'Lock'),
-    button('archive', !topic.archivedAt, topic.archivedAt ? 'Restore' : 'Archive'),
-  ].join('')}<button type="button" class="btn danger forum-action" data-topic-delete="${id}">Delete</button></div>`;
+  const parts = [];
+  if (rename) parts.push(`<button type="button" class="btn forum-action" data-topic-rename="${id}">Rename</button>`);
+  if (moderate) {
+    parts.push(
+      button('pin', !topic.pinnedAt, topic.pinnedAt ? 'Unpin' : 'Pin'),
+      button('lock', !topic.lockedAt, topic.lockedAt ? 'Unlock' : 'Lock'),
+      button('archive', !topic.archivedAt, topic.archivedAt ? 'Unarchive' : 'Archive'),
+      `<button type="button" class="btn danger forum-action" data-topic-delete="${id}">Delete</button>`
+    );
+  }
+  return `<div class="forum-actions">${parts.join('')}</div>`;
+}
+
+// The Active / Archived toggle above the list.
+function forumTabsHtml({ archived = false } = {}) {
+  const tab = (name, label, pressed) => `<button type="button" class="forum-tab${pressed ? ' active' : ''}" data-forum-tab="${name}" aria-pressed="${pressed}">${label}</button>`;
+  return `${tab('active', 'Active', !archived)}${tab('archived', 'Archived', archived)}`;
 }
 
 function forumReplyText(count) {
@@ -53,14 +65,14 @@ function forumTopicListHtml(topics, { canModerate = false, archived = false } = 
 }
 
 // The bar above an open topic: the way back, the title, moderator controls, and a notice when replies are off.
-function forumTopicHeaderHtml(topic, { canModerate = false } = {}) {
+function forumTopicHeaderHtml(topic, { canModerate = false, canRename = false } = {}) {
   const notice = topic.archivedAt
     ? '<div class="forum-notice" role="status">This topic is archived. It is read-only.</div>'
     : (topic.lockedAt ? '<div class="forum-notice" role="status">This topic is locked. Replies are turned off.</div>' : '');
   return `<div class="forum-topic-header" data-topic-id="${Number(topic.id)}">
     <button type="button" class="btn" data-topic-back>&larr; All topics</button>
     <div class="forum-topic-heading"><h2>${forumEscape(topic.title)}</h2>${forumBadgesHtml(topic)}</div>
-    ${canModerate ? forumModerationHtml(topic) : ''}
+    ${canModerate || canRename ? forumModerationHtml(topic, { moderate: canModerate, rename: true }) : ''}
   </div>${notice}`;
 }
 
@@ -77,5 +89,5 @@ function forumRelativeTime(iso, now = Date.now()) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { forumTopicListHtml, forumTopicHeaderHtml, forumRelativeTime, FORUM_BADGES };
+  module.exports = { forumTopicListHtml, forumTopicHeaderHtml, forumTabsHtml, forumRelativeTime, FORUM_BADGES };
 }

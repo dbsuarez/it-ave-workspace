@@ -308,10 +308,7 @@
 
           <section class="forum-pane" id="forum-pane" aria-label="Forum topics" hidden>
             <div class="forum-toolbar">
-              <div class="forum-tabs" role="tablist" aria-label="Topics">
-                <button type="button" class="forum-tab active" role="tab" aria-selected="true" data-forum-tab="active">Active</button>
-                <button type="button" class="forum-tab" role="tab" aria-selected="false" data-forum-tab="archived">Archived</button>
-              </div>
+              <div class="forum-tabs" id="forum-tabs" role="group" aria-label="Topics"></div>
               <button type="button" class="btn primary" id="btn-new-topic">New topic</button>
             </div>
             <div class="forum-topic-list" id="forum-topic-list" aria-live="polite"></div>

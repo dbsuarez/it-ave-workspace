@@ -89,3 +89,34 @@ test('relative times: just now, minutes, hours, days, then a date', () => {
   assert.equal(forumRelativeTime('not a date', now), '');
   assert.equal(forumRelativeTime(new Date(now + 60000).toISOString(), now), 'just now', 'a clock a little ahead is still just now');
 });
+
+test('buttons are labelled for what they will do: Pin/Unpin, Lock/Unlock, Archive/Unarchive, Delete', () => {
+  const open = forumTopicListHtml([topic()], { canModerate: true });
+  assert.match(open, />Pin<\/button>/);
+  assert.match(open, />Lock<\/button>/);
+  assert.match(open, />Archive<\/button>/);
+  assert.match(open, />Delete<\/button>/);
+  const done = forumTopicListHtml([topic({ pinnedAt: 'x', lockedAt: 'x', archivedAt: 'x' })], { canModerate: true });
+  assert.match(done, />Unpin<\/button>/);
+  assert.match(done, />Unlock<\/button>/);
+  assert.match(done, />Unarchive<\/button>/);
+});
+
+test('moderators can rename from the list; the author or a moderator from the header', () => {
+  assert.match(forumTopicListHtml([topic()], { canModerate: true }), /data-topic-rename="5"/);
+  assert.doesNotMatch(forumTopicListHtml([topic()], { canModerate: false }), /data-topic-rename/);
+  assert.match(forumTopicHeaderHtml(topic(), { canModerate: true }), /data-topic-rename="5"/);
+  assert.match(forumTopicHeaderHtml(topic(), { canRename: true }), /data-topic-rename="5"/);
+  assert.doesNotMatch(forumTopicHeaderHtml(topic(), { canRename: true }), /data-topic-(pin|lock|archive|delete)/);
+  assert.doesNotMatch(forumTopicHeaderHtml(topic()), /data-topic-rename/);
+});
+
+test('the Active / Archived toggle shows which one is pressed', () => {
+  const { forumTabsHtml } = require('../src/features/forum-view');
+  const active = forumTabsHtml({ archived: false });
+  assert.match(active, /data-forum-tab="active"[^>]*aria-pressed="true"/);
+  assert.match(active, /data-forum-tab="archived"[^>]*aria-pressed="false"/);
+  const archived = forumTabsHtml({ archived: true });
+  assert.match(archived, /data-forum-tab="active"[^>]*aria-pressed="false"/);
+  assert.match(archived, /data-forum-tab="archived"[^>]*aria-pressed="true"/);
+});

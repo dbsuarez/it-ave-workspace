@@ -1584,7 +1584,7 @@ function applyForumMode() {
 function renderForumTopicBar() {
   const topic = state.forum.topic;
   if (!topic || !els.forumTopicBar) return;
-  els.forumTopicBar.innerHTML = forumTopicHeaderHtml(topic, { canModerate: canModerateChannel(topic.channelId) });
+  els.forumTopicBar.innerHTML = forumTopicHeaderHtml(topic, { canModerate: canModerateChannel(topic.channelId), canRename: Number(topic.authorId) === Number(state.user?.id) && !topic.lockedAt && !topic.archivedAt });
   const reason = topic.archivedAt ? 'This topic is archived' : (topic.lockedAt ? 'This topic is locked' : null);
   setComposerLocked(reason);
 }
@@ -1595,11 +1595,8 @@ function renderForumTopics() {
   const topics = forum.topics.map((topic) => ({ ...topic, lastActivityText: forumRelativeTime(topic.lastActivityAt) }));
   els.forumTopicList.innerHTML = forumTopicListHtml(topics, { canModerate: canModerateChannel(forum.channelId), archived: forum.archived });
   if (els.forumMoreBtn) els.forumMoreBtn.hidden = !forum.hasMore;
-  els.forumPane?.querySelectorAll('[data-forum-tab]').forEach((tab) => {
-    const on = (tab.dataset.forumTab === 'archived') === forum.archived;
-    tab.classList.toggle('active', on);
-    tab.setAttribute('aria-selected', String(on));
-  });
+  const tabs = document.getElementById('forum-tabs');
+  if (tabs) tabs.innerHTML = forumTabsHtml({ archived: forum.archived });
 }
 
 async function loadForumTopics({ more = false } = {}) {
@@ -1685,6 +1682,14 @@ async function changeForumTopic(topicId, patch) {
   }
 }
 
+async function renameForumTopic(topicId) {
+  const current = state.forum.topic && state.forum.topic.id === Number(topicId)
+    ? state.forum.topic : state.forum.topics.find((topic) => Number(topic.id) === Number(topicId));
+  const title = await askText('New title for this topic', { placeholder: current ? current.title : '', maxLength: 120, required: true });
+  if (title === null || !title.trim() || (current && title.trim() === current.title)) return;
+  await changeForumTopic(topicId, { title: title.trim() });
+}
+
 async function deleteForumTopic(topicId) {
   if (!(await confirmAction({ title: 'Delete topic', message: 'This deletes the topic and every post in it. It cannot be undone.', confirmLabel: 'Delete topic' }))) return;
   try {
@@ -1742,6 +1747,8 @@ function handleForumClick(event) {
     const button = target.closest(selector);
     if (button) return changeForumTopic(Number(button.dataset[dataKey]), { [key]: button.dataset.set === 'true' });
   }
+  const rename = target.closest('[data-topic-rename]');
+  if (rename) return renameForumTopic(Number(rename.dataset.topicRename));
   const remove = target.closest('[data-topic-delete]');
   if (remove) return deleteForumTopic(Number(remove.dataset.topicDelete));
   return undefined;
