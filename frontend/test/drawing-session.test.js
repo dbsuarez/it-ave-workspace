@@ -257,3 +257,15 @@ test('closing leaves the room, saves the local copy at once, and stops listening
   ctx.session.localChange([el('after-close')], {});
   assert.equal(ctx.sent.length, count);
 });
+
+test('refresh re-reads the connection, so the status turns to offline when the socket drops and back to saved when it returns', async () => {
+  const ctx = setup();
+  await ctx.session.open(7, { title: 'Map' });
+  assert.equal(ctx.statuses[ctx.statuses.length - 1], 'saved');
+  ctx.socket.connected = false;
+  ctx.session.refresh();
+  assert.equal(ctx.statuses[ctx.statuses.length - 1], 'offline');
+  ctx.socket.connected = true;
+  await ctx.session.reconnect();
+  assert.equal(ctx.statuses[ctx.statuses.length - 1], 'saved');
+});

@@ -266,6 +266,9 @@ function createDrawingSession({
       for (const event of DRAWING_EVENTS) socket.off(event, handlers[event]);
     },
 
+    // the connection changed (dropped or came back): update the status line
+    refresh() { report(); },
+
     state: () => ({ id, status: lastStatus, role, joined, denied, dirty, lastRevision }),
   };
 }

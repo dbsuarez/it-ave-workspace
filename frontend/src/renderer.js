@@ -600,6 +600,7 @@ function setupEventListeners() {
 
   setupForumScreens();
   setupHelp();
+  setupDrawings();
 
   // Compose
   on('btn-compose', 'click', () => els.messageInput?.focus());
@@ -1135,6 +1136,7 @@ function connectSocket() {
   state.socket.on('channel_activity', handleChannelActivity);
   state.socket.on('poll_updated', ({ pollId }) => refreshPollCard(pollId));
   setupForumSocketEvents();
+  setupDrawingSocketEvents();
   state.socket.on('channel_topic_updated', (event) => {
     const channelId = Number(event.channelId);
     const channel = state.channels.find((c) => Number(c.id) === channelId);
@@ -2383,7 +2385,7 @@ function renderMessageEl(msg, allowReply = false) {
         <span class="message-reply-content">${escapeHtml(replyPreview.content || 'Attachment')}</span>
       </button>` : ''}
       <div class="message-bubble-row">
-        <div class="message-text">${msg.kind === 'poll' && msg.poll ? pollCardHtml(msg.poll, { canClose: isYou || canModerate }) : formatMessageText(msg.content)}${reactionsHtml && !reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
+        <div class="message-text">${msg.kind === 'poll' && msg.poll ? pollCardHtml(msg.poll, { canClose: isYou || canModerate }) : (msg.kind === 'drawing' ? (msg.drawing ? drawingCardHtml(msg.drawing) : drawingCardRemovedHtml()) : formatMessageText(msg.content))}${reactionsHtml && !reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
         ${!attachmentsHtml && allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
           <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
           <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
@@ -3051,6 +3053,7 @@ const SECTIONS = {
   lists:    { pane: null,       view: 'lists' },
   canvases: { pane: null,       view: 'canvases' },
   canvas2:  { pane: null,       view: 'canvas2' },
+  drawings: { pane: null,       view: 'drawings' },
   people:   { pane: null,       view: 'people' },
   huddle:   { pane: null,       view: 'huddle' },
   moderation: { pane: null,     view: 'moderation' },
@@ -3143,6 +3146,10 @@ async function setSection(section) {
     showPane(null);
     showView('canvas2');
     await loadCanvas2StandaloneList();
+  } else if (section === 'drawings') {
+    showPane(null);
+    showView('drawings');
+    await showDrawingsHome();
   } else if (section === 'people') {
     showPane(null);
     showView('people');

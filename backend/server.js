@@ -71,7 +71,7 @@ app.use('/m', (req, res, next) => {
 }, express.static(require('path').join(__dirname, 'public', 'm')));
 if (config.LOG_REQUESTS) app.use(requestLogger());
 // Drawings take large bodies (a scene or a picture), so the router has its own JSON limit and is mounted before the general parser.
-app.use('/api/drawings', require('./src/routes/drawings'));
+app.use('/api/drawings', (req, res, next) => { req.io = io; next(); }, require('./src/routes/drawings'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

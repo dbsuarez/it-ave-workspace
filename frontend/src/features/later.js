@@ -81,6 +81,9 @@ function handleMessageUpdated(event) {
   if (message) {
     message.content = event.content;
     if (event.editedAt) message.editedAt = event.editedAt;
+    // a drawing card: a new title, or the drawing was removed
+    if (event.drawingRemoved) message.drawing = undefined;
+    else if (event.drawing) message.drawing = event.drawing;
   }
   messages.forEach((item) => {
     if (Number(item.replyTo) === Number(event.messageId ?? event.id) && item.replyToMessage) {

@@ -39,6 +39,65 @@ function drawingListHtml(drawings, { empty = 'No drawings yet.' } = {}) {
   }).join('');
 }
 
+const DRAWING_BANNERS = {
+  viewer: 'You can view this drawing but not change it.',
+  locked: 'This topic is locked, so the drawing is view-only.',
+  archived: 'This place is archived, so the drawing is view-only.',
+  'cannot-sync': 'You can no longer sync this drawing. Your changes stay on this computer; export it to keep a copy.',
+};
+
+function drawingPresenceHtml(person) {
+  const color = /^#[0-9a-fA-F]{6}$/.test(person.color || '') ? person.color : '#6b7280';
+  const name = String(person.username || '?');
+  return `<span class="drawing-presence" title="${drawingEscape(name)}" style="background:${color}">${drawingEscape(name.charAt(0).toUpperCase())}</span>`;
+}
+
+// The bar above an open drawing: back, title, who is here, status, export, share; plus a banner when it is view-only or cannot sync.
+// drawing: { id, title, kind, role, readOnlyReason }; status/statusText from drawing-sync.js; present: [{ userId, username, color }].
+function drawingBarHtml({ drawing, status = 'saved', statusText = '', present = [], canShare = false, canDelete = false }) {
+  const id = Number(drawing.id);
+  const editor = drawing.role === 'editor';
+  const banner = drawing.readOnlyReason ? DRAWING_BANNERS[drawing.readOnlyReason] : (drawing.role === 'viewer' ? DRAWING_BANNERS.viewer : '');
+  const notice = status === 'cannot-sync' ? DRAWING_BANNERS['cannot-sync'] : banner;
+  return `<div class="drawing-bar" data-drawing-id="${id}">
+    <button type="button" class="btn" data-drawing-back>&larr; Drawings</button>
+    <span class="drawing-bar-title">${drawingEscape(drawing.title)}</span>${editor ? '<button type="button" class="icon-btn" data-drawing-rename title="Rename" aria-label="Rename">&#9998;</button>' : ''}
+    <span class="drawing-bar-present">${present.map(drawingPresenceHtml).join('')}</span>
+    <span class="drawing-status" data-status="${drawingEscape(status)}">${drawingEscape(statusText)}</span>
+    <button type="button" class="btn" data-drawing-export="png">Export PNG</button>
+    <button type="button" class="btn" data-drawing-export="svg">Export SVG</button>
+    ${canShare ? '<button type="button" class="btn primary" data-drawing-share>Share</button>' : ''}
+    ${canDelete ? '<button type="button" class="btn danger" data-drawing-delete>Delete</button>' : ''}
+  </div>${notice ? `<div class="drawing-banner" role="status">${drawingEscape(notice)}</div>` : ''}`;
+}
+
+// The Share dialog of a standalone drawing: invite people, change or remove them, or copy the drawing into a channel or topic.
+// members: [{ userId, username, role }]; people: ["Name (username)"] for the search box; channels: [{ id, name, kind }].
+function drawingShareHtml({ drawing, members = [], people = [], channels = [] }) {
+  const roleSelect = (attrs, current) => `<select ${attrs}><option value="editor"${current === 'editor' ? ' selected' : ''}>Can edit</option><option value="viewer"${current === 'viewer' ? ' selected' : ''}>Can view</option></select>`;
+  const rows = members.length
+    ? members.map((member) => `<div class="drawing-share-row"><span>${drawingEscape(member.username)}</span>${roleSelect(`data-drawing-member-role="${Number(member.userId)}" aria-label="Role of ${drawingEscape(member.username)}"`, member.role)}<button type="button" class="btn" data-drawing-member-remove="${Number(member.userId)}">Remove</button></div>`).join('')
+    : '<p class="drawing-share-empty">Not shared with anyone yet.</p>';
+  return `<div class="modal-header"><h3>Share "${drawingEscape(drawing.title)}"</h3><button class="modal-close" type="button" data-drawing-share-close aria-label="Close">&times;</button></div>
+  <div class="modal-body" data-drawing-id="${Number(drawing.id)}">
+    <h4>People</h4>
+    ${rows}
+    <div class="drawing-share-add">
+      <input type="text" list="drawing-people-options" data-drawing-add-person placeholder="Add a person (type to search)" autocomplete="off" aria-label="Add a person">
+      <datalist id="drawing-people-options">${people.map((label) => `<option value="${drawingEscape(label)}"></option>`).join('')}</datalist>
+      ${roleSelect('data-drawing-add-role aria-label="Role for the new person"', 'editor')}
+      <button type="button" class="btn primary" data-drawing-add>Add</button>
+    </div>
+    <h4>Copy into a channel or topic</h4>
+    <p class="drawing-share-note">This makes a separate copy that everyone in the channel can edit. Your own drawing stays private.</p>
+    <div class="drawing-share-add">
+      <select data-drawing-copy-channel aria-label="Channel"><option value="">Choose a channel</option>${channels.map((channel) => `<option value="${Number(channel.id)}"${channel.kind === 'forum' ? ' data-forum="1"' : ''}>${drawingEscape(channel.name)}</option>`).join('')}</select>
+      <select data-drawing-copy-topic aria-label="Topic" hidden></select>
+      <button type="button" class="btn" data-drawing-copy>Copy</button>
+    </div>
+  </div>`;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { drawingCardHtml, drawingCardRemovedHtml, drawingListHtml, drawingEscape };
+  module.exports = { drawingCardHtml, drawingCardRemovedHtml, drawingListHtml, drawingBarHtml, drawingShareHtml, drawingEscape };
 }

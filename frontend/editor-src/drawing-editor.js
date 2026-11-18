@@ -3,7 +3,7 @@
 //
 //   const handle = ITADrawing.mount(element, { initialElements, initialFiles, viewOnly, userName, onChange, onPointer, onReady });
 //   handle.getElements()  handle.getFiles()  handle.exportPng()  handle.exportSvg()
-//   handle.updateElements(remoteElements)  handle.setCollaborators(list)  handle.setViewOnly(bool)  handle.destroy()
+//   handle.updateElements(remoteElements)  handle.setCollaborators(list)  handle.addFiles(files)  handle.setViewOnly(bool)  handle.destroy()
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import {
@@ -15,6 +15,8 @@ function mount(element, options = {}) {
   let api = null;
   let viewOnly = Boolean(options.viewOnly);
   let collaborators = new Map();
+  let lastSceneKey = '';
+  const sceneKey = (elements) => `${elements.length}:${elements.reduce((sum, shape) => sum + shape.version, 0)}`;
 
   const render = () => {
     root.render(React.createElement(Excalidraw, {
@@ -31,7 +33,13 @@ function mount(element, options = {}) {
       langCode: 'en',
       name: options.title || 'Drawing',
       UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false } },
-      onChange: (elements, appState, files) => { if (options.onChange) options.onChange(elements, files); },
+      // fires for every change, including selection and scrolling; only a change to the shapes is passed on
+      onChange: (elements, appState, files) => {
+        const key = sceneKey(elements);
+        if (key === lastSceneKey) return;
+        lastSceneKey = key;
+        if (options.onChange) options.onChange(elements, files);
+      },
       onPointerUpdate: (pointer) => { if (options.onPointer) options.onPointer(pointer); },
     }));
   };
@@ -58,6 +66,7 @@ function mount(element, options = {}) {
       collaborators = new Map(list.map((person) => [String(person.id), { pointer: person.pointer, username: person.username, color: { background: person.color, stroke: person.color }, selectedElementIds: person.selectedElementIds || {} }]));
       if (api) api.updateScene({ collaborators });
     },
+    addFiles: (files) => need().addFiles(files),
     setViewOnly: (value) => { viewOnly = Boolean(value); render(); },
     destroy: () => { root.unmount(); api = null; },
   };

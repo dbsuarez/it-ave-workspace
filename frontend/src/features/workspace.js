@@ -730,6 +730,7 @@ const CHANNEL_TABS = [
   ['pins', 'Pins'],
   ['files', 'Files'],
   ['canvases', 'Canvases'],
+  ['drawings', 'Drawings'],
   ['lists', 'Lists'],
   ['links', 'Links'],
 ];
@@ -831,6 +832,11 @@ async function channelResourceHtml(tab, channelId) {
         return row(`${canvas.shared ? 'data-resource-shared-canvas' : 'data-resource-canvas'}="${canvas.id}"`, escapeHtml(canvas.title || 'Untitled canvas'), meta);
       }).join('')
       : emptyRecordMarkup('No canvases in this channel', 'Create one from the Canvas section.');
+  }
+  if (tab === 'drawings') {
+    const data = await fetchJson(`/api/drawings?channelId=${channelId}`);
+    const drawings = (data.drawings || []).map((drawing) => ({ ...drawing, updatedText: forumRelativeTime(drawing.updatedAt) }));
+    return `<div class="drawings-tab-head"><button type="button" class="btn primary" data-drawing-new-channel>New drawing</button></div>${drawingListHtml(drawings, { empty: 'No drawings in this channel yet. Add one to sketch an idea together.' })}`;
   }
   if (tab === 'lists') {
     const data = await fetchJson(`/api/lists?channelId=${channelId}`);

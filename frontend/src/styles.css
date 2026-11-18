@@ -8091,3 +8091,42 @@ body.view-as .input-area { opacity: 0.45; pointer-events: none; }
 .builtin-order { margin-left: auto; display: inline-flex; gap: 2px; }
 .builtin-order .icon-btn { width: 24px; height: 24px; padding: 0; font-size: 13px; }
 .builtin-order .icon-btn[disabled] { opacity: .35; cursor: default; }
+
+/* ---------- Drawings (Excalidraw) ---------- */
+.view-drawings { flex-direction: column; min-height: 0; }
+.drawings-home { padding: 16px 24px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; }
+.drawings-home[hidden], .drawings-editor[hidden] { display: none; }
+.drawings-header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.drawings-header h2 { margin: 0; flex: 1 1 auto; }
+.drawings-offline { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--muted-bg); border: 1px solid var(--border); color: var(--text-muted); font-size: 13px; }
+.drawings-list { display: flex; flex-direction: column; gap: 8px; }
+.drawing-row { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.drawing-row:hover { background: var(--muted-bg); }
+.drawing-row-main { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; background: transparent; color: var(--text); font: inherit; padding: 12px 14px; cursor: pointer; }
+.drawing-row-title { font-weight: 700; flex: 1 1 auto; overflow-wrap: anywhere; }
+.drawing-row-meta { color: var(--text-muted); font-size: 12px; }
+.drawing-badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--muted-bg); color: var(--text-muted); border: 1px solid var(--border); }
+.drawing-icon { flex: 0 0 auto; color: var(--purple); }
+.drawing-empty { color: var(--text-muted); padding: 28px 8px; text-align: center; }
+.drawing-card { display: inline-flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.drawing-card.removed { color: var(--text-muted); font-style: italic; }
+.drawing-card-title { font-weight: 700; }
+.drawings-tab-head { display: flex; justify-content: flex-end; padding-bottom: 8px; }
+.drawings-editor { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.drawing-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.drawing-bar-title { font-weight: 700; margin-right: auto; overflow-wrap: anywhere; }
+.drawing-bar-present { display: inline-flex; gap: 4px; }
+.drawing-presence { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 700; }
+.drawing-status { font-size: 12px; color: var(--text-muted); }
+.drawing-status[data-status="offline"], .drawing-status[data-status="cannot-sync"] { color: var(--danger); font-weight: 700; }
+.drawing-banner { padding: 8px 16px; background: var(--muted-bg); border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 13px; }
+.drawing-canvas { flex: 1 1 auto; min-height: 0; position: relative; }
+.drawing-canvas .excalidraw { height: 100%; }
+/* nothing in the editor reaches outside the app: hide the public library and the links to Excalidraw's own sites */
+.drawing-canvas .default-sidebar-trigger, .drawing-canvas .sidebar-trigger, .drawing-canvas [data-testid="github-link"], .drawing-canvas [data-testid="socials-link"], .drawing-canvas [data-testid="main-menu-trigger"] ~ * .dropdown-menu-group-title { display: none !important; }
+.drawing-share-modal { width: min(560px, 94vw); }
+.drawing-share-row, .drawing-share-add { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.drawing-share-row span { flex: 1 1 auto; font-weight: 600; }
+.drawing-share-add input[type="text"] { flex: 1 1 200px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.drawing-share-add select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.drawing-share-empty, .drawing-share-note { color: var(--text-muted); font-size: 13px; margin: 6px 0; }
