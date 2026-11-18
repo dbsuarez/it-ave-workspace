@@ -80,6 +80,35 @@ module.exports = [
   'CREATE INDEX IF NOT EXISTS idx_forum_topics_channel ON forum_topics(channel_id, last_activity_at DESC)',
   'ALTER TABLE messages ADD COLUMN IF NOT EXISTS topic_id INTEGER REFERENCES forum_topics(id) ON DELETE CASCADE',
   'CREATE INDEX IF NOT EXISTS idx_messages_topic ON messages(topic_id, created_at) WHERE topic_id IS NOT NULL',
+  // Drawings (Excalidraw): a channel or forum-topic drawing belongs to its channel; a standalone one has no channel and is shared by invitation.
+  `CREATE TABLE IF NOT EXISTS drawings (
+     id SERIAL PRIMARY KEY,
+     title VARCHAR(120) NOT NULL,
+     owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     channel_id INTEGER REFERENCES channels(id) ON DELETE CASCADE,
+     topic_id INTEGER REFERENCES forum_topics(id) ON DELETE CASCADE,
+     message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+     scene JSONB NOT NULL DEFAULT '{"elements":[],"appState":{}}'::jsonb,
+     revision INTEGER NOT NULL DEFAULT 1,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_drawings_channel ON drawings(channel_id) WHERE channel_id IS NOT NULL',
+  'CREATE INDEX IF NOT EXISTS idx_drawings_owner ON drawings(owner_id)',
+  `CREATE TABLE IF NOT EXISTS drawing_members (
+     drawing_id INTEGER NOT NULL REFERENCES drawings(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     role VARCHAR(10) NOT NULL CHECK (role IN ('editor', 'viewer')),
+     PRIMARY KEY (drawing_id, user_id)
+   )`,
+  `CREATE TABLE IF NOT EXISTS drawing_files (
+     drawing_id INTEGER NOT NULL REFERENCES drawings(id) ON DELETE CASCADE,
+     file_key VARCHAR(64) NOT NULL,
+     mime VARCHAR(100) NOT NULL,
+     bytes BYTEA NOT NULL,
+     PRIMARY KEY (drawing_id, file_key)
+   )`,
   // Polls created with /poll: the poll, its options, and one row per person per chosen option
   `CREATE TABLE IF NOT EXISTS polls (
      id BIGSERIAL PRIMARY KEY,
