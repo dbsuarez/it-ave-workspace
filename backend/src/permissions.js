@@ -23,6 +23,7 @@ const PERMISSIONS = [
   ['timeout_members', 'Time people out in a channel'],
   ['manage_roles', 'Create roles and give them to people'],
   ['manage_people', 'Employee records, leave and attendance (HR)'],
+  ['manage_sheets', 'Create spreadsheets in Sheets and publish their tables (HR)'],
   ['view_audit_log', 'Read the moderation audit log'],
   ['manage_workspace', 'Workspace settings, integrations and slow mode'],
 ].map(([key, label]) => ({ key, label }));

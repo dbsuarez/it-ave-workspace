@@ -73,6 +73,7 @@ if (config.LOG_REQUESTS) app.use(requestLogger());
 app.use('/api/drawings', (req, res, next) => { req.io = io; next(); }, require('./src/routes/drawings'));
 // Notes take pictures as base64 in JSON, so the notes router parses its own (larger) bodies, before the general parser
 app.use('/api/notes', require('./src/routes/notes'));
+app.use('/api/sheets', require('./src/routes/sheets'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

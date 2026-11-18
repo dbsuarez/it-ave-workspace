@@ -965,4 +965,25 @@ $$`,
    )`,
   `CREATE INDEX IF NOT EXISTS idx_note_images_note ON note_images (note_id)`,
   `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS note_id INTEGER REFERENCES notes(id) ON DELETE CASCADE`,
+  // Sheets: spreadsheets HR makes in the app (docs/superpowers/specs/2026-11-19-sheets-design.md)
+  `CREATE TABLE IF NOT EXISTS sheets (
+     id SERIAL PRIMARY KEY,
+     title VARCHAR(120) NOT NULL,
+     owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     data JSONB NOT NULL,
+     revision INTEGER NOT NULL DEFAULT 1,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_sheets_owner ON sheets(owner_id)`,
+  `CREATE TABLE IF NOT EXISTS sheet_members (
+     sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     role VARCHAR(8) NOT NULL CHECK (role IN ('editor', 'viewer')),
+     PRIMARY KEY (sheet_id, user_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_sheet_members_user ON sheet_members(user_id)`,
+  // the HR role may create sheets
+  `UPDATE roles SET permissions = array_append(permissions, 'manage_sheets') WHERE legacy_hr = true AND NOT ('manage_sheets' = ANY(permissions))`,
 ];
