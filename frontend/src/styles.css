@@ -7964,10 +7964,12 @@ button.pp-prow:hover { background: var(--muted-bg); }
 
 .role-table-tools { margin: 8px 0; }
 .role-table-tools input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; min-width: 240px; }
-.role-table-wrap { overflow-x: auto; }
+/* the table scrolls inside its own box so the header row can stay frozen at the top */
+.role-table-wrap { overflow: auto; max-height: calc(100vh - 300px); min-height: 240px; }
 .role-table { width: 100%; border-collapse: collapse; }
 .role-table th, .role-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
 .role-table th { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.role-table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: 0 1px 0 var(--border); }
 .role-table td small { display: block; color: var(--text-muted); }
 .role-table .role-col { text-align: center; }
 
