@@ -8312,3 +8312,12 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .read-receipts.expanded { flex-wrap: wrap; align-items: flex-start; row-gap: 4px; }
 .read-receipts.expanded .read-receipt-avatars { flex-wrap: wrap; row-gap: 2px; }
 .read-receipts.expanded .read-receipt-text { white-space: normal; overflow: visible; text-overflow: clip; flex: 1 1 260px; }
+
+/* ---------- The Post announcement dialog ---------- */
+.announce-modal { width: min(560px, 94vw); }
+.announce-where { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }
+.announce-text { min-height: 120px; max-height: 40vh; resize: vertical; line-height: 1.45; }
+.announce-count { margin-top: 4px; text-align: right; font-size: 12px; color: var(--text-muted); }
+.announce-preview { padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--purple); border-radius: 8px; background: var(--muted-bg); }
+.announce-preview-text { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30vh; overflow-y: auto; }
+.announce-preview-empty { color: var(--text-muted); font-style: italic; }

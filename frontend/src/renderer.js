@@ -598,6 +598,7 @@ function setupEventListeners() {
   setupDrawings();
   setupNotes();
   setupPollDialog();
+  setupAnnouncements();
   on('channel-read-receipts', 'click', (event) => {
     if (!event.target.closest('[data-read-receipts-toggle]')) return;
     const id = state.currentChannelId;
@@ -1483,6 +1484,7 @@ async function openChannel(channelId) {
   }
 
   state.currentChannelId = channelId;
+  syncAnnouncementButton();
   const lastKey = !state.viewAs && lastChannelStoreKey();
   if (lastKey) electronAPI.storeSet(lastKey, channelId).catch((err) => console.error('Remember last channel error:', err));
   state.currentDMId = null;
@@ -2057,6 +2059,8 @@ async function openDM(userId) {
   closeCanvasSheetForOtherConversation({ userId });
   leaveGroupView();
   state.currentDMId = userId;
+  const announceButton = document.getElementById('btn-add-announcement');
+  if (announceButton) announceButton.hidden = true; // announcements are for channels
   state.currentChannelId = null;
   cancelReply();
   state.view = 'dm';
