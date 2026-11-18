@@ -7,6 +7,7 @@ const {
   ensureChannelPermission,
   ensureDirectMessageAccess,
 } = require('../security');
+const forums = require('../forums');
 const { findMentionedUsers } = require('../mentions');
 const { roleHandle } = require('../roles');
 const { reconcileChannelRoom, startChannelExpirySweep } = require('../channelRoomReconcile');
@@ -510,8 +511,10 @@ module.exports = (io, socket) => {
     }
 
     try {
-      const { query } = require('../db');
+      const { query, pool } = require('../db');
       await ensureCanPostToChannel(query, currentUserId, channelId);
+      // In a department forum every post belongs to an open topic; anywhere else a topicId is refused.
+      const topicId = await forums.ensureTopicOpen(query, channelId, data.topicId, { forPosting: true });
       if (attachmentRequest.ids.length) {
         await ensureChannelPermission(query, currentUserId, channelId, 'attach_files', 'You cannot attach files in this channel');
       }
@@ -523,8 +526,8 @@ module.exports = (io, socket) => {
           `SELECT m.id, m.content, m.user_id, u.username
            FROM messages m
            JOIN users u ON u.id = m.user_id
-           WHERE m.id = $1 AND m.channel_id = $2`,
-          [replyTo, channelId]
+           WHERE m.id = $1 AND m.channel_id = $2 AND m.topic_id IS NOT DISTINCT FROM $3`,
+          [replyTo, channelId, topicId]
         );
         if (parentResult.rows.length === 0) {
           socket.emit('message_error', { error: 'Reply target not found in this channel', clientMessageId });
@@ -544,9 +547,11 @@ module.exports = (io, socket) => {
         return;
       }
       // The uploads are claimed and the message created in one statement (see attachments.js).
-      const message = await insertChannelMessage(query, {
-        channelId, userId: currentUserId, content, replyTo, attachmentIds: attachmentRequest.ids,
-      });
+      const message = topicId
+        ? await forums.insertTopicMessage(pool, { channelId, topicId, userId: currentUserId, content, replyTo, attachmentIds: attachmentRequest.ids })
+        : await insertChannelMessage(query, {
+          channelId, userId: currentUserId, content, replyTo, attachmentIds: attachmentRequest.ids,
+        });
       if (!message) {
         socket.emit('message_error', { error: ATTACHMENT_UNAVAILABLE, clientMessageId });
         return;
@@ -580,6 +585,7 @@ module.exports = (io, socket) => {
         content: message.content,
         replyTo: message.reply_to,
         replyToMessage,
+        topicId: message.topic_id || null,
         createdAt: message.created_at,
         attachments,
         reactions: [],

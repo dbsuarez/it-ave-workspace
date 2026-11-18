@@ -137,4 +137,45 @@ async function listTopics(query, channelId, { archived = false, offset = 0 } = {
   return { topics: rows.slice(0, TOPIC_PAGE).map(serializeTopic), hasMore: rows.length > TOPIC_PAGE };
 }
 
-module.exports = { serializeTopic, loadTopic, listTopics, forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };
+// What a topicId means in a channel. Returns the topic id (a number) in a forum, or null in an ordinary channel with none.
+// 400: a forum without a topic, a topic in an ordinary channel, or a malformed id. 404: no such topic in this channel.
+// 409 (forPosting only): the topic is locked or archived.
+async function ensureTopicOpen(query, channelId, topicId, { forPosting = false } = {}) {
+  const channel = (await query('SELECT kind FROM channels WHERE id = $1', [channelId])).rows[0];
+  if (!channel) throw fail(404, 'Channel not found');
+  const absent = topicId === undefined || topicId === null || topicId === '';
+  if (channel.kind !== 'forum') {
+    if (!absent) throw fail(400, 'Topics only exist in forums');
+    return null;
+  }
+  if (absent) throw fail(400, forPosting ? 'Open a topic to post in this forum' : 'Open a topic to read its posts');
+  if (!/^\d+$/.test(String(topicId))) throw fail(400, 'A valid topic is required');
+  const found = (await query('SELECT id, locked_at, archived_at FROM forum_topics WHERE id = $1 AND channel_id = $2', [Number(topicId), channelId])).rows[0];
+  if (!found) throw fail(404, 'Topic not found');
+  if (forPosting && (found.locked_at || found.archived_at)) throw fail(409, found.locked_at ? 'This topic is locked' : 'This topic is archived');
+  return Number(found.id);
+}
+
+// Posts into a topic. The topic row is locked for the length of the insert and re-checked, so a reply and a moderator's lock
+// can never both win: whichever gets the row first, a post is never created after the topic was locked or archived.
+async function insertTopicMessage(pool, { channelId, topicId, userId, content, replyTo, attachmentIds }) {
+  const { insertChannelMessage } = require('./attachments');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const row = (await client.query('SELECT locked_at, archived_at FROM forum_topics WHERE id = $1 AND channel_id = $2 FOR UPDATE', [topicId, channelId])).rows[0];
+    if (!row) throw fail(404, 'Topic not found');
+    if (row.locked_at || row.archived_at) throw fail(409, row.locked_at ? 'This topic is locked' : 'This topic is archived');
+    const message = await insertChannelMessage((...args) => client.query(...args), { channelId, userId, content, replyTo, attachmentIds, topicId });
+    if (message) await client.query('UPDATE forum_topics SET last_activity_at = clock_timestamp() WHERE id = $1', [topicId]);
+    await client.query('COMMIT');
+    return message;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { ensureTopicOpen, insertTopicMessage, serializeTopic, loadTopic, listTopics, forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };

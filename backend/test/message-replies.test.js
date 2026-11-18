@@ -29,6 +29,7 @@ require.cache[dbPath] = {
       if (sql.includes('FROM channels c') && sql.includes('CROSS JOIN users u')) {
         return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{ needs_check: false }] : [] };
       }
+      if (sql.includes('SELECT kind FROM channels')) return { rows: [{ kind: 'channel' }] }; // an ordinary channel, not a forum
       if (sql.includes('SELECT 1 FROM channel_members')) {
         return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{}] : [] };
       }

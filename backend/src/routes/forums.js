@@ -119,7 +119,8 @@ router.patch('/topics/:topicId', async (req, res) => {
     for (const key of flags) {
       const [column, current] = states[key];
       if (Boolean(current) === body[key]) continue;
-      sets.push(`${column} = ${body[key] ? 'NOW()' : 'NULL'}`);
+      // clock_timestamp() is read once the row lock is held, so a lock that waited for a reply is stamped after that reply
+      sets.push(`${column} = ${body[key] ? 'clock_timestamp()' : 'NULL'}`);
       changes.push([`forum_topic_${body[key] ? '' : 'un'}${key}`, {}]);
     }
     if (sets.length) await query(`UPDATE forum_topics SET ${sets.join(', ')} WHERE id = $1`, values);

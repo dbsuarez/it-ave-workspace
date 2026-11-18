@@ -9,6 +9,7 @@ const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
 const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel, ensureChannelNotArchived } = require('../security');
 const { can, needsCheckSql } = require('../permissions');
+const { ensureTopicOpen } = require('../forums');
 
 const emojiSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -162,10 +163,12 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
     if (channelCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Channel not found' });
     }
+    // A department forum is read one topic at a time; every other channel's history holds no topic posts.
+    const topicId = await ensureTopicOpen(query, channelId, req.query.topicId);
 
     const result = await query(`
       SELECT m.id, m.channel_id, m.user_id, m.content, m.kind, m.reply_to, m.edited_at, m.created_at,
-             m.pinned_at, m.pinned_by,
+             m.pinned_at, m.pinned_by, m.topic_id,
              u.username, u.avatar_color,
              parent.id AS reply_to_message_id, parent.content AS reply_to_content,
              parent_user.username AS reply_to_username
@@ -173,10 +176,10 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       JOIN users u ON m.user_id = u.id
       LEFT JOIN messages parent ON parent.id = m.reply_to
       LEFT JOIN users parent_user ON parent_user.id = parent.user_id
-      WHERE m.channel_id = $1
+      WHERE m.channel_id = $1 AND m.topic_id IS NOT DISTINCT FROM $4
       ORDER BY m.created_at DESC, m.id DESC
       LIMIT $2 OFFSET $3
-    `, [channelId, limit, offset]);
+    `, [channelId, limit, offset, topicId]);
 
     // Get reactions for these messages
     const messageIds = result.rows.map((m) => m.id);
@@ -236,6 +239,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       avatarColor: m.avatar_color,
       content: m.content,
       kind: m.kind,
+      topicId: m.topic_id || null,
       replyTo: m.reply_to,
       replyToMessage: m.reply_to ? {
         id: m.reply_to_message_id,
