@@ -6,6 +6,9 @@ const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { ensureChannelMembership, ensureChannelNotArchived, ensureNotTimedOut } = require('../security');
 const { findMentionedUsers } = require('../mentions');
+const { can } = require('../permissions');
+
+const MAX_ANNOUNCEMENT = 2000; // the same limit as posting one
 
 // Authors editing and deleting their own channel messages.
 // Mounted on /api/messages alongside the main message routes.
@@ -54,6 +57,13 @@ router.patch('/:messageId', authenticateToken, async (req, res) => {
     const message = await loadOwnMessage(messageId, req.user.userId);
     await require('../forums').ensureMessageTopicOpen(query, messageId);
     await ensureNotTimedOut(query, req.user.userId, message.channel_id);
+    if (message.kind === 'announcement') {
+      // an announcement is edited under the rules it was posted with: an announcement channel, the Announce permission, 2000 characters
+      const scope = (await query('SELECT command_scope FROM channels WHERE id = $1', [message.channel_id])).rows[0];
+      if (!scope || scope.command_scope !== 'announcements') return res.status(403).json({ error: 'Announcements can only be edited in an announcement channel' });
+      if (!(await can(query, req.user.userId, 'announce', { channelId: message.channel_id }))) return res.status(403).json({ error: 'You do not have permission to edit announcements' });
+      if (content.length > MAX_ANNOUNCEMENT) return res.status(400).json({ error: `An announcement can be at most ${MAX_ANNOUNCEMENT} characters` });
+    }
     if (content === message.content) {
       return res.json({ message: { id: message.id, channelId: message.channel_id, content, editedAt: null, unchanged: true } });
     }

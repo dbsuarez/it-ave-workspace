@@ -17,18 +17,28 @@ function announcementCounterText(text) {
   return `${String(text || '').length} / ${ANNOUNCEMENT_MAX}`;
 }
 
-function announcementDialogHtml({ text = '', channelName = '' } = {}) {
+// Saving an edit with the same words (spaces around them ignored) changes nothing.
+function announcementUnchanged(original, text) {
+  return String(original || '').trim() === String(text || '').trim();
+}
+
+// The same dialog posts a new announcement and edits an existing one (editing: true).
+function announcementDialogHtml({ text = '', channelName = '', editing = false } = {}) {
   const shown = String(text);
-  return `<div class="modal open announce-modal" role="dialog" aria-modal="true" aria-label="Post announcement"><div class="modal-header"><h3>Post announcement</h3><button class="modal-close" type="button" data-announce-cancel aria-label="Close">&times;</button></div><div class="modal-body"><p class="announce-where">This is posted to <strong>#${announcementEscape(channelName)}</strong> and everyone in the channel sees it.</p><label class="poll-field-label" for="announce-text">Announcement</label><textarea id="announce-text" class="poll-field announce-text" data-announce-text rows="6" maxlength="${ANNOUNCEMENT_MAX}" placeholder="Write your announcement...">${announcementEscape(shown)}</textarea><div class="announce-count" data-announce-count>${announcementCounterText(shown)}</div><div class="poll-field-label">Preview</div><div class="announce-preview"><span class="message-announcement-badge">&#128227; Announcement</span><div class="announce-preview-text" data-announce-preview>${announcementEscape(shown)}</div></div></div><div class="modal-footer"><button type="button" class="btn" data-announce-cancel>Cancel</button><button type="button" class="btn primary" data-announce-post${announcementDraftValid(shown) ? '' : ' disabled'}>Post announcement</button></div></div>`;
+  const heading = editing ? 'Edit announcement' : 'Post announcement';
+  const where = editing
+    ? `This changes the announcement in <strong>#${announcementEscape(channelName)}</strong>. It will show as (edited) and earlier versions are kept.`
+    : `This is posted to <strong>#${announcementEscape(channelName)}</strong> and everyone in the channel sees it.`;
+  return `<div class="modal open announce-modal" role="dialog" aria-modal="true" aria-label="${heading}"><div class="modal-header"><h3>${heading}</h3><button class="modal-close" type="button" data-announce-cancel aria-label="Close">&times;</button></div><div class="modal-body"><p class="announce-where">${where}</p><label class="poll-field-label" for="announce-text">Announcement</label><textarea id="announce-text" class="poll-field announce-text" data-announce-text rows="6" maxlength="${ANNOUNCEMENT_MAX}" placeholder="Write your announcement...">${announcementEscape(shown)}</textarea><div class="announce-count" data-announce-count>${announcementCounterText(shown)}</div><div class="poll-field-label">Preview</div><div class="announce-preview"><span class="message-announcement-badge">&#128227; Announcement</span><div class="announce-preview-text" data-announce-preview>${announcementEscape(shown)}</div></div></div><div class="modal-footer"><button type="button" class="btn" data-announce-cancel>Cancel</button><button type="button" class="btn primary" data-announce-post${announcementDraftValid(shown) ? '' : ' disabled'}>${editing ? 'Save changes' : 'Post announcement'}</button></div></div>`;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { announcementDialogHtml, announcementDraftValid, announcementCounterText, ANNOUNCEMENT_MAX };
+  module.exports = { announcementDialogHtml, announcementDraftValid, announcementCounterText, announcementUnchanged, ANNOUNCEMENT_MAX };
 }
 
 // ---- everything below touches the page and the network; it is exercised in the browser, not in node ----
 
-const announcementState = { busy: false };
+const announcementState = { busy: false, editing: null }; // editing: the message being edited, or null for a new announcement
 
 // Shows the composer's megaphone button only where the person may announce (the channel's command list says so).
 async function syncAnnouncementButton() {
@@ -55,6 +65,7 @@ function updateAnnouncementDialog() {
 function closeAnnouncementDialog() {
   document.getElementById('announce-dialog-overlay')?.remove();
   announcementState.busy = false;
+  announcementState.editing = null;
 }
 
 async function postAnnouncement() {
@@ -62,14 +73,19 @@ async function postAnnouncement() {
   if (!overlay || announcementState.busy) return;
   const text = overlay.querySelector('[data-announce-text]').value;
   if (!announcementDraftValid(text)) return;
+  const editing = announcementState.editing;
+  if (editing && announcementUnchanged(editing.content, text)) { closeAnnouncementDialog(); return; }
   announcementState.busy = true;
   updateAnnouncementDialog();
   try {
-    const response = await api('/api/announcements', { method: 'POST', body: JSON.stringify({ channelId: Number(state.currentChannelId), text }) });
+    const response = editing
+      ? await api(`/api/messages/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ content: text.trim() }) })
+      : await api('/api/announcements', { method: 'POST', body: JSON.stringify({ channelId: Number(state.currentChannelId), text }) });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Could not post the announcement.');
+    if (!response.ok) throw new Error(data.error || (editing ? 'Could not save the announcement.' : 'Could not post the announcement.'));
     closeAnnouncementDialog();
-    showToast('Announcement posted.', 'success');
+    if (editing) { handleMessageUpdated(data.message); showToast('Announcement updated.', 'success'); }
+    else showToast('Announcement posted.', 'success');
   } catch (err) {
     announcementState.busy = false;
     updateAnnouncementDialog();
@@ -77,14 +93,16 @@ async function postAnnouncement() {
   }
 }
 
-function openAnnouncementDialog() {
+// Opens the dialog for a new announcement, or (given the announcement's message) to edit it.
+function openAnnouncementDialog(message = null) {
   if (document.getElementById('announce-dialog-overlay')) return;
   const channel = (state.channels || []).find((candidate) => Number(candidate.id) === Number(state.currentChannelId));
   if (!channel) return;
+  announcementState.editing = message ? { id: message.id, content: message.content } : null;
   const overlay = document.createElement('div');
   overlay.id = 'announce-dialog-overlay';
   overlay.className = 'modal-overlay open';
-  overlay.innerHTML = announcementDialogHtml({ text: '', channelName: channel.name });
+  overlay.innerHTML = announcementDialogHtml({ text: message ? message.content : '', channelName: channel.name, editing: Boolean(message) });
   document.body.appendChild(overlay);
   updateAnnouncementDialog();
   overlay.querySelector('[data-announce-text]').focus();

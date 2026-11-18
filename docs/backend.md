@@ -391,7 +391,7 @@ Live editing (`sockets/drawings.js`, `createDrawingHub`): the server keeps one r
 | GET | `/api/roles/assignments` | also returns `auto: { userId: [roleId] }`; `PUT /api/roles/users/:id` leaves automatic roles in place, `GET /api/roles/users/:id` returns `autoRoleIds` |
 
 ### Announcements
-`POST /api/announcements` `{ channelId, text }` posts an announcement from the "Post announcement" dialog, with the same rules as `/announce`: the channel must be an announcement channel (`command_scope = 'announcements'`, set in Moderation), the person must be a member holding the `announce` permission in it, the text is 1 to 2000 characters (kept exactly, line breaks included), and the channel must be open and not a forum. No second confirmation step: the dialog is the confirmation. Returns `201 { message }`; the channel gets the usual `new_message`.
+`POST /api/announcements` `{ channelId, text }` posts an announcement from the "Post announcement" dialog, with the same rules as `/announce`: the channel must be an announcement channel (`command_scope = 'announcements'`, set in Moderation), the person must be a member holding the `announce` permission in it, the text is 1 to 2000 characters (kept exactly, line breaks included), and the channel must be open and not a forum. No second confirmation step: the dialog is the confirmation. An announcement is edited with the ordinary `PATCH /api/messages/:id`, which for an announcement also requires the announcement channel, the `announce` permission and at most 2000 characters (ordinary messages allow 10000); the old text is kept in `message_edits`. Returns `201 { message }`; the channel gets the usual `new_message`.
 
 ### Socket.io Events
 

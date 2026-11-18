@@ -41,6 +41,7 @@ test.before(async () => {
   app.use(express.json());
   app.use((req, res, next) => { req.io = fakeIo; next(); });
   app.use('/api/announcements', require('../src/routes/announcements'));
+  app.use('/api/messages', require('../src/routes/messageEdits'));
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -106,4 +107,50 @@ test('a missing or unknown channel is refused', async (t) => {
   assert.equal((await post('poster', { text: 'Hi' })).status, 400);
   assert.equal((await post('poster', { channelId: 'x', text: 'Hi' })).status, 400);
   assert.ok([403, 404].includes((await post('poster', { channelId: 999999, text: 'Hi' })).status));
+});
+
+// ------------------------------------------------------------------------------------------------- editing an announcement
+async function patch(user, messageId, content) {
+  const response = await fetch(`${baseUrl}/api/messages/${messageId}`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${jwt.sign({ userId: ids[user], username: 'u', tokenVersion: 0 }, config.JWT_SECRET)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  return { status: response.status, json: await response.json().catch(() => ({})) };
+}
+const announce = async (text) => (await post('poster', { channelId: ids.news, text })).json.message.id;
+
+test('the person who posted an announcement can edit it, the old text is kept, and the channel is told', async (t) => {
+  if (skip(t)) return;
+  const id = await announce('Office closed Friday');
+  const before = emitted.length;
+  const edited = await patch('poster', id, 'Office closed Friday and Monday');
+  assert.equal(edited.status, 200, JSON.stringify(edited.json));
+  const row = (await admin.query('SELECT content, edited_at, kind FROM messages WHERE id = $1', [id])).rows[0];
+  assert.deepEqual([row.content, row.kind], ['Office closed Friday and Monday', 'announcement']);
+  assert.ok(row.edited_at);
+  assert.equal((await admin.query('SELECT previous_content FROM message_edits WHERE message_id = $1', [id])).rows[0].previous_content, 'Office closed Friday');
+  assert.ok(emitted.slice(before).some((e) => e.event === 'message_updated' && e.payload.messageId === id));
+});
+
+test('an announcement edit has the announcement limit of 2000 characters, not the 10000 of ordinary messages', async (t) => {
+  if (skip(t)) return;
+  const id = await announce('Short');
+  assert.equal((await patch('poster', id, 'x'.repeat(2001))).status, 400);
+  assert.equal((await patch('poster', id, 'x'.repeat(2000))).status, 200);
+  assert.equal((await patch('poster', id, '   ')).status, 400, 'not empty');
+});
+
+test('editing an announcement needs the Announce permission and the announcement channel, as posting does', async (t) => {
+  if (skip(t)) return;
+  const id = await announce('Original');
+  assert.equal((await patch('plain', id, 'Not mine')).status, 403, 'not the author');
+  await admin.query("DELETE FROM user_roles WHERE user_id = $1", [ids.poster]);
+  assert.equal((await patch('poster', id, 'Edited without the right')).status, 403, 'the permission was taken away');
+  assert.equal((await admin.query('SELECT content FROM messages WHERE id = $1', [id])).rows[0].content, 'Original');
+  const role = (await admin.query("SELECT id FROM roles WHERE name = 'an-announcers'")).rows[0].id;
+  await admin.query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [ids.poster, role]);
+  await admin.query("UPDATE channels SET command_scope = NULL WHERE id = $1", [ids.news]);
+  assert.equal((await patch('poster', id, 'Channel is not an announcement channel now')).status, 403);
+  await admin.query("UPDATE channels SET command_scope = 'announcements' WHERE id = $1", [ids.news]);
+  assert.equal((await patch('poster', id, 'Fine again')).status, 200);
 });

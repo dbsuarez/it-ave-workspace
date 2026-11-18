@@ -38,6 +38,7 @@ function startEditMessage(messageId) {
   const message = findChannelMessage(messageId);
   const el = document.getElementById(`message-${messageId}`);
   if (message && message.kind === 'poll' && message.poll) { openPollEditor(message.poll.id); return; } // a poll has its own editor
+  if (message && message.kind === 'announcement') { openAnnouncementDialog(message); return; } // an announcement reuses the announcement dialog
   if (!message || !el || el.querySelector('.message-edit-form')) return;
   const textEl = el.querySelector('.message-text');
   const form = document.createElement('form');
