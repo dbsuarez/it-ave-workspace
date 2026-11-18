@@ -199,24 +199,27 @@ async function closeDrawing() {
 
 // ------------------------------------------------------------------------------------------------------- creating drawings
 // A standalone drawing (no channel), or one in the current channel or forum topic with its card posted into the conversation.
-async function startNewDrawing({ channelId = null, topicId = null } = {}) {
-  const asked = await askText('Name this drawing', { placeholder: 'Untitled drawing', maxLength: 120 });
-  if (asked === null) return;
-  const title = asked.trim() || 'Untitled drawing';
+async function startNewDrawing({ channelId = null, topicId = null, name = null } = {}) {
+  // `name` is given when the drawing comes from a file, so the person is not asked again
+  const asked = name !== null ? name : await askText('Name this drawing', { placeholder: 'Untitled drawing', maxLength: 120 });
+  if (asked === null) return false;
+  const title = asked.trim().slice(0, 120) || 'Untitled drawing';
   try {
     if (channelId || state.socket?.connected) {
       const created = await drawingJson('/api/drawings', { method: 'POST', body: JSON.stringify({ title, ...(channelId ? { channelId, topicId } : {}) }) });
       await setSection('drawings');
       await openDrawing(created.drawing.id);
-      return;
+      return true;
     }
     // offline: a draft on this computer, created on the server at the first sync
     const id = `local-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
     await drawingStoreInstance().save(id, { title, kind: 'standalone', channelId: null, topicId: null, elements: [], files: {}, lastRevision: 0, dirty: true, role: 'editor' });
     await setSection('drawings');
     await openDrawing(id);
+    return true;
   } catch (err) {
     showToast(err.message || 'Could not start the drawing.', 'error');
+    return false;
   }
 }
 
@@ -258,6 +261,58 @@ async function exportOpenDrawing(format) {
     if (format === 'svg') downloadDrawingFile(new Blob([await drawingsState.handle.exportSvg()], { type: 'image/svg+xml' }), `${base}.svg`);
     else downloadDrawingFile(await drawingsState.handle.exportPng(), `${base}.png`);
   } catch (err) { showToast(err.message || 'Could not export the drawing.', 'error'); }
+}
+
+// ---------------------------------------------------------------------------------------- .excalidraw files: save and open
+function saveOpenDrawingFile() {
+  const open = drawingsState.open;
+  if (!open || !drawingsState.handle) return;
+  try {
+    const text = drawingFileJson(drawingsState.handle.getElements(), drawingsState.handle.getFiles());
+    downloadDrawingFile(new Blob([text], { type: 'application/json' }), `${drawingFileBaseName(open.drawing.title)}.excalidraw`);
+  } catch (err) { showToast(err.message || 'Could not save the file.', 'error'); }
+}
+
+// Adds what is in the file to the open drawing (nothing already there is removed, so it is safe while others are drawing).
+function addFileToOpenDrawing(parsed) {
+  const handle = drawingsState.handle;
+  if (!handle) return 0;
+  const pictures = Object.values(parsed.files || {}).filter((picture) => picture && picture.id && picture.dataURL);
+  if (pictures.length) handle.addFiles(pictures);
+  handle.updateElements(parsed.elements);
+  return parsed.elements.length;
+}
+
+async function readDrawingFile(file) {
+  if (file.size > DRAWING_FILE_MAX_BYTES) throw new Error('That file is too large to open (the limit is 20 MB).');
+  return parseDrawingFile(await file.text());
+}
+
+async function handleDrawingFileChosen(file) {
+  const mode = drawingsState.fileMode;
+  drawingsState.fileMode = null;
+  if (!file) return;
+  try {
+    const parsed = await readDrawingFile(file);
+    if (mode === 'new') {
+      const started = await startNewDrawing({ name: drawingFileBaseName(file.name).replace(/_/g, ' ') });
+      if (!started) return;
+      const added = addFileToOpenDrawing(parsed);
+      showToast(`Opened ${added} shape${added === 1 ? '' : 's'} from the file.`, 'success');
+    } else {
+      if (!drawingsState.open || drawingsState.open.drawing.role !== 'editor') { showToast('You can only look at this drawing, not change it.', 'info'); return; }
+      const added = addFileToOpenDrawing(parsed);
+      showToast(`Added ${added} shape${added === 1 ? '' : 's'} from the file.`, 'success');
+    }
+  } catch (err) { showToast(err.message || 'Could not open the file.', 'error'); }
+}
+
+function chooseDrawingFile(mode) {
+  const input = document.getElementById('drawing-file-input');
+  if (!input) return;
+  drawingsState.fileMode = mode;
+  input.value = '';
+  input.click();
 }
 
 async function deleteOpenDrawing() {
@@ -351,6 +406,9 @@ function setupDrawings() {
     }
     if (!target.closest) return;
     if (target.closest('#btn-drawings-new')) { startNewDrawing(); return; }
+    if (target.closest('#btn-drawings-open-file')) { chooseDrawingFile('new'); return; }
+    if (target.closest('[data-drawing-save-file]')) { saveOpenDrawingFile(); return; }
+    if (target.closest('[data-drawing-open-file]')) { chooseDrawingFile('into'); return; }
     if (target.closest('#btn-add-drawing')) { addDrawingToConversation(); return; }
     if (target.closest('[data-drawing-new-channel]')) { addDrawingToConversation(); return; }
     const scope = target.closest('[data-drawings-scope]');
@@ -362,6 +420,8 @@ function setupDrawings() {
     if (target.closest('[data-drawing-share]')) { openDrawingShare(); return; }
     if (target.closest('[data-drawing-delete]')) { deleteOpenDrawing(); return; }
   });
+  const fileInput = document.getElementById('drawing-file-input');
+  if (fileInput) fileInput.addEventListener('change', () => handleDrawingFileChosen(fileInput.files && fileInput.files[0]));
   const modal = document.getElementById('drawing-share-modal');
   if (modal) { modal.addEventListener('click', handleDrawingShareClick); modal.addEventListener('change', handleDrawingShareChange); }
 }

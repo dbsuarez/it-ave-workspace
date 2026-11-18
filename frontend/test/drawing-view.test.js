@@ -122,3 +122,12 @@ test('Delete shows in the bar only when the person may delete the drawing', () =
   assert.doesNotMatch(bar(), /data-drawing-delete/);
   assert.match(bar({ canDelete: true }), /data-drawing-delete/);
 });
+
+test('the top bar has Save file for everyone and Open file only for people who can edit', () => {
+  const editor = drawingBarHtml({ drawing: { id: 4, title: 'Map', role: 'editor', readOnlyReason: null } });
+  assert.match(editor, /data-drawing-save-file/);
+  assert.match(editor, /data-drawing-open-file/);
+  const viewer = drawingBarHtml({ drawing: { id: 4, title: 'Map', role: 'viewer', readOnlyReason: null } });
+  assert.match(viewer, /data-drawing-save-file/);
+  assert.doesNotMatch(viewer, /data-drawing-open-file/);
+});

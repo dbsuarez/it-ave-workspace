@@ -66,6 +66,8 @@ function drawingBarHtml({ drawing, status = 'saved', statusText = '', present = 
     <span class="drawing-status" data-status="${drawingEscape(status)}">${drawingEscape(statusText)}</span>
     <button type="button" class="btn" data-drawing-export="png">Export PNG</button>
     <button type="button" class="btn" data-drawing-export="svg">Export SVG</button>
+    <button type="button" class="btn" data-drawing-save-file title="Save as a .excalidraw file that opens in any Excalidraw">Save file</button>
+    ${editor ? '<button type="button" class="btn" data-drawing-open-file title="Add the drawing in a .excalidraw file to this one">Open file</button>' : ''}
     ${canShare ? '<button type="button" class="btn primary" data-drawing-share>Share</button>' : ''}
     ${canDelete ? '<button type="button" class="btn danger" data-drawing-delete>Delete</button>' : ''}
   </div>${notice ? `<div class="drawing-banner" role="status">${drawingEscape(notice)}</div>` : ''}`;

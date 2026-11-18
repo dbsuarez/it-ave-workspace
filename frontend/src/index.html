@@ -498,7 +498,9 @@
                 <button type="button" class="forum-tab active" data-drawings-scope="mine" aria-pressed="true">My drawings</button>
                 <button type="button" class="forum-tab" data-drawings-scope="shared" aria-pressed="false">Shared with me</button>
               </div>
+              <button type="button" class="btn" id="btn-drawings-open-file" title="Make a new drawing from a .excalidraw file">Open file</button>
               <button type="button" class="btn primary" id="btn-drawings-new">New drawing</button>
+              <input type="file" id="drawing-file-input" accept=".excalidraw,application/json" style="display:none;">
             </header>
             <p class="drawings-offline" id="drawings-offline" hidden>You are offline: this shows the drawings kept on this computer.</p>
             <div class="drawings-list" id="drawings-list" aria-live="polite"></div>
@@ -1181,6 +1183,7 @@
   <script src="features/drawing-sync.js"></script>
   <script src="features/drawing-view.js"></script>
   <script src="features/drawing-templates.js"></script>
+  <script src="features/drawing-file.js"></script>
   <script src="features/drawing-store.js"></script>
   <script src="features/drawing-session.js"></script>
   <script src="features/drawings.js"></script>
