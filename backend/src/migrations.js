@@ -73,6 +73,24 @@ module.exports = [
   "ALTER TABLE messages ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'message'",
   // The built-in #announcements channel is where /announce works
   "UPDATE channels SET command_scope = 'announcements' WHERE name = 'announcements' AND command_scope IS NULL AND created_by IS NULL AND is_personal = FALSE",
+  // Department forums: a forum is a channel (kind 'forum') tied to one department; topics are rows, posts are messages
+  "ALTER TABLE channels ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'channel'",
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS forum_department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_forum_department ON channels(forum_department_id) WHERE forum_department_id IS NOT NULL',
+  `CREATE TABLE IF NOT EXISTS forum_topics (
+     id SERIAL PRIMARY KEY,
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     title VARCHAR(120) NOT NULL,
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+     last_activity_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+     pinned_at TIMESTAMP WITH TIME ZONE,
+     locked_at TIMESTAMP WITH TIME ZONE,
+     archived_at TIMESTAMP WITH TIME ZONE
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_forum_topics_channel ON forum_topics(channel_id, last_activity_at DESC)',
+  'ALTER TABLE messages ADD COLUMN IF NOT EXISTS topic_id INTEGER REFERENCES forum_topics(id) ON DELETE CASCADE',
+  'CREATE INDEX IF NOT EXISTS idx_messages_topic ON messages(topic_id, created_at) WHERE topic_id IS NOT NULL',
   // Polls created with /poll: the poll, its options, and one row per person per chosen option
   `CREATE TABLE IF NOT EXISTS polls (
      id BIGSERIAL PRIMARY KEY,

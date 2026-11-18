@@ -135,6 +135,7 @@ const PORT = config.PORT;
 Promise.resolve()
   .then(() => migrations.reduce((chain, sql) => chain.then(() => db.query(sql)), Promise.resolve()))
   .then(() => require('./src/defaultChannels').ensureDefaultChannels(db))
+  .then(() => require('./src/forums').ensureAllForums(db.query))
   .then(() => {
     server.listen(PORT, () => {
       console.log(`IT Avenue Workspace backend running on port ${PORT}`);
