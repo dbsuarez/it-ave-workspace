@@ -8345,6 +8345,12 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .sheet-banner { padding: 8px 16px; background: var(--muted-bg); border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 13px; }
 .sheet-grid { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; background: var(--surface); }
 .sheet-grid .jss_container { height: 100%; }
+/* The grid library draws white cells and sets no text colour, so in the dark theme it inherited the light text colour and typing
+   vanished. The paper stays light in both themes; give its text, headers, editor and menus dark colours explicitly. */
+.sheet-grid, .sheet-grid .jss_worksheet td, .sheet-grid .jss_worksheet td input, .sheet-grid .jss_worksheet td textarea { color: #1D1C1D; color-scheme: light; }
+.sheet-grid .jss_worksheet td input, .sheet-grid .jss_worksheet td textarea { background: #fff; }
+.sheet-grid .jss_worksheet > thead > tr > td, .sheet-grid .jss_worksheet > tbody > tr > td:first-child { color: #4A4A4A; }
+.jcontextmenu, .jcontextmenu a, .jcontextmenu div, .jdropdown-container, .jdropdown-item, .jcalendar-content { color: #1D1C1D; }
 
 .sheet-tables-modal { width: min(680px, 94vw); max-height: 90vh; overflow-y: auto; }
 .sheet-table { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
