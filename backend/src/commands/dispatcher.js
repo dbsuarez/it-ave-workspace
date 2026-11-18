@@ -62,10 +62,10 @@ function parseFor(definition, input) {
 
 async function listCommands({ userId, channelId }) {
   const context = await commandContext(userId, channelId);
+  if (context.accountType !== 'member') throw fail(403, 'Commands are for workspace members');
   const visible = [];
   for (const definition of definitions) {
     if (!inScope(definition, context)) continue;
-    if (context.accountType !== 'member' && !definition.allowGuests) continue;
     if (await lacksPermission(definition, context)) continue;
     visible.push(publicDefinition(definition));
   }

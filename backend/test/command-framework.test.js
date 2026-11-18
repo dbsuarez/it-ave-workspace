@@ -123,12 +123,10 @@ test('a command with a catalogue permission needs it, and discovery hides what y
   assert.ok(ownerList.includes('t-perm'));
 });
 
-test('guests cannot run commands and get an empty list, not an error', async (t) => {
+test('guests cannot run commands or list them', async (t) => {
   if (skip(t)) return;
   assert.equal((await run(ids.guest, ids.general, '/t-global')).status, 403);
-  const list = await call(ids.guest, 'GET', `?channelId=${ids.general}`);
-  assert.equal(list.status, 200);
-  assert.deepEqual(list.json.commands, []);
+  assert.equal((await call(ids.guest, 'GET', `?channelId=${ids.general}`)).status, 403);
 });
 
 test('listed commands carry category and usage', async (t) => {
