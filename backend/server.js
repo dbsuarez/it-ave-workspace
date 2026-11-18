@@ -129,9 +129,15 @@ app.get('/api/health', (req, res) => {
 });
 
 // Socket.io connection
+// Live drawing rooms (Excalidraw): merged scenes are held in memory and saved every few seconds, when the last person leaves, and on shutdown.
+const drawingHub = require('./src/sockets/drawings').createDrawingHub({ io, query: db.query, pool: db.pool });
 io.on('connection', (socket) => {
   chatSockets(io, socket);
+  drawingHub.register(socket);
 });
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => { drawingHub.shutdown().catch((err) => console.error('Drawing save on shutdown failed:', err)).finally(() => process.exit(0)); });
+}
 
 // Start server
 const PORT = config.PORT;
@@ -143,6 +149,7 @@ Promise.resolve()
     server.listen(PORT, () => {
       console.log(`IT Avenue Workspace backend running on port ${PORT}`);
     });
+    drawingHub.start();
     reminderRoutes.startReminderScheduler(io);
     scheduledRoutes.startScheduledMessageRunner(io);
     require('./src/canvasTrash').schedulePurge(db.query.bind(db));
