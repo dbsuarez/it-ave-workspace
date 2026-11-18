@@ -90,6 +90,8 @@ test('the sheets you made are under mine, and the ones shared with you are under
   const mine = await call('hr', 'GET', '?scope=mine');
   assert.ok(mine.json.sheets.some((s) => s.id === ids.sheet));
   assert.equal((await call('plain', 'GET', '?scope=mine')).json.sheets.length, 0);
+  assert.equal(mine.json.canCreate, true, 'the list says whether this person may make new sheets, so the screen can show the button');
+  assert.equal((await call('plain', 'GET', '?scope=mine')).json.canCreate, false);
   assert.equal((await call('hr', 'PUT', `/${ids.sheet}/members/${ids.ed}`, { role: 'editor' })).status, 200);
   assert.equal((await call('hr', 'PUT', `/${ids.sheet}/members/${ids.vi}`, { role: 'viewer' })).status, 200);
   const shared = await call('ed', 'GET', '?scope=shared');

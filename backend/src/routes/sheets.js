@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
       : (await query(
         `SELECT s.id, s.title, s.owner_id, s.revision, s.created_at, s.updated_at, u.username AS owner_username, m.role, jsonb_array_length(s.data->'tabs') AS tab_count
          FROM sheet_members m JOIN sheets s ON s.id = m.sheet_id JOIN users u ON u.id = s.owner_id WHERE m.user_id = $1 ORDER BY s.updated_at DESC, s.id DESC`, [userId])).rows;
-    res.json({ sheets: rows.map((row) => sheets.serializeSheet(row, row.role, { tabCount: row.tab_count })) });
+    res.json({ sheets: rows.map((row) => sheets.serializeSheet(row, row.role, { tabCount: row.tab_count })), canCreate: await can(query, userId, 'manage_sheets') });
   } catch (err) { sendError(res, err, 'List sheets error'); }
 });
 

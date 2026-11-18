@@ -73,6 +73,14 @@ try {
   problems.push(`drawing bundle check: ${err.message}`);
 }
 
+// The Sheets grid bundle may only contain reviewed third-party addresses (scripts/sheet-hosts.js).
+try {
+  const { findOutsideAddresses } = require('./sheet-hosts');
+  for (const found of findOutsideAddresses(path.join(root, 'src', 'vendor'))) problems.push(`sheets bundle has an unreviewed address (${found}): review it in scripts/sheet-hosts.js`);
+} catch (err) {
+  problems.push(`sheets bundle check: ${err.message}`);
+}
+
 // The in-app Help is generated from docs/USER_GUIDE.md; a stale copy would show an old guide.
 try {
   const { generate, outPath } = require('./sync-help');

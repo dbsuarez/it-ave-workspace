@@ -10,6 +10,7 @@
     "vendor": "node scripts/vendor.js",
     "help": "node scripts/sync-help.js",
     "drawing": "node scripts/build-drawing.js",
+    "sheets": "node scripts/build-sheets.js",
     "editor": "node scripts/build-editor.js",
     "smoke": "node scripts/smoke.js",
     "verify:installer": "node scripts/verify-installer.js",
@@ -39,6 +40,7 @@
     "electron-builder": "^24.0.0",
     "esbuild": "^0.28.2",
     "jsdom": "^31.0.0",
+    "jspreadsheet-ce": "5.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "socket.io-client": "^4.7.2"

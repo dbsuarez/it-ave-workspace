@@ -8321,3 +8321,27 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .announce-preview { padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--purple); border-radius: 8px; background: var(--muted-bg); }
 .announce-preview-text { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30vh; overflow-y: auto; }
 .announce-preview-empty { color: var(--text-muted); font-style: italic; }
+
+/* ---------- Sheets ---------- */
+.view-sheets { flex-direction: column; min-height: 0; }
+.sheets-home { padding: 16px 24px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; }
+.sheets-home[hidden], .sheets-editor[hidden] { display: none; }
+.sheets-header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.sheets-header h2 { margin: 0; flex: 1 1 auto; }
+.sheets-list { display: flex; flex-direction: column; gap: 8px; }
+.sheet-row { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.sheet-row:hover { background: var(--muted-bg); }
+.sheet-row-main { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; background: transparent; color: var(--text); font: inherit; padding: 12px 14px; cursor: pointer; }
+.sheet-row-title { font-weight: 700; flex: 1 1 auto; overflow-wrap: anywhere; }
+.sheet-row-meta { color: var(--text-muted); font-size: 12px; }
+.sheet-badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--muted-bg); color: var(--text-muted); border: 1px solid var(--border); }
+.sheet-icon { flex: 0 0 auto; color: var(--purple); }
+.sheet-empty { color: var(--text-muted); padding: 28px 8px; text-align: center; }
+.sheets-editor { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.sheet-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.sheet-bar-title { font-weight: 700; margin-right: auto; overflow-wrap: anywhere; }
+.sheet-status { font-size: 12px; color: var(--text-muted); }
+.sheet-status[data-status="error"] { color: var(--danger); font-weight: 700; }
+.sheet-banner { padding: 8px 16px; background: var(--muted-bg); border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 13px; }
+.sheet-grid { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; background: var(--surface); }
+.sheet-grid .jss_container { height: 100%; }
