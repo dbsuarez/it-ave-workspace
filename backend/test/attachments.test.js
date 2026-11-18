@@ -19,7 +19,7 @@ test('a message without an attachment is a plain insert that never touches files
   assert.deepEqual(row, { id: 9 });
   assert.equal(calls.length, 1);
   assert.doesNotMatch(calls[0].sql, /files/);
-  assert.deepEqual(calls[0].params, [1, 2, 'hi', null]);
+  assert.deepEqual(calls[0].params, [1, 2, 'hi', null, null]); // the last is the forum topic (none)
 });
 
 test('claiming an attachment is one statement that requires it to be unattached and owned', async () => {
@@ -34,7 +34,7 @@ test('claiming an attachment is one statement that requires it to be unattached 
   assert.match(sql, /message_id IS NULL AND dm_message_id IS NULL/);
   assert.match(sql, /FOR UPDATE/);
   assert.match(sql, /WHERE \(SELECT COUNT\(\*\) FROM claim\) = \$6/, 'every file must be claimed, or no message');
-  assert.deepEqual(params, [1, 2, '', null, [77], 1]);
+  assert.deepEqual(params, [1, 2, '', null, [77], 1, null]); // the last is the forum topic (none)
 });
 
 test('when the file cannot be claimed no message is created and null is returned', async () => {

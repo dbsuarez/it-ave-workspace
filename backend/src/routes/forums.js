@@ -55,6 +55,17 @@ router.get('/:channelId/topics', async (req, res) => {
   } catch (err) { sendError(res, err, 'List topics error'); }
 });
 
+// One topic (to open it from a link, a search result or a notification).
+router.get('/topics/:topicId', async (req, res) => {
+  try {
+    const topicId = parseId(req.params.topicId);
+    if (!topicId) throw fail(400, 'A valid topic is required');
+    const topic = await forums.loadTopic(query, topicId);
+    await openForum(req.user.userId, topic.channelId);
+    res.json({ topic });
+  } catch (err) { sendError(res, err, 'Get topic error'); }
+});
+
 // Starts a topic: the topic row and its opening post are created together, or not at all.
 router.post('/:channelId/topics', async (req, res) => {
   const body = req.body || {};

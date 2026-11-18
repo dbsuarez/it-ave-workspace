@@ -156,6 +156,13 @@ async function ensureTopicOpen(query, channelId, topicId, { forPosting = false }
   return Number(found.id);
 }
 
+// A forum takes posts only inside topics, so anything that would post straight into the channel (announcements,
+// scheduled messages, webhooks, polls) is refused there with a clear reason.
+async function ensureNotForum(query, channelId) {
+  const channel = (await query('SELECT kind FROM channels WHERE id = $1', [channelId])).rows[0];
+  if (channel && channel.kind === 'forum') throw fail(400, 'A forum takes posts inside topics. Open a topic to post there.');
+}
+
 // Posts into a topic. The topic row is locked for the length of the insert and re-checked, so a reply and a moderator's lock
 // can never both win: whichever gets the row first, a post is never created after the topic was locked or archived.
 async function insertTopicMessage(pool, { channelId, topicId, userId, content, replyTo, attachmentIds }) {
@@ -178,4 +185,4 @@ async function insertTopicMessage(pool, { channelId, topicId, userId, content, r
   }
 }
 
-module.exports = { ensureTopicOpen, insertTopicMessage, serializeTopic, loadTopic, listTopics, forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };
+module.exports = { ensureNotForum, ensureTopicOpen, insertTopicMessage, serializeTopic, loadTopic, listTopics, forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };

@@ -143,6 +143,8 @@ let state = {
     statusType: '',
   },
   files: [],
+  // Department forums: the open forum's screen ('list' when topic is null) and what is on it
+  forum: { channelId: null, topicId: null, topic: null, topics: [], archived: false, hasMore: false, requestId: 0, refreshTimer: null },
   moderation: { isSuperadmin: false, isHr: false, canManageChannels: false, canManagePersonalChannels: false, canManageWorkspace: false, canCreateChannels: false, moderatorChannelIds: [], channel: null, settings: null, tab: 'channels', channelSettingsTab: 'overview' },
   notes: [],
   lists: [],
@@ -193,6 +195,11 @@ const els = {
   globalSearch: document.getElementById('global-search'),
   searchResults: document.getElementById('search-results'),
   filePicker: document.getElementById('file-picker'),
+  forumPane: document.getElementById('forum-pane'),
+  forumTopicList: document.getElementById('forum-topic-list'),
+  forumTopicBar: document.getElementById('forum-topic-bar'),
+  forumMoreBtn: document.getElementById('btn-forum-more'),
+  newTopicBtn: document.getElementById('btn-new-topic'),
   dmFilePicker: document.getElementById('dm-file-picker'),
   userName: document.getElementById('user-name'),
   userEmail: document.getElementById('user-email'),
@@ -586,6 +593,8 @@ function setupEventListeners() {
   on('btn-cancel-note', 'click', () => closeNoteEditor());
   on('btn-close-note-editor', 'click', () => closeNoteEditor());
 
+  setupForumScreens();
+
   // Compose
   on('btn-compose', 'click', () => els.messageInput?.focus());
   on('send-btn', 'click', sendChannelMessage);
@@ -966,6 +975,7 @@ function connectSocket() {
   });
   state.socket.on('message_sent', ({ message }) => {
     if (!message) return;
+    if (forumChannel(message.channelId) && !isOpenForumTopic(message)) return;
     const messages = state.messages[message.channelId] || (state.messages[message.channelId] = []);
     upsertMessage(messages, message);
     if (Number(state.currentChannelId) === Number(message.channelId) && state.view === 'channel') {
@@ -1076,6 +1086,11 @@ function connectSocket() {
   });
 
   state.socket.on('new_message', (msg) => {
+    if (forumChannel(msg.channelId) && !isOpenForumTopic(msg)) {
+      // a post in a topic that is not on screen: only the topic list (its activity and reply count) changes
+      if (Number(state.currentChannelId) === Number(msg.channelId) && forumScreen() === 'list') refreshForumSoon();
+      return;
+    }
     const messages = state.messages[msg.channelId] || (state.messages[msg.channelId] = []);
     upsertMessage(messages, msg);
 
@@ -1121,6 +1136,7 @@ function connectSocket() {
   state.socket.on('reminder_due', handleReminderDue);
   state.socket.on('channel_activity', handleChannelActivity);
   state.socket.on('poll_updated', ({ pollId }) => refreshPollCard(pollId));
+  setupForumSocketEvents();
   state.socket.on('channel_topic_updated', (event) => {
     const channelId = Number(event.channelId);
     const channel = state.channels.find((c) => Number(c.id) === channelId);
@@ -1484,6 +1500,10 @@ async function openChannel(channelId) {
 
   resetChannelTab();
 
+  // A forum opens on its topic list (every time it is chosen from the sidebar)
+  state.forum = { channelId, topicId: null, topic: null, topics: [], archived: false, hasMore: false, requestId: 0, refreshTimer: null };
+  applyForumMode();
+
   // Join the channel room so realtime messages appear without reloading the view
   if (state.socket) {
     state.socket.emit('join_channel', channelId);
@@ -1498,9 +1518,256 @@ async function openChannel(channelId) {
   api(`/api/channels/${channelId}/read`, { method: 'POST' }).catch(() => {});
 
   renderSidebar();
+  if (forumScreen() === 'list') {
+    renderForumTopics();
+    await loadForumTopics();
+    return;
+  }
   await loadChannelMessages(channelId);
   await loadPinnedMessages(channelId);
   await loadReadReceipts(channelId);
+}
+
+// ============================================================
+// Department forums (the markup comes from features/forum-view.js)
+// A forum is a channel of kind 'forum': it shows its topics, and an open topic shows its posts in the usual message
+// stream and composer. Every post carries the topic's id; the server refuses a post without one.
+// ============================================================
+function forumChannel(channelId = state.currentChannelId) {
+  const channel = state.channels.find((item) => Number(item.id) === Number(channelId));
+  return channel && channel.kind === 'forum' ? channel : null;
+}
+
+// Whether a message (or event) belongs to the topic that is open on screen.
+function isOpenForumTopic(item) {
+  return Boolean(item.topicId) && state.forum.channelId === Number(item.channelId) && state.forum.topicId === Number(item.topicId);
+}
+
+// 'list' or 'topic' while a forum is open, null for any other channel.
+function forumScreen() {
+  if (!forumChannel()) return null;
+  return state.forum.channelId === Number(state.currentChannelId) && state.forum.topicId ? 'topic' : 'list';
+}
+
+// The topic id to send with a post (null outside forums). `blocked` is true when a post cannot be sent from this screen.
+function forumSendTarget() {
+  const screen = forumScreen();
+  if (!screen) return { topicId: null, blocked: false };
+  return screen === 'topic' ? { topicId: state.forum.topicId, blocked: false } : { topicId: null, blocked: true };
+}
+
+function setComposerLocked(reason) {
+  const locked = Boolean(reason);
+  if (els.messageInput) {
+    els.messageInput.disabled = locked;
+    els.messageInput.placeholder = locked ? reason : 'Say something…';
+  }
+  const sendBtn = document.getElementById('send-btn');
+  if (sendBtn) sendBtn.disabled = locked;
+  const attach = document.getElementById('btn-attach');
+  if (attach) attach.disabled = locked;
+}
+
+// Shows the right parts for the open channel: the topic list, an open topic, or the ordinary stream.
+function applyForumMode() {
+  const view = document.getElementById('view-channel');
+  const screen = forumScreen();
+  view?.classList.toggle('forum-list-mode', screen === 'list');
+  view?.classList.toggle('forum-topic-mode', screen === 'topic');
+  if (els.forumPane) els.forumPane.hidden = screen !== 'list';
+  if (els.forumTopicBar) els.forumTopicBar.hidden = screen !== 'topic';
+  if (els.newTopicBtn) els.newTopicBtn.hidden = Boolean(forumChannel()?.archivedAt);
+  if (screen === 'topic') renderForumTopicBar();
+  else setComposerLocked(null);
+}
+
+function renderForumTopicBar() {
+  const topic = state.forum.topic;
+  if (!topic || !els.forumTopicBar) return;
+  els.forumTopicBar.innerHTML = forumTopicHeaderHtml(topic, { canModerate: canModerateChannel(topic.channelId) });
+  const reason = topic.archivedAt ? 'This topic is archived' : (topic.lockedAt ? 'This topic is locked' : null);
+  setComposerLocked(reason);
+}
+
+function renderForumTopics() {
+  if (!els.forumTopicList) return;
+  const forum = state.forum;
+  const topics = forum.topics.map((topic) => ({ ...topic, lastActivityText: forumRelativeTime(topic.lastActivityAt) }));
+  els.forumTopicList.innerHTML = forumTopicListHtml(topics, { canModerate: canModerateChannel(forum.channelId), archived: forum.archived });
+  if (els.forumMoreBtn) els.forumMoreBtn.hidden = !forum.hasMore;
+  els.forumPane?.querySelectorAll('[data-forum-tab]').forEach((tab) => {
+    const on = (tab.dataset.forumTab === 'archived') === forum.archived;
+    tab.classList.toggle('active', on);
+    tab.setAttribute('aria-selected', String(on));
+  });
+}
+
+async function loadForumTopics({ more = false } = {}) {
+  const forum = state.forum;
+  const channelId = forum.channelId;
+  if (!channelId || !els.forumTopicList) return;
+  const request = ++forum.requestId;
+  if (!more && !forum.topics.length) els.forumTopicList.innerHTML = '<div class="forum-empty">Loading topics…</div>';
+  try {
+    const offset = more ? forum.topics.length : 0;
+    const res = await api(`/api/forums/${channelId}/topics?archived=${forum.archived ? 1 : 0}&offset=${offset}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not load topics');
+    if (state.forum !== forum || request !== forum.requestId) return; // something newer took over
+    forum.topics = more ? forum.topics.concat(data.topics) : data.topics;
+    forum.hasMore = Boolean(data.hasMore);
+    renderForumTopics();
+  } catch (err) {
+    if (state.forum === forum) els.forumTopicList.innerHTML = `<div class="forum-empty">${escapeHtml(err.message || 'Could not load topics')}</div>`;
+  }
+}
+
+// Several events can arrive together (a burst of posts); reload the list once.
+function refreshForumSoon() {
+  const forum = state.forum;
+  clearTimeout(forum.refreshTimer);
+  forum.refreshTimer = setTimeout(() => { if (state.forum === forum && forumScreen() === 'list') loadForumTopics(); }, 300);
+}
+
+async function openForumTopic(topicId) {
+  const channelId = Number(state.currentChannelId);
+  if (!forumChannel(channelId)) return;
+  try {
+    const res = await api(`/api/forums/topics/${Number(topicId)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not open the topic');
+    if (Number(data.topic.channelId) !== channelId) throw new Error('That topic is in another forum');
+    state.forum.topicId = Number(data.topic.id);
+    state.forum.topic = data.topic;
+    state.messages[channelId] = [];
+    cancelReply();
+    applyForumMode();
+    await loadChannelMessages(channelId);
+    api(`/api/channels/${channelId}/read`, { method: 'POST' }).catch(() => {});
+  } catch (err) {
+    showToast(err.message || 'Could not open the topic.', 'error');
+  }
+}
+
+function closeForumTopic() {
+  const channelId = Number(state.currentChannelId);
+  state.forum.topicId = null;
+  state.forum.topic = null;
+  state.messages[channelId] = [];
+  cancelReply();
+  applyForumMode();
+  loadForumTopics();
+}
+
+// Re-reads the open topic (it may have been locked, renamed or archived by a moderator).
+async function refreshOpenForumTopic() {
+  const forum = state.forum;
+  if (!forum.topicId) return;
+  try {
+    const res = await api(`/api/forums/topics/${forum.topicId}`);
+    if (res.status === 404) { showToast('This topic was deleted.', 'info'); closeForumTopic(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || state.forum !== forum || forum.topicId !== Number(data.topic.id)) return;
+    forum.topic = data.topic;
+    renderForumTopicBar();
+  } catch (_) { /* the next event or reopening refreshes it */ }
+}
+
+async function changeForumTopic(topicId, patch) {
+  try {
+    const res = await api(`/api/forums/topics/${Number(topicId)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not change the topic');
+    if (state.forum.topicId === Number(topicId)) { state.forum.topic = data.topic; renderForumTopicBar(); }
+    if (forumScreen() === 'list') loadForumTopics();
+  } catch (err) {
+    showToast(err.message || 'Could not change the topic.', 'error');
+  }
+}
+
+async function deleteForumTopic(topicId) {
+  if (!(await confirmAction({ title: 'Delete topic', message: 'This deletes the topic and every post in it. It cannot be undone.', confirmLabel: 'Delete topic' }))) return;
+  try {
+    const res = await api(`/api/forums/topics/${Number(topicId)}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not delete the topic');
+    if (state.forum.topicId === Number(topicId)) closeForumTopic();
+    else loadForumTopics();
+  } catch (err) {
+    showToast(err.message || 'Could not delete the topic.', 'error');
+  }
+}
+
+async function startForumTopic() {
+  const channelId = Number(state.currentChannelId);
+  if (!forumChannel(channelId)) return;
+  const input = await askNewTopic();
+  if (!input) return;
+  let attachmentIds = [];
+  if (input.files.length) {
+    const plan = planUpload(input.files);
+    showToast(plan.files.length === 1 ? `Uploading ${plan.files[0].name}…` : `Uploading ${plan.files.length} files…`, 'info');
+    const results = await uploadAll(plan.files);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length) {
+      failed.slice(0, 3).forEach((r) => showToast(`${r.name}: ${r.error}`, 'error'));
+      return; // nothing was created; the person can try again
+    }
+    attachmentIds = results.map((r) => r.fileId);
+  }
+  try {
+    const res = await api(`/api/forums/${channelId}/topics`, { method: 'POST', body: JSON.stringify({ title: input.title, content: input.content, attachmentIds }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not start the topic');
+    await openForumTopic(data.topic.id);
+  } catch (err) {
+    showToast(err.message || 'Could not start the topic.', 'error');
+  }
+}
+
+function handleForumClick(event) {
+  const target = event.target;
+  const open = target.closest('[data-topic-open]');
+  if (open) return openForumTopic(Number(open.dataset.topicOpen));
+  if (target.closest('[data-topic-back]')) return closeForumTopic();
+  const tab = target.closest('[data-forum-tab]');
+  if (tab) {
+    state.forum.archived = tab.dataset.forumTab === 'archived';
+    state.forum.topics = [];
+    renderForumTopics();
+    return loadForumTopics();
+  }
+  if (target.closest('#btn-forum-more')) return loadForumTopics({ more: true });
+  for (const [selector, key, dataKey] of [['[data-topic-pin]', 'pinned', 'topicPin'], ['[data-topic-lock]', 'locked', 'topicLock'], ['[data-topic-archive]', 'archived', 'topicArchive']]) {
+    const button = target.closest(selector);
+    if (button) return changeForumTopic(Number(button.dataset[dataKey]), { [key]: button.dataset.set === 'true' });
+  }
+  const remove = target.closest('[data-topic-delete]');
+  if (remove) return deleteForumTopic(Number(remove.dataset.topicDelete));
+  return undefined;
+}
+
+// Wired once, after the socket exists (see connectSocket) and the page is ready.
+function setupForumScreens() {
+  els.forumPane?.addEventListener('click', handleForumClick);
+  els.forumTopicBar?.addEventListener('click', handleForumClick);
+  els.newTopicBtn?.addEventListener('click', startForumTopic);
+}
+
+function setupForumSocketEvents() {
+  state.socket.on('forum_topic_created', ({ channelId }) => {
+    if (forumScreen() === 'list' && Number(channelId) === Number(state.forum.channelId)) refreshForumSoon();
+  });
+  state.socket.on('forum_topic_updated', ({ channelId, topicId }) => {
+    if (Number(channelId) !== Number(state.forum.channelId)) return;
+    if (forumScreen() === 'list') refreshForumSoon();
+    else if (state.forum.topicId === Number(topicId)) refreshOpenForumTopic();
+  });
+  state.socket.on('forum_topic_deleted', ({ channelId, topicId }) => {
+    if (Number(channelId) !== Number(state.forum.channelId)) return;
+    if (forumScreen() === 'topic' && state.forum.topicId === Number(topicId)) { showToast('This topic was deleted.', 'info'); closeForumTopic(); }
+    else if (forumScreen() === 'list') refreshForumSoon();
+  });
 }
 
 function renderSkeleton(container) {
@@ -1514,9 +1781,16 @@ function renderSkeleton(container) {
 
 async function loadChannelMessages(channelId, offset = 0) {
   const container = document.getElementById('messages');
+  // a forum has no channel-wide stream: its list screen loads topics, an open topic loads that topic's posts
+  const inForum = Boolean(forumChannel(channelId));
+  if (inForum && !(state.forum.channelId === Number(channelId) && state.forum.topicId)) {
+    if (Number(channelId) === Number(state.currentChannelId)) loadForumTopics();
+    return;
+  }
   renderSkeleton(container);
   try {
-    const res = await api(`/api/messages/${channelId}?limit=100&offset=${offset}`);
+    const topicQuery = inForum ? `&topicId=${state.forum.topicId}` : '';
+    const res = await api(`/api/messages/${channelId}?limit=100&offset=${offset}${topicQuery}`);
     const data = await res.json();
 
     if (!res.ok) throw new Error(data.error || 'Failed to load messages');
@@ -2212,6 +2486,11 @@ async function sendChannelMessage() {
     showToast('Chat is reconnecting. Please try again in a moment.', 'error');
     return;
   }
+  const target = forumSendTarget();
+  if (target.blocked) {
+    showToast('Open a topic to reply, or start a new one.', 'info');
+    return;
+  }
 
   try {
     const clientMessageId = createClientMessageId();
@@ -2221,6 +2500,7 @@ async function sendChannelMessage() {
       id: `pending-${clientMessageId}`,
       clientMessageId,
       channelId: state.currentChannelId,
+      topicId: target.topicId,
       userId: state.user.id,
       username: state.user.username,
       avatarColor: state.user.avatarColor,
@@ -2235,6 +2515,7 @@ async function sendChannelMessage() {
     cancelReply();
     state.socket.emit('send_message', {
       channelId: state.currentChannelId,
+      topicId: target.topicId,
       content: text,
       replyTo,
       clientMessageId,

@@ -48,6 +48,9 @@ async function sendFilesTo(kind, fileList) {
   if (!state.socketAuthenticated) { showToast('Chat is reconnecting. Please try again in a moment.', 'error'); return false; }
   if (kind === 'channel' && !state.currentChannelId) return false;
   if (kind === 'dm' && !state.currentDMId) return false;
+  // in a department forum files go into the open topic; nothing can be sent from the topic list
+  const target = kind === 'channel' && typeof forumSendTarget === 'function' ? forumSendTarget() : { topicId: null, blocked: false };
+  if (target.blocked) { showToast('Open a topic to attach files, or start a new one.', 'info'); return false; }
   if (plan.skipped) showToast(`Up to ${MAX_FILES_PER_MESSAGE} files go in one message. Sending the first ${MAX_FILES_PER_MESSAGE}.`, 'info');
   showToast(plan.files.length === 1 ? `Uploading ${plan.files[0].name}…` : `Uploading ${plan.files.length} files…`, 'info');
 
@@ -60,7 +63,7 @@ async function sendFilesTo(kind, fileList) {
   const caption = input ? input.value.trim() : '';
   if (kind === 'channel') {
     state.socket.emit('send_message', {
-      channelId: state.currentChannelId, content: caption, attachmentIds: sent.map((r) => r.fileId), replyTo: state.replyingTo?.id || null,
+      channelId: state.currentChannelId, topicId: target.topicId, content: caption, attachmentIds: sent.map((r) => r.fileId), replyTo: state.replyingTo?.id || null,
     });
     if (typeof cancelReply === 'function') cancelReply();
   } else {

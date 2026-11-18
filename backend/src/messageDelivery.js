@@ -35,6 +35,7 @@ async function broadcastChannelMessage(io, query, message, sender, extra = {}) {
 
 async function postChannelMessage(io, query, { userId, channelId, content, kind = 'message' }) {
   await ensureCanPostToChannel(query, userId, channelId);
+  await require('./forums').ensureNotForum(query, channelId);
   const sender = await loadSender(query, userId);
   const result = await query(
     `INSERT INTO messages (channel_id, user_id, content, kind)

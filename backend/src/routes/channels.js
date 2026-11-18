@@ -15,6 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
       SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.archived_at, c.created_at, c.created_by,
+             c.kind, c.forum_department_id,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
              creator.avatar_color AS creator_avatar_color,
@@ -48,6 +49,8 @@ router.get('/', authenticateToken, async (req, res) => {
         isPrivate: ch.is_private,
         isPersonal: ch.is_personal,
         teamSectionId: ch.team_section_id,
+        kind: ch.kind || 'channel',
+        forumDepartmentId: ch.forum_department_id || null,
         availableToAll: ch.available_to_all,
         archivedAt: ch.archived_at,
         memberCount: ch.member_count,
@@ -72,6 +75,7 @@ router.get('/my', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
       SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.team_section_id, c.available_to_all, c.archived_at, c.created_at, c.created_by,
+             c.kind, c.forum_department_id,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
              creator.avatar_color AS creator_avatar_color,
@@ -111,6 +115,8 @@ router.get('/my', authenticateToken, async (req, res) => {
         isPrivate: ch.is_private,
         isPersonal: ch.is_personal,
         teamSectionId: ch.team_section_id,
+        kind: ch.kind || 'channel',
+        forumDepartmentId: ch.forum_department_id || null,
         availableToAll: ch.available_to_all,
         archivedAt: ch.archived_at,
         memberCount: ch.member_count,

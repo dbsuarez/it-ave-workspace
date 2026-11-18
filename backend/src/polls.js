@@ -108,6 +108,7 @@ async function pollsForMessages(query, messageIds, viewerId) {
 async function createPoll(io, query, { userId, channelId, question, options, multiple = false, anonymous = false, closesAt = null }) {
   const valid = validateNewPoll({ question, options });
   await ensureCanPostToChannel(query, userId, channelId);
+  await require('./forums').ensureNotForum(query, channelId);
   const sender = await loadSender(query, userId);
   const client = await pool.connect();
   let message;

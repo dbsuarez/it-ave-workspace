@@ -306,6 +306,19 @@
             <div class="channel-pins-list" id="channel-pins-list" aria-live="polite"></div>
           </aside>
 
+          <section class="forum-pane" id="forum-pane" aria-label="Forum topics" hidden>
+            <div class="forum-toolbar">
+              <div class="forum-tabs" role="tablist" aria-label="Topics">
+                <button type="button" class="forum-tab active" role="tab" aria-selected="true" data-forum-tab="active">Active</button>
+                <button type="button" class="forum-tab" role="tab" aria-selected="false" data-forum-tab="archived">Archived</button>
+              </div>
+              <button type="button" class="btn primary" id="btn-new-topic">New topic</button>
+            </div>
+            <div class="forum-topic-list" id="forum-topic-list" aria-live="polite"></div>
+            <div class="forum-more"><button type="button" class="btn" id="btn-forum-more" hidden>Show more topics</button></div>
+          </section>
+          <div class="forum-topic-bar" id="forum-topic-bar" hidden></div>
+
           <div class="messages" id="messages"></div>
 
           <div class="input-area">
@@ -1128,6 +1141,7 @@
   <script src="features/dialogs.js"></script>
   <script src="features/command-cards.js"></script>
   <script src="features/polls.js"></script>
+  <script src="features/forum-view.js"></script>
   <script src="features/format.js"></script>
   <script src="features/activity.js"></script>
   <script src="features/notification-sound.js"></script>

@@ -215,3 +215,16 @@ test('a topic of another department’s forum cannot be changed from outside it'
   assert.equal((await call(ids.head, 'DELETE', `/topics/${id}`)).status, 403, 'the MIS head has no say in Legal');
   assert.equal((await call(ids.ann, 'PATCH', '/topics/999999', { title: 'x' })).status, 404);
 });
+
+test('one topic can be read by someone who may open its forum, and nobody else', async (t) => {
+  if (skip(t)) return;
+  const id = (await create(ids.ann, 'Readable')).json.topic.id;
+  const read = await call(ids.bob, 'GET', `/topics/${id}`);
+  assert.equal(read.status, 200);
+  assert.equal(read.json.topic.title, 'Readable');
+  assert.equal(read.json.topic.channelId, ids.forum);
+  assert.equal((await call(ids.cara, 'GET', `/topics/${id}`)).status, 403, 'another department');
+  assert.equal((await call(ids.outsider, 'GET', `/topics/${id}`)).status, 403);
+  assert.equal((await call(ids.ann, 'GET', '/topics/999999')).status, 404);
+  assert.equal((await call(ids.ann, 'GET', '/topics/abc')).status, 400);
+});

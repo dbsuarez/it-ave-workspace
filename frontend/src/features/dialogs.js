@@ -137,3 +137,68 @@ function showMessage(message, { title = '', okLabel = 'OK' } = {}) {
     modal.querySelector('[data-message-ok]').focus();
   });
 }
+
+// The dialog for starting a department-forum topic: a title, the first post, and optionally some files.
+// Resolves with { title, content, files } (files is an array of File), or null when cancelled.
+function askNewTopic({ titleMax = 120, contentMax = 10000 } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    const modal = document.createElement('form');
+    modal.className = 'modal open';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'New topic');
+    modal.innerHTML = `
+      <div class="modal-header"><h2>New topic</h2></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="new-topic-title">Title</label>
+          <input id="new-topic-title" type="text" autocomplete="off" maxlength="${Number(titleMax)}" placeholder="What is this about?">
+        </div>
+        <div class="form-group">
+          <label for="new-topic-content">First post</label>
+          <textarea id="new-topic-content" rows="6" maxlength="${Number(contentMax)}" placeholder="Write the first post of the topic"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="new-topic-files">Files (optional)</label>
+          <input id="new-topic-files" type="file" multiple>
+        </div>
+        <p class="new-topic-error" role="alert" hidden></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" data-topic-cancel>Cancel</button>
+        <button class="btn primary" type="submit">Start topic</button>
+      </div>`;
+    const title = modal.querySelector('#new-topic-title');
+    const content = modal.querySelector('#new-topic-content');
+    const files = modal.querySelector('#new-topic-files');
+    const error = modal.querySelector('.new-topic-error');
+    const finish = (value) => {
+      document.removeEventListener('keydown', onKeydown, true);
+      overlay.remove();
+      modal.remove();
+      resolve(value);
+    };
+    const onKeydown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      finish(null);
+    };
+    modal.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = { title: title.value.trim(), content: content.value.trim() };
+      const attached = Array.from(files.files || []);
+      if (!text.title) { error.textContent = 'Give the topic a title.'; error.hidden = false; title.focus(); return; }
+      if (!text.content && !attached.length) { error.textContent = 'Write the first post, or attach a file.'; error.hidden = false; content.focus(); return; }
+      finish({ ...text, files: attached });
+    });
+    content.addEventListener('keydown', (event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) modal.requestSubmit(); });
+    modal.querySelector('[data-topic-cancel]').addEventListener('click', () => finish(null));
+    overlay.addEventListener('click', () => finish(null));
+    document.addEventListener('keydown', onKeydown, true);
+    document.body.append(overlay, modal);
+    title.focus();
+  });
+}

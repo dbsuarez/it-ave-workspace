@@ -85,6 +85,18 @@ test('the Owner switch opens it for an Owner, and moving a person out of the dep
   assert.equal(await open(ids.bob, ids.misForum), 200, 'moved back in');
 });
 
+test('the channel lists tell a forum from an ordinary channel and name its department', async (t) => {
+  if (skip(t)) return;
+  for (const path of ['/api/channels', '/api/channels/my']) {
+    const channels = (await call(ids.bob, 'GET', path)).json.channels;
+    const forum = channels.find((c) => c.id === ids.misForum);
+    assert.equal(forum.kind, 'forum', path);
+    assert.equal(forum.forumDepartmentId, ids.mis, path);
+    const ordinary = channels.find((c) => c.kind !== 'forum');
+    if (ordinary) { assert.equal(ordinary.kind, 'channel', path); assert.equal(ordinary.forumDepartmentId, null, path); }
+  }
+});
+
 test('creating a department creates its forum', async (t) => {
   if (skip(t)) return;
   const created = await call(ids.owner, 'POST', '/api/hr/departments', { name: 'Finance Team' });

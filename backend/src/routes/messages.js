@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const fs = require('fs');
-const { query } = require('../db');
+const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { pollsForMessages } = require('../polls');
 const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
 const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel, ensureChannelNotArchived } = require('../security');
 const { can, needsCheckSql } = require('../permissions');
-const { ensureTopicOpen } = require('../forums');
+const { ensureTopicOpen, insertTopicMessage } = require('../forums');
 
 const emojiSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -348,7 +348,7 @@ router.post('/:messageId/replies', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Content is required' });
     }
     const parent = await query(
-      'SELECT channel_id FROM messages WHERE id = $1',
+      'SELECT channel_id, topic_id FROM messages WHERE id = $1',
       [messageId]
     );
     if (parent.rows.length === 0) {
@@ -357,13 +357,15 @@ router.post('/:messageId/replies', authenticateToken, async (req, res) => {
     await ensureChannelMembership(query, req.user.userId, parent.rows[0].channel_id);
     await ensureCanPostToChannel(query, req.user.userId, parent.rows[0].channel_id);
 
-    const result = await query(
-      `INSERT INTO messages (channel_id, user_id, content, reply_to)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, channel_id, user_id, content, reply_to, created_at`,
-      [parent.rows[0].channel_id, req.user.userId, content, messageId]
-    );
-    const msg = result.rows[0];
+    // a reply to a post in a department forum stays in that topic (and obeys its lock)
+    const msg = parent.rows[0].topic_id
+      ? await insertTopicMessage(pool, { channelId: parent.rows[0].channel_id, topicId: parent.rows[0].topic_id, userId: req.user.userId, content, replyTo: messageId })
+      : (await query(
+        `INSERT INTO messages (channel_id, user_id, content, reply_to)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, channel_id, user_id, content, reply_to, created_at`,
+        [parent.rows[0].channel_id, req.user.userId, content, messageId]
+      )).rows[0];
     const u = await query(
       'SELECT username, avatar_color FROM users WHERE id = $1',
       [req.user.userId]

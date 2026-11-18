@@ -231,3 +231,28 @@ test('a reply-to inside a topic must point at a post of the same topic', async (
   assert.ok(ok.sent);
   assert.equal(ok.sent.message.replyTo, inA);
 });
+
+test('nothing else can drop a topic-less post into a forum: announcements, scheduled messages, webhooks and polls are refused', async (t) => {
+  if (skip(t)) return;
+  const { postChannelMessage } = require('../src/messageDelivery');
+  const polls = require('../src/polls');
+  const q = (...a) => admin.query(...a);
+  await assert.rejects(() => postChannelMessage(io, q, { userId: ids.ann, channelId: ids.forum, content: 'announce' }), (e) => e.status === 400 && /topic/i.test(e.message));
+  await assert.rejects(() => polls.createPoll(io, q, { userId: ids.ann, channelId: ids.forum, question: 'Lunch?', options: ['a', 'b'] }), (e) => e.status === 400 && /topic/i.test(e.message));
+  assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM messages WHERE channel_id = $1 AND topic_id IS NULL', [ids.forum])).rows[0].n, 0, 'the forum holds no topic-less posts');
+  const ok = await postChannelMessage(io, q, { userId: ids.ann, channelId: ids.plain, content: 'ordinary announce' });
+  assert.ok(ok.id, 'ordinary channels are unaffected');
+});
+
+test('a thread reply to a topic post belongs to that topic and obeys its lock', async (t) => {
+  if (skip(t)) return;
+  const id = await newTopic('Threaded');
+  const first = (await admin.query('SELECT id FROM messages WHERE topic_id = $1', [id])).rows[0].id;
+  const reply = await http_(ids.bob, 'POST', `/api/messages/${first}/replies`, { content: 'a thread reply' });
+  assert.equal(reply.status, 201, JSON.stringify(reply.json));
+  assert.equal((await admin.query('SELECT topic_id FROM messages WHERE id = $1', [reply.json.reply.id])).rows[0].topic_id, id);
+  assert.equal((await http_(ids.ann, 'GET', `/api/forums/${ids.forum}/topics`)).json.topics.find((x) => x.id === id).replyCount, 1);
+  await admin.query('UPDATE forum_topics SET locked_at = NOW() WHERE id = $1', [id]);
+  assert.equal((await http_(ids.bob, 'POST', `/api/messages/${first}/replies`, { content: 'too late' })).status, 409);
+  assert.equal((await admin.query("SELECT COUNT(*)::int AS n FROM messages WHERE content = 'too late'")).rows[0].n, 0);
+});
