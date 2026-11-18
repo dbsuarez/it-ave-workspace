@@ -17,9 +17,12 @@ test('content visibility predicate requires active users and rejects bans before
 
 test('files library and search share the same channel visibility predicate', () => {
   const files = route('files.js');
-  const search = route('search.js');
+  // the search SQL lives in src/searchService.js (shared by GET /api/search and the /search command)
+  const search = fs.readFileSync(path.join(__dirname, '..', 'src', 'searchService.js'), 'utf8');
+  assert.match(files, /require\('\.\.\/channelVisibilitySql'\)/);
+  assert.match(search, /require\('\.\/channelVisibilitySql'\)/);
+  assert.match(route('search.js'), /require\('\.\.\/searchService'\)/, 'the route uses the shared service');
   for (const source of [files, search]) {
-    assert.match(source, /require\('\.\.\/channelVisibilitySql'\)/);
     assert.match(source, /channelVisibleToUser\('m.channel_id'\)/);
   }
   assert.doesNotMatch(files.slice(files.indexOf("router.get('/',"), files.indexOf("router.get('/:id/download'")), /m.channel_id IN \(SELECT channel_id FROM channel_members/);
