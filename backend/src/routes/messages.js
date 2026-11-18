@@ -94,7 +94,7 @@ router.get('/:channelId/pins', authenticateToken, async (req, res) => {
     const { channelId } = req.params;
     await ensureChannelMembership(query, req.user.userId, channelId);
     const result = await query(
-      `SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at,
+      `SELECT m.id, m.channel_id, m.user_id, m.content, m.kind, m.created_at,
               m.pinned_at, m.pinned_by, u.username, u.avatar_color,
               pinner.username AS pinned_by_username
        FROM messages m
@@ -133,6 +133,7 @@ router.get('/:channelId/pins', authenticateToken, async (req, res) => {
         username: message.username,
         avatarColor: message.avatar_color,
         content: message.content,
+        kind: message.kind,
         createdAt: message.created_at,
         pinned: true,
         pinnedAt: message.pinned_at,

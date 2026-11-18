@@ -294,3 +294,60 @@ test('markup in a question or option is stored verbatim for the client to escape
   assert.equal(row.question, '<script>alert(1)</script> & co?');
   assert.deepEqual((await options(poll)).map((o) => o.label), ['<b>x</b>', 'a & b']);
 });
+
+// a new member of the channel, so the per-user command rate limit (30 a minute) never mixes tests up
+async function freshMember(ch) {
+  sequence += 1;
+  const id = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, 'x') RETURNING id", [`pl-f${sequence}`, `pl-f${sequence}@x.test`])).rows[0].id;
+  await admin.query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)', [ch, id]);
+  return id;
+}
+
+test('simultaneous requests with the same request id create exactly one poll', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const creator = await freshMember(ch);
+  const results = await Promise.all(Array.from({ length: 6 }, () => run(creator, ch, '/poll "Race?" "a" "b"', 'race-1')));
+  assert.ok(results.every((r) => r.status === 200), 'every request is answered');
+  assert.equal((await admin.query("SELECT COUNT(*)::int AS n FROM polls WHERE channel_id = $1 AND question = 'Race?'", [ch])).rows[0].n, 1);
+  assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM messages WHERE channel_id = $1', [ch])).rows[0].n, 1);
+  assert.equal(results.filter((r) => r.json.title === 'Poll posted').length, 1, 'only one of them did the work');
+});
+
+test('loading many polls takes a fixed, small number of queries and gives the same answer as loading them one by one', async (t) => {
+  if (skip(t)) return;
+  const polls = require('../src/polls');
+  const { query } = require('../src/db');
+  const ch = await channel();
+  const creator = await freshMember(ch);
+  const created = [];
+  for (let i = 0; i < 12; i += 1) created.push(await newPoll(ch, `/poll "Question ${i}?" "yes" "no" ${i % 2 ? '--anonymous' : ''}`, creator));
+  for (const [i, id] of created.entries()) {
+    const [first] = (await options(id)).map((o) => Number(o.id));
+    if (i % 3 === 0) await vote(ids.bob, id, [first]);
+    if (i % 4 === 0) await vote(await freshMember(ch), id, [first]);
+  }
+  await admin.query("UPDATE polls SET closes_at = NOW() - INTERVAL '1 second' WHERE id = $1", [created[5]]);
+  const messageIds = (await admin.query('SELECT message_id FROM polls WHERE channel_id = $1 ORDER BY id', [ch])).rows.map((r) => r.message_id);
+  let calls = 0;
+  const counting = (...args) => { calls += 1; return query(...args); };
+  const batch = await polls.pollsForMessages(counting, messageIds, ids.bob);
+  assert.ok(calls <= 8, `12 polls should not cost ${calls} queries`);
+  assert.equal(batch.size, 12);
+  for (const id of created) {
+    const single = await polls.serializePoll(query, id, ids.bob);
+    assert.deepEqual(batch.get(single.messageId), single, `poll ${id} is the same either way`);
+  }
+  assert.equal(batch.get((await polls.serializePoll(query, created[5], ids.bob)).messageId).closed, true, 'an expired poll is shown closed');
+});
+
+test('the pinned list says what a pinned poll or announcement is', async (t) => {
+  if (skip(t)) return;
+  const ch = await channel();
+  const creator = await freshMember(ch);
+  await newPoll(ch, '/poll "Lunch?" "Pizza" "Sushi" "Soup"', creator);
+  await admin.query("INSERT INTO messages (channel_id, user_id, content, kind) VALUES ($1, $2, 'All hands at 3', 'announcement'), ($1, $2, 'plain one', 'message')", [ch, creator]);
+  await admin.query('UPDATE messages SET pinned_at = NOW(), pinned_by = $2 WHERE channel_id = $1', [ch, ids.mod]);
+  const pins = (await call(ids.bob, 'GET', `/api/messages/${ch}/pins`)).json.messages;
+  assert.deepEqual(pins.map((m) => [m.content, m.kind]).sort(), [['All hands at 3', 'announcement'], ['Lunch?', 'poll'], ['plain one', 'message']]);
+});

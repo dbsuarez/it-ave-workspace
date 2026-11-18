@@ -1575,6 +1575,7 @@ function renderPinnedMessages(channelId) {
       <button class="pinned-message-jump" type="button" data-pinned-message-id="${escapeHtml(String(message.id))}" aria-label="Jump to message by ${escapeHtml(message.username || 'Unknown')}">
         <span class="pinned-message-meta">
           <strong>${escapeHtml(message.username || 'Unknown')}</strong>
+          ${message.kind === 'poll' ? '<span class="pinned-kind">Poll</span>' : (message.kind === 'announcement' ? '<span class="pinned-kind">Announcement</span>' : '')}
           <time>${escapeHtml(shortTime(message.createdAt))}</time>
         </span>
         <span class="pinned-message-content">${escapeHtml(message.content || (message.attachments?.length ? 'Attachment' : ''))}</span>

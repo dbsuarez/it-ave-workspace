@@ -7,6 +7,7 @@ const { byName, definitions, publicDefinition } = require('./registry');
 
 const HARD_MAX_LENGTH = 2000;
 const CONFIRM_MINUTES = 5;
+const inFlight = new Set(); // shared-command requests that are running right now
 const fail = (status, message, code) => Object.assign(new Error(message), { status, code });
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
@@ -121,16 +122,24 @@ async function dispatch({ userId, channelId, input, requestId, io }) {
     };
   }
   if (definition.visibility === 'shared' && typeof requestId === 'string' && requestId === safeRequestId) {
-    // a retry of the same request (reconnect, double click) must not post twice
-    const done = await query(
-      `SELECT 1 FROM command_audit_log WHERE actor_id = $1 AND request_id = $2 AND command_name = $3 AND outcome = 'success'`,
-      [userId, safeRequestId, definition.name]
-    );
-    if (done.rows.length) {
-      return {
-        requestId: safeRequestId, category: definition.category, visibility: 'private', kind: 'card', title: 'Already done',
-        data: { message: 'This command already ran, so it was not repeated.' }, actions: [],
-      };
+    // A retry of the same request (reconnect, double click) must not post twice. The in-flight set covers copies that
+    // arrive while the first is still running (the audit row only exists once it has finished); this backend is one process.
+    const key = `${userId}:${safeRequestId}:${definition.name}`;
+    const alreadyDone = () => ({
+      requestId: safeRequestId, category: definition.category, visibility: 'private', kind: 'card', title: 'Already done',
+      data: { message: 'This command is already running or already ran, so it was not repeated.' }, actions: [],
+    });
+    if (inFlight.has(key)) return alreadyDone();
+    inFlight.add(key);
+    try {
+      const done = await query(
+        `SELECT 1 FROM command_audit_log WHERE actor_id = $1 AND request_id = $2 AND command_name = $3 AND outcome = 'success'`,
+        [userId, safeRequestId, definition.name]
+      );
+      if (done.rows.length) return alreadyDone();
+      return await runHandler(definition, context, parsed, safeRequestId);
+    } finally {
+      inFlight.delete(key);
     }
   }
   return runHandler(definition, context, parsed, safeRequestId);

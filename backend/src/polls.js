@@ -47,45 +47,61 @@ async function loadPoll(query, pollId) {
   return row;
 }
 
-// -> { id, messageId, channelId, question, multiple, anonymous, closesAt, closed, options: [{ id, label, count, voters? }],
-//      myOptionIds, totalVoters }. `voters` only for named polls.
-async function serializePoll(query, pollId, viewerId) {
-  await closeIfExpired(query, pollId);
-  const poll = await loadPoll(query, pollId);
+// Serializes many polls for one viewer with a fixed number of queries (not a handful per poll).
+// -> Map(pollId -> { id, messageId, channelId, question, multiple, anonymous, closesAt, closed,
+//                    options: [{ id, label, count, voters? }], myOptionIds, totalVoters }). `voters` only for named polls.
+async function serializePolls(query, pollIds, viewerId) {
+  const found = new Map();
+  if (!pollIds.length) return found;
+  await query(
+    'UPDATE polls SET closed_at = closes_at WHERE id = ANY($1::bigint[]) AND closed_at IS NULL AND closes_at IS NOT NULL AND closes_at <= NOW()', [pollIds]);
+  const rows = (await query(
+    'SELECT id, channel_id, message_id, question, multiple, anonymous, closes_at, closed_at FROM polls WHERE id = ANY($1::bigint[])', [pollIds])).rows;
   const options = (await query(
-    `SELECT o.id, o.label, o.position, COUNT(v.user_id)::int AS count
+    `SELECT o.poll_id, o.id, o.label, COUNT(v.user_id)::int AS count
      FROM poll_options o LEFT JOIN poll_votes v ON v.option_id = o.id
-     WHERE o.poll_id = $1 GROUP BY o.id ORDER BY o.position`, [pollId])).rows;
-  const mine = (await query('SELECT option_id FROM poll_votes WHERE poll_id = $1 AND user_id = $2', [pollId, viewerId])).rows.map((r) => Number(r.option_id));
-  const total = (await query('SELECT COUNT(DISTINCT user_id)::int AS n FROM poll_votes WHERE poll_id = $1', [pollId])).rows[0].n;
-  const votersByOption = new Map();
-  if (!poll.anonymous) {
-    const voters = (await query(
-      `SELECT v.option_id, u.username FROM poll_votes v JOIN users u ON u.id = v.user_id WHERE v.poll_id = $1 ORDER BY u.username`, [pollId])).rows;
-    for (const row of voters) {
-      if (!votersByOption.has(Number(row.option_id))) votersByOption.set(Number(row.option_id), []);
-      votersByOption.get(Number(row.option_id)).push(row.username);
-    }
+     WHERE o.poll_id = ANY($1::bigint[]) GROUP BY o.id ORDER BY o.poll_id, o.position`, [pollIds])).rows;
+  const mine = (await query('SELECT poll_id, option_id FROM poll_votes WHERE poll_id = ANY($1::bigint[]) AND user_id = $2', [pollIds, viewerId])).rows;
+  const totals = (await query('SELECT poll_id, COUNT(DISTINCT user_id)::int AS n FROM poll_votes WHERE poll_id = ANY($1::bigint[]) GROUP BY poll_id', [pollIds])).rows;
+  const namedIds = rows.filter((row) => !row.anonymous).map((row) => row.id);
+  const voters = namedIds.length ? (await query(
+    `SELECT v.poll_id, v.option_id, u.username FROM poll_votes v JOIN users u ON u.id = v.user_id
+     WHERE v.poll_id = ANY($1::bigint[]) ORDER BY u.username`, [namedIds])).rows : [];
+  const votersOf = new Map();
+  for (const row of voters) {
+    const key = `${row.poll_id}:${row.option_id}`;
+    if (!votersOf.has(key)) votersOf.set(key, []);
+    votersOf.get(key).push(row.username);
   }
-  return {
-    id: Number(poll.id), messageId: poll.message_id, channelId: poll.channel_id, question: poll.question,
-    multiple: poll.multiple, anonymous: poll.anonymous, closesAt: poll.closes_at, closed: Boolean(poll.closed_at),
-    options: options.map((option) => ({
-      id: Number(option.id), label: option.label, count: option.count,
-      ...(poll.anonymous ? {} : { voters: votersByOption.get(Number(option.id)) || [] }),
-    })),
-    myOptionIds: mine.sort((a, b) => a - b),
-    totalVoters: total,
-  };
+  for (const poll of rows) {
+    found.set(Number(poll.id), {
+      id: Number(poll.id), messageId: poll.message_id, channelId: poll.channel_id, question: poll.question,
+      multiple: poll.multiple, anonymous: poll.anonymous, closesAt: poll.closes_at, closed: Boolean(poll.closed_at),
+      options: options.filter((option) => String(option.poll_id) === String(poll.id)).map((option) => ({
+        id: Number(option.id), label: option.label, count: option.count,
+        ...(poll.anonymous ? {} : { voters: votersOf.get(`${poll.id}:${option.id}`) || [] }),
+      })),
+      myOptionIds: mine.filter((vote) => String(vote.poll_id) === String(poll.id)).map((vote) => Number(vote.option_id)).sort((a, b) => a - b),
+      totalVoters: (totals.find((row) => String(row.poll_id) === String(poll.id)) || { n: 0 }).n,
+    });
+  }
+  return found;
+}
+
+async function serializePoll(query, pollId, viewerId) {
+  const poll = (await serializePolls(query, [pollId], viewerId)).get(Number(pollId));
+  if (!poll) throw fail(404, 'Poll not found');
+  return poll;
 }
 
 // Map of messageId -> serialized poll for the poll messages among `messageIds`.
 async function pollsForMessages(query, messageIds, viewerId) {
-  const found = new Map();
-  if (!messageIds.length) return found;
+  const byMessage = new Map();
+  if (!messageIds.length) return byMessage;
   const rows = (await query('SELECT id, message_id FROM polls WHERE message_id = ANY($1::int[])', [messageIds])).rows;
-  for (const row of rows) found.set(row.message_id, await serializePoll(query, row.id, viewerId));
-  return found;
+  const serialized = await serializePolls(query, rows.map((row) => row.id), viewerId);
+  for (const row of rows) if (serialized.has(Number(row.id))) byMessage.set(row.message_id, serialized.get(Number(row.id)));
+  return byMessage;
 }
 
 // Posts the poll message and creates the poll in one transaction, then broadcasts it like any other message.
@@ -171,6 +187,6 @@ async function closePoll(query, pollId) {
 }
 
 module.exports = {
-  parseDuration, validateNewPoll, loadPoll, serializePoll, pollsForMessages, createPoll,
+  parseDuration, validateNewPoll, loadPoll, serializePoll, serializePolls, pollsForMessages, createPoll,
   authorizeVoter, replaceVotes, closePoll, closeIfExpired,
 };
