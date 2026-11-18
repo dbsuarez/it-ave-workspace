@@ -18,14 +18,14 @@ function idList({ attachmentIds, attachmentId }) {
   return Array.from(new Set(raw.map(Number)));
 }
 
-async function insertChannelMessage(query, { channelId, userId, content, replyTo, attachmentId, attachmentIds }) {
+async function insertChannelMessage(query, { channelId, userId, content, replyTo, attachmentId, attachmentIds, topicId }) {
   const ids = idList({ attachmentIds, attachmentId });
   if (!ids.length) {
     const plain = await query(
-      `INSERT INTO messages (channel_id, user_id, content, reply_to)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, channel_id, user_id, content, reply_to, created_at`,
-      [channelId, userId, content || '', replyTo || null]
+      `INSERT INTO messages (channel_id, user_id, content, reply_to, topic_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, channel_id, user_id, content, reply_to, created_at, topic_id`,
+      [channelId, userId, content || '', replyTo || null, topicId || null]
     );
     return plain.rows[0];
   }
@@ -37,16 +37,16 @@ async function insertChannelMessage(query, { channelId, userId, content, replyTo
        WHERE id = ANY($5::int[]) AND uploaded_by = $2 AND message_id IS NULL AND dm_message_id IS NULL
        FOR UPDATE
      ), msg AS (
-       INSERT INTO messages (channel_id, user_id, content, reply_to)
-       SELECT $1, $2, $3, $4 WHERE (SELECT COUNT(*) FROM claim) = $6
-       RETURNING id, channel_id, user_id, content, reply_to, created_at
+       INSERT INTO messages (channel_id, user_id, content, reply_to, topic_id)
+       SELECT $1, $2, $3, $4, $7 WHERE (SELECT COUNT(*) FROM claim) = $6
+       RETURNING id, channel_id, user_id, content, reply_to, created_at, topic_id
      ), linked AS (
        UPDATE files SET message_id = (SELECT id FROM msg)
        WHERE id IN (SELECT id FROM claim) AND EXISTS (SELECT 1 FROM msg)
        RETURNING id
      )
      SELECT msg.* FROM msg`,
-    [channelId, userId, content || '', replyTo || null, ids, ids.length]
+    [channelId, userId, content || '', replyTo || null, ids, ids.length, topicId || null]
   );
   return result.rows[0] || null;
 }

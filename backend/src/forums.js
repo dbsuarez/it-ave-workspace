@@ -96,4 +96,45 @@ async function ensureAllForums(query) {
   return missing.rows.length;
 }
 
-module.exports = { forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };
+const TOPIC_COLUMNS = `t.id, t.channel_id, t.title, t.created_by, t.created_at, t.last_activity_at, t.pinned_at, t.locked_at, t.archived_at,
+  u.username AS author_username,
+  GREATEST((SELECT COUNT(*) FROM messages m WHERE m.topic_id = t.id) - 1, 0)::int AS reply_count`;
+
+function serializeTopic(row) {
+  return {
+    id: Number(row.id),
+    channelId: row.channel_id,
+    title: row.title,
+    authorId: row.created_by,
+    authorUsername: row.author_username || null,
+    createdAt: row.created_at,
+    lastActivityAt: row.last_activity_at,
+    pinnedAt: row.pinned_at,
+    lockedAt: row.locked_at,
+    archivedAt: row.archived_at,
+    replyCount: row.reply_count,
+  };
+}
+
+// One topic (404 when it does not exist), in the shape the API returns.
+async function loadTopic(query, topicId) {
+  const found = await query(`SELECT ${TOPIC_COLUMNS} FROM forum_topics t LEFT JOIN users u ON u.id = t.created_by WHERE t.id = $1`, [topicId]);
+  if (!found.rows.length) throw fail(404, 'Topic not found');
+  return serializeTopic(found.rows[0]);
+}
+
+const TOPIC_PAGE = 50;
+
+// Pinned topics first, then the most recently active; archived topics are listed apart. { topics, hasMore }.
+async function listTopics(query, channelId, { archived = false, offset = 0 } = {}) {
+  const rows = (await query(
+    `SELECT ${TOPIC_COLUMNS} FROM forum_topics t LEFT JOIN users u ON u.id = t.created_by
+     WHERE t.channel_id = $1 AND (t.archived_at IS NOT NULL) = $2
+     ORDER BY (t.pinned_at IS NULL), t.pinned_at DESC, t.last_activity_at DESC, t.id DESC
+     LIMIT $3 OFFSET $4`,
+    [channelId, archived, TOPIC_PAGE + 1, offset]
+  )).rows;
+  return { topics: rows.slice(0, TOPIC_PAGE).map(serializeTopic), hasMore: rows.length > TOPIC_PAGE };
+}
+
+module.exports = { serializeTopic, loadTopic, listTopics, forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };
