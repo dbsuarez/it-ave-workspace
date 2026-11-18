@@ -8153,3 +8153,8 @@ body .ttd-dialog .ttd-template-restore[hidden] { display: none; }
 
 /* Roles: departments that give a role */
 .role-dept-list { max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+
+/* Ended polls: voters as round avatars (the same circles as "Seen by") */
+.poll-voter-avatars { margin: 4px 0 2px 10px; }
+.poll-voter-avatars .read-receipt-avatar { width: 22px; height: 22px; font-size: 11px; }
+.poll-voters-more { margin-left: 4px; font-size: 12px; color: var(--text-muted); }

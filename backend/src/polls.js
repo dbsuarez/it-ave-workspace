@@ -49,7 +49,8 @@ async function loadPoll(query, pollId) {
 
 // Serializes many polls for one viewer with a fixed number of queries (not a handful per poll).
 // -> Map(pollId -> { id, messageId, channelId, question, multiple, anonymous, closesAt, closed,
-//                    options: [{ id, label, count, voters? }], myOptionIds, totalVoters }). `voters` only for named polls.
+//                    options: [{ id, label, count, voters?, voterIds? }], myOptionIds, totalVoters }). `voters` (usernames) and
+//                    `voterIds` (the same people, same order) only for named polls.
 async function serializePolls(query, pollIds, viewerId) {
   const found = new Map();
   if (!pollIds.length) return found;
@@ -65,13 +66,15 @@ async function serializePolls(query, pollIds, viewerId) {
   const totals = (await query('SELECT poll_id, COUNT(DISTINCT user_id)::int AS n FROM poll_votes WHERE poll_id = ANY($1::bigint[]) GROUP BY poll_id', [pollIds])).rows;
   const namedIds = rows.filter((row) => !row.anonymous).map((row) => row.id);
   const voters = namedIds.length ? (await query(
-    `SELECT v.poll_id, v.option_id, u.username FROM poll_votes v JOIN users u ON u.id = v.user_id
+    `SELECT v.poll_id, v.option_id, v.user_id, u.username FROM poll_votes v JOIN users u ON u.id = v.user_id
      WHERE v.poll_id = ANY($1::bigint[]) ORDER BY u.username`, [namedIds])).rows : [];
   const votersOf = new Map();
+  const voterIdsOf = new Map();
   for (const row of voters) {
     const key = `${row.poll_id}:${row.option_id}`;
-    if (!votersOf.has(key)) votersOf.set(key, []);
+    if (!votersOf.has(key)) { votersOf.set(key, []); voterIdsOf.set(key, []); }
     votersOf.get(key).push(row.username);
+    voterIdsOf.get(key).push(Number(row.user_id));
   }
   for (const poll of rows) {
     found.set(Number(poll.id), {
@@ -79,7 +82,7 @@ async function serializePolls(query, pollIds, viewerId) {
       multiple: poll.multiple, anonymous: poll.anonymous, closesAt: poll.closes_at, closed: Boolean(poll.closed_at),
       options: options.filter((option) => String(option.poll_id) === String(poll.id)).map((option) => ({
         id: Number(option.id), label: option.label, count: option.count,
-        ...(poll.anonymous ? {} : { voters: votersOf.get(`${poll.id}:${option.id}`) || [] }),
+        ...(poll.anonymous ? {} : { voters: votersOf.get(`${poll.id}:${option.id}`) || [], voterIds: voterIdsOf.get(`${poll.id}:${option.id}`) || [] }),
       })),
       myOptionIds: mine.filter((vote) => String(vote.poll_id) === String(poll.id)).map((vote) => Number(vote.option_id)).sort((a, b) => a - b),
       totalVoters: (totals.find((row) => String(row.poll_id) === String(poll.id)) || { n: 0 }).n,

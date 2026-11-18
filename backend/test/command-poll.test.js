@@ -249,6 +249,7 @@ test('named polls show voters to members; anonymous polls never reveal who voted
   await vote(ids.bob, named, [n1]);
   const view = (await call(ids.cara, 'GET', `/api/polls/${named}`)).json;
   assert.deepEqual(view.options[0].voters, ['pl-bob']);
+  assert.deepEqual(view.options[0].voterIds, [ids.bob], 'with their ids, so the client can show their avatars');
 
   const anon = await newPoll(ch, '/poll "Secret?" "yes" "no" --anonymous');
   const [y] = (await options(anon)).map((o) => Number(o.id));
@@ -265,6 +266,7 @@ test('named polls show voters to members; anonymous polls never reveal who voted
   for (const output of outputs) {
     assert.doesNotMatch(output, /pl-bob/, 'no username');
     assert.doesNotMatch(output, /"voters"/, 'no voter list at all');
+    assert.doesNotMatch(output, /"voterIds"/, 'and no voter ids either');
   }
   assert.equal(JSON.parse(outputs[1]).options[0].count, 1, 'but the counts are there');
   assert.deepEqual(JSON.parse(outputs[0]).myOptionIds, [y], 'and you still see your own vote');

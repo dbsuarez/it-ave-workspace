@@ -74,3 +74,53 @@ test('an empty poll shows 0% and never divides by zero', () => {
 test('a closing time is shown for an open poll', () => {
   assert.match(pollCardHtml(poll({ closesAt: '2030-01-02T03:04:05.000Z' })), /Closes /);
 });
+
+const closedPoll = (extra = {}) => poll({
+  closed: true,
+  options: [
+    { id: 1, label: 'Pizza', count: 1, voters: ['ann'], voterIds: [11] },
+    { id: 2, label: 'Sushi', count: 3, voters: ['bob', 'cara', 'dan'], voterIds: [12, 13, 14] },
+  ],
+  ...extra,
+});
+const people = (id) => ({ 11: { name: 'Ann Lee', avatarColor: '#112233' }, 12: { name: 'Bob Ray', avatarColor: '#445566' } }[id] || null);
+
+test('in a closed poll the voters are small round avatars, not a line of names', () => {
+  const html = pollCardHtml(closedPoll(), { people });
+  assert.doesNotMatch(html, /poll-voters/);
+  assert.equal((html.match(/class="read-receipt-avatar"/g) || []).length, 4);
+  assert.match(html, /data-user-id="12"/);
+  assert.match(html, /title="Bob Ray"/);
+  assert.match(html, /style="background:#445566;"/);
+  assert.match(html, />B<\/span>/);
+});
+
+test('a voter the client does not know yet still gets an avatar, named by username, on the default colour', () => {
+  const html = pollCardHtml(closedPoll(), { people });
+  assert.match(html, /data-user-id="13"[^>]*>C<\/span>/);
+  assert.match(html, /title="cara"/);
+  assert.match(html, /background:#A855F7/);
+});
+
+test('only the first few avatars show, and the rest are counted', () => {
+  const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const html = pollCardHtml(closedPoll({ options: [{ id: 1, label: 'A', count: 10, voters: ids.map((n) => `u${n}`), voterIds: ids }, { id: 2, label: 'B', count: 0, voters: [], voterIds: [] }] }));
+  assert.equal((html.match(/class="read-receipt-avatar"/g) || []).length, 6);
+  assert.match(html, /\+4/);
+});
+
+test('an open poll still lists names, and a closed anonymous poll shows no avatars', () => {
+  assert.match(pollCardHtml(poll(), { people }), /poll-voters/);
+  const anon = pollCardHtml(closedPoll({ anonymous: true, options: closedPoll().options.map(({ voters, voterIds, ...rest }) => rest) }), { people });
+  assert.doesNotMatch(anon, /read-receipt-avatar|poll-voters/);
+});
+
+test('a closed poll from a server that sends no ids falls back to the names', () => {
+  const html = pollCardHtml(poll({ closed: true }), { people });
+  assert.match(html, /poll-voters/);
+});
+
+test('avatar names are escaped', () => {
+  const html = pollCardHtml(closedPoll(), { people: () => ({ name: '"><img src=x>', avatarColor: '#000000' }) });
+  assert.doesNotMatch(html, /<img/);
+});

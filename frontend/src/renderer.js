@@ -2385,7 +2385,7 @@ function renderMessageEl(msg, allowReply = false) {
         <span class="message-reply-content">${escapeHtml(replyPreview.content || 'Attachment')}</span>
       </button>` : ''}
       <div class="message-bubble-row">
-        <div class="message-text">${msg.kind === 'poll' && msg.poll ? pollCardHtml(msg.poll, { canClose: isYou || canModerate }) : (msg.kind === 'drawing' ? (msg.drawing ? drawingCardHtml(msg.drawing) : drawingCardRemovedHtml()) : formatMessageText(msg.content))}${reactionsHtml && !reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
+        <div class="message-text">${msg.kind === 'poll' && msg.poll ? pollCardHtml(msg.poll, { canClose: isYou || canModerate, people: pollPerson }) : (msg.kind === 'drawing' ? (msg.drawing ? drawingCardHtml(msg.drawing) : drawingCardRemovedHtml()) : formatMessageText(msg.content))}${reactionsHtml && !reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
         ${!attachmentsHtml && allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
           <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
           <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
@@ -2642,6 +2642,12 @@ function renderPrivateCommandResponse(response, commandText) {
 }
 
 // ---- Polls (card markup comes from features/polls.js) ----
+// Who a voter is, for the avatars of an ended poll (name and colour; the photo is painted by the avatar painter).
+function pollPerson(id) {
+  const user = state.user && Number(state.user.id) === id ? state.user : (state.users || []).find((candidate) => Number(candidate.id) === id);
+  return user ? { name: personName(user) || user.username, avatarColor: user.avatarColor } : null;
+}
+
 async function refreshPollCard(pollId) {
   const cards = [...document.querySelectorAll(`.poll-card[data-poll-id="${Number(pollId)}"]`)];
   if (!cards.length) return;
@@ -2651,7 +2657,7 @@ async function refreshPollCard(pollId) {
     if (!res.ok) return;
     for (const card of cards) {
       const holder = document.createElement('div');
-      holder.innerHTML = pollCardHtml(poll, { canClose: card.dataset.pollCanClose === '1' });
+      holder.innerHTML = pollCardHtml(poll, { canClose: card.dataset.pollCanClose === '1', people: pollPerson });
       card.replaceWith(holder.firstElementChild);
     }
   } catch (_) { /* the next update will refresh it */ }
