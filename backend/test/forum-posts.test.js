@@ -59,6 +59,7 @@ test.before(async () => {
   app.use(express.json());
   app.use((req, res, next) => { req.io = io; next(); });
   app.use('/api/messages', require('../src/routes/messages'));
+  app.use('/api/messages', require('../src/routes/messageEdits'));
   app.use('/api/forums', require('../src/routes/forums'));
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -255,4 +256,42 @@ test('a thread reply to a topic post belongs to that topic and obeys its lock', 
   await admin.query('UPDATE forum_topics SET locked_at = NOW() WHERE id = $1', [id]);
   assert.equal((await http_(ids.bob, 'POST', `/api/messages/${first}/replies`, { content: 'too late' })).status, 409);
   assert.equal((await admin.query("SELECT COUNT(*)::int AS n FROM messages WHERE content = 'too late'")).rows[0].n, 0);
+});
+
+test('an author cannot edit or delete a post in a locked or archived topic; a moderator still can remove one', async (t) => {
+  if (skip(t)) return;
+  const id = await newTopic('Frozen edits');
+  const posted = await send(ids.bob, { channelId: ids.forum, topicId: id, content: 'my reply' });
+  const mine = posted.sent.messageId;
+  assert.equal((await http_(ids.bob, 'PATCH', `/api/messages/${mine}`, { content: 'edited while open' })).status, 200);
+  await admin.query('UPDATE forum_topics SET locked_at = NOW() WHERE id = $1', [id]);
+  assert.equal((await http_(ids.bob, 'PATCH', `/api/messages/${mine}`, { content: 'edited when locked' })).status, 409);
+  assert.equal((await http_(ids.bob, 'DELETE', `/api/messages/${mine}`)).status, 409);
+  await admin.query('UPDATE forum_topics SET locked_at = NULL, archived_at = NOW() WHERE id = $1', [id]);
+  assert.equal((await http_(ids.bob, 'DELETE', `/api/messages/${mine}`)).status, 409, 'archived too');
+  assert.equal((await admin.query('SELECT content FROM messages WHERE id = $1', [mine])).rows[0].content, 'edited while open');
+  await admin.query('UPDATE forum_topics SET archived_at = NULL WHERE id = $1', [id]);
+  assert.equal((await http_(ids.bob, 'DELETE', `/api/messages/${mine}`)).status, 200, 'open again: allowed');
+});
+
+test('the reply count stays right when the opening post is deleted', async (t) => {
+  if (skip(t)) return;
+  const id = await newTopic('Count me');
+  await send(ids.bob, { channelId: ids.forum, topicId: id, content: 'r1' });
+  await send(ids.bob, { channelId: ids.forum, topicId: id, content: 'r2' });
+  const count = async () => (await http_(ids.bob, 'GET', `/api/forums/topics/${id}`)).json.topic.replyCount;
+  assert.equal(await count(), 2);
+  await admin.query('DELETE FROM messages WHERE topic_id = $1 AND content = $2', [id, 'opening post']);
+  assert.equal(await count(), 2, 'still two replies');
+});
+
+test('the pinned list of a topic holds only that topic’s pins', async (t) => {
+  if (skip(t)) return;
+  const a = await newTopic('Pins A');
+  const b = await newTopic('Pins B');
+  const first = async (topic) => (await admin.query('SELECT id FROM messages WHERE topic_id = $1 ORDER BY id LIMIT 1', [topic])).rows[0].id;
+  await admin.query('UPDATE messages SET pinned_at = NOW() WHERE id = ANY($1)', [[await first(a), await first(b)]]);
+  const pinsOf = async (qs) => (await http_(ids.ann, 'GET', `/api/messages/${ids.forum}/pins${qs}`)).json.messages.map((m) => m.id);
+  assert.deepEqual(await pinsOf(`?topicId=${a}`), [await first(a)]);
+  assert.equal((await pinsOf('')).length >= 1, true);
 });

@@ -94,6 +94,8 @@ router.get('/:channelId/pins', authenticateToken, async (req, res) => {
   try {
     const { channelId } = req.params;
     await ensureChannelMembership(query, req.user.userId, channelId);
+    // in a department forum the panel can be limited to the open topic
+    const pinTopic = req.query.topicId === undefined ? null : await ensureTopicOpen(query, channelId, req.query.topicId);
     const result = await query(
       `SELECT m.id, m.channel_id, m.user_id, m.content, m.kind, m.created_at,
               m.pinned_at, m.pinned_by, u.username, u.avatar_color,
@@ -101,9 +103,9 @@ router.get('/:channelId/pins', authenticateToken, async (req, res) => {
        FROM messages m
        JOIN users u ON u.id = m.user_id
        LEFT JOIN users pinner ON pinner.id = m.pinned_by
-       WHERE m.channel_id = $1 AND m.pinned_at IS NOT NULL
+       WHERE m.channel_id = $1 AND m.pinned_at IS NOT NULL AND ($2::int IS NULL OR m.topic_id = $2)
        ORDER BY m.pinned_at DESC, m.id DESC`,
-      [channelId]
+      [channelId, pinTopic]
     );
     const messageIds = result.rows.map((message) => message.id);
     let attachmentsByMessage = {};

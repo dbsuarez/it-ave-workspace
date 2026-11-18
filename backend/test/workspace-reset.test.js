@@ -43,3 +43,26 @@ test('workspace reset clears content but preserves organization and channel conf
   assert.deepEqual(account, { token_version: 5, profile_visit_count: 0, status: 'offline' });
   assert.equal((await admin.query('SELECT last_message_at FROM channel_members WHERE channel_id = $1 AND user_id = $2', [channel.id, user.id])).rows[0].last_message_at, null);
 });
+
+test('workspace reset deletes uploaded files but keeps the profile photos people still use', async (t) => {
+  if (!scratch) return t.skip('no PostgreSQL reachable');
+  process.env.DATABASE_URL = scratch.url;
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const config = require('../src/config');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reset-uploads-'));
+  const previous = config.UPLOAD_DIR;
+  config.UPLOAD_DIR = dir;
+  try {
+    await admin.query("INSERT INTO users (username, email, password_hash, photo_file, photo_updated_at) VALUES ('reset-photo', 'rp@x.test', 'x', 'avatar-9-1.jpg', NOW())");
+    for (const name of ['avatar-9-1.jpg', 'avatar-9-0-old.jpg', '1700-message-file.txt']) fs.writeFileSync(path.join(dir, name), 'x');
+    const { clearUploads } = require('../src/workspaceReset');
+    resetPool = require('../src/db').pool;
+    await clearUploads();
+    assert.deepEqual(fs.readdirSync(dir), ['avatar-9-1.jpg']);
+  } finally {
+    config.UPLOAD_DIR = previous;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

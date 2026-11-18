@@ -228,3 +228,15 @@ test('one topic can be read by someone who may open its forum, and nobody else',
   assert.equal((await call(ids.ann, 'GET', '/topics/999999')).status, 404);
   assert.equal((await call(ids.ann, 'GET', '/topics/abc')).status, 400);
 });
+
+test('the forum directory lists forum names for people who manage the workspace, without opening them', async (t) => {
+  if (skip(t)) return;
+  const asOwner = await call(ids.owner, 'GET', '/directory');
+  assert.equal(asOwner.status, 200);
+  const names = asOwner.json.forums.map((f) => f.name);
+  assert.ok(names.includes('dept-mis') && names.includes('dept-legal'), names.join());
+  assert.deepEqual(Object.keys(asOwner.json.forums[0]).sort(), ['archived', 'departmentId', 'id', 'name'], 'metadata only');
+  assert.equal((await call(ids.owner, 'GET', `/${ids.forum}/topics`)).status, 403, 'the directory does not open the forum');
+  assert.equal((await call(ids.ann, 'GET', '/directory')).status, 403, 'an ordinary member cannot');
+  assert.equal((await call(ids.guest, 'GET', '/directory')).status, 403);
+});

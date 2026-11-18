@@ -6,6 +6,7 @@ const authenticateToken = require('../middleware/auth');
 const { ensureChannelMembership, ensureChannelModerator, ensureChannelNotArchived, ensureCanPostToChannel } = require('../security');
 const { insertChannelMessage, parseAttachmentIds, ATTACHMENT_UNAVAILABLE } = require('../attachments');
 const forums = require('../forums');
+const { can } = require('../permissions');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -45,6 +46,16 @@ function cleanTitle(value) {
   if (title.length > MAX_TITLE) throw fail(400, `A title can be at most ${MAX_TITLE} characters`);
   return title;
 }
+
+// Forum names for people who arrange the sidebar (Owners and manage_workspace holders): names only, so a forum can be
+// placed in a section without anyone reading it. Opening a forum still needs department membership.
+router.get('/directory', async (req, res) => {
+  try {
+    if (!(await can(query, req.user.userId, 'manage_workspace'))) throw fail(403, 'Managing the workspace is required');
+    const rows = (await query("SELECT id, name, forum_department_id, archived_at FROM channels WHERE kind = 'forum' ORDER BY name")).rows;
+    res.json({ forums: rows.map((row) => ({ id: row.id, name: row.name, departmentId: row.forum_department_id, archived: Boolean(row.archived_at) })) });
+  } catch (err) { sendError(res, err, 'Forum directory error'); }
+});
 
 router.get('/:channelId/topics', async (req, res) => {
   try {

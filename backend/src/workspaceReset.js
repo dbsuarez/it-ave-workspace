@@ -26,7 +26,10 @@ async function preview() {
 
 async function clearUploads() {
   await fs.promises.mkdir(config.UPLOAD_DIR, { recursive: true });
+  // People stay after a reset, so the profile photos they still use must stay too (they live in the same folder)
+  const keep = new Set((await pool.query('SELECT photo_file FROM users WHERE photo_file IS NOT NULL')).rows.map((row) => row.photo_file));
   for (const name of await fs.promises.readdir(config.UPLOAD_DIR)) {
+    if (keep.has(name)) continue;
     await fs.promises.rm(path.join(config.UPLOAD_DIR, name), { recursive: true, force: true });
   }
 }
@@ -75,4 +78,4 @@ async function resetWorkspace(actorId) {
   } finally { resetting = false; }
 }
 
-module.exports = { clearDatabase, isResetting: () => resetting, preview, resetWorkspace };
+module.exports = { clearDatabase, clearUploads, isResetting: () => resetting, preview, resetWorkspace };

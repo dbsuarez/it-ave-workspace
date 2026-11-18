@@ -98,7 +98,7 @@ async function ensureAllForums(query) {
 
 const TOPIC_COLUMNS = `t.id, t.channel_id, t.title, t.created_by, t.created_at, t.last_activity_at, t.pinned_at, t.locked_at, t.archived_at,
   u.username AS author_username,
-  GREATEST((SELECT COUNT(*) FROM messages m WHERE m.topic_id = t.id) - 1, 0)::int AS reply_count`;
+  (SELECT COUNT(*) FROM messages m WHERE m.topic_id = t.id AND m.created_at > t.created_at)::int AS reply_count`;
 
 function serializeTopic(row) {
   return {
@@ -163,6 +163,14 @@ async function ensureNotForum(query, channelId) {
   if (channel && channel.kind === 'forum') throw fail(400, 'A forum takes posts inside topics. Open a topic to post there.');
 }
 
+// A person may not edit or delete their own post once its topic is locked or archived (moderators removing posts is separate).
+async function ensureMessageTopicOpen(query, messageId) {
+  const row = (await query(
+    'SELECT t.locked_at, t.archived_at FROM messages m JOIN forum_topics t ON t.id = m.topic_id WHERE m.id = $1', [messageId]
+  )).rows[0];
+  if (row && (row.locked_at || row.archived_at)) throw fail(409, row.locked_at ? 'This topic is locked' : 'This topic is archived');
+}
+
 // Posts into a topic. The topic row is locked for the length of the insert and re-checked, so a reply and a moderator's lock
 // can never both win: whichever gets the row first, a post is never created after the topic was locked or archived.
 async function insertTopicMessage(pool, { channelId, topicId, userId, content, replyTo, attachmentIds }) {
@@ -185,4 +193,4 @@ async function insertTopicMessage(pool, { channelId, topicId, userId, content, r
   }
 }
 
-module.exports = { ensureNotForum, ensureTopicOpen, insertTopicMessage, serializeTopic, loadTopic, listTopics, forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };
+module.exports = { ensureMessageTopicOpen, ensureNotForum, ensureTopicOpen, insertTopicMessage, serializeTopic, loadTopic, listTopics, forumChannelName, forumChannelIdFor, ensureDepartmentForum, ensureAllForums, syncForumHead, renameForum, archiveForumForDepartment };

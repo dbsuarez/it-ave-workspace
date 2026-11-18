@@ -156,7 +156,8 @@ function channelNavItem(channel) {
   item.className = 'nav-item' + (active ? ' active' : '');
   const unread = channel.unreadCount || 0;
   const canConfigure = state.moderation.canManageChannels || canModerateChannel(channel.id);
-  item.innerHTML = `<span>#</span><span class="channel-nav-name">${escapeHtml(channel.name)}</span>${unread > 0 && !active ? `<span class="unread-badge">${unread}</span>` : ''}${canConfigure ? `<button type="button" class="channel-nav-settings" title="Channel settings" aria-label="Open settings for ${escapeHtml(channel.name)}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.09A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.16.4.37.74.6 1 .3.3.7.5 1.1.6h.09v4h-.09a1.7 1.7 0 0 0-1.7.4z"/></svg></button>` : ''}`;
+  const mark = channel.kind === 'forum' ? `<span class="forum-nav-icon" title="Forum">${forumIconHtml()}</span>` : '<span>#</span>';
+  item.innerHTML = `${mark}<span class="channel-nav-name">${escapeHtml(channel.name)}</span>${unread > 0 && !active ? `<span class="unread-badge">${unread}</span>` : ''}${canConfigure ? `<button type="button" class="channel-nav-settings" title="Channel settings" aria-label="Open settings for ${escapeHtml(channel.name)}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.09A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.16.4.37.74.6 1 .3.3.7.5 1.1.6h.09v4h-.09a1.7 1.7 0 0 0-1.7.4z"/></svg></button>` : ''}`;
   item.title = channel.topic || '';
   item.onclick = (event) => { event.stopPropagation(); openChannel(channel.id); };
   item.querySelector('.channel-nav-settings')?.addEventListener('click', (event) => {
@@ -285,8 +286,24 @@ function openSidebarModal() {
   state.sidebarOrganizerFilter = state.sidebarOrganizerFilter || 'all';
   state.sidebarOrganizerQuery = '';
   state.sidebarOrganizerShowAssigned = false;
+  state.forumDirectory = [];
   renderSidebarModal();
   openSettingsModal(document.getElementById('modal-sidebar'));
+  loadForumDirectory().then(() => { if (state.sidebarDraft) renderSidebarModal(); });
+}
+
+// Department forums the person cannot open but may place in a workspace section (names only).
+async function loadForumDirectory() {
+  state.forumDirectory = [];
+  if (!sidebarLayout().canManageWorkspaceSections) return;
+  try {
+    const res = await api('/api/forums/directory');
+    if (!res.ok) return;
+    const data = await res.json();
+    const have = new Set(state.channels.map((channel) => Number(channel.id)));
+    state.forumDirectory = (data.forums || []).filter((forum) => !forum.archived && !have.has(Number(forum.id)))
+      .map((forum) => ({ id: forum.id, name: forum.name, kind: 'forum', isPrivate: true, availableToAll: false, createdBy: null }));
+  } catch (err) { console.error('Load forum directory error:', err); }
 }
 
 function renderSidebarModal() {
@@ -297,15 +314,17 @@ function renderSidebarModal() {
   if (configurableTitleRow) configurableTitleRow.hidden = !canManageWorkspace;
   const configurableSectionsHost = document.getElementById('sidebar-sections');
   if (configurableSectionsHost) configurableSectionsHost.hidden = !canManageWorkspace;
-  const channelById = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
+  // forums an admin may arrange but not open (names only) are listed too
+  const organizerChannels = [...state.channels, ...(state.forumDirectory || [])];
+  const channelById = new Map(organizerChannels.map((channel) => [Number(channel.id), channel]));
   const workspaceChannelIds = new Set(workspaceDraft.sections.flatMap((section) => section.channelIds.map(Number)));
   const builtInWorkspaceChannelIds = new Set(workspaceDraft.sections.filter((section) => section.builtIn)
     .flatMap((section) => section.channelIds.map(Number)));
   const assignedChannelIds = new Set([...workspaceDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
-  const canRenameChannel = (channel, readOnly) => !readOnly && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
+  const canRenameChannel = (channel, readOnly) => !readOnly && channel.kind !== 'forum' && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
-  const canDeleteOrganizerChannel = (channel, readOnly) => !readOnly && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
+  const canDeleteOrganizerChannel = (channel, readOnly) => !readOnly && channel.kind !== 'forum' && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
   const creatorName = (channel) => [channel.creatorFirstName, channel.creatorMiddleName, channel.creatorLastName]
@@ -330,7 +349,7 @@ function renderSidebarModal() {
       ${canRenameChannel(channel, showOwner)
     ? `<input class="sidebar-channel-name" data-channel-name="${channel.id}" value="${escapeHtml(state.sidebarChannelNameDraft[channel.id] || channel.name)}" aria-label="Channel name">`
     : `<span class="sidebar-channel-name sidebar-channel-name-readonly">${escapeHtml(channel.name)}</span>`}
-      ${canManageWorkspace && !showOwner ? `<label class="sidebar-available-all"><input type="checkbox" data-channel-available-all="${channel.id}"${state.sidebarAvailabilityDraft[channel.id] ? ' checked' : ''}> Visible to all</label>` : ''}
+      ${canManageWorkspace && !showOwner && channel.kind !== 'forum' ? `<label class="sidebar-available-all"><input type="checkbox" data-channel-available-all="${channel.id}"${state.sidebarAvailabilityDraft[channel.id] ? ' checked' : ''}> Visible to all</label>` : ''}
       <select class="sidebar-channel-move" data-channel-move="${channel.id}" aria-label="Move #${escapeHtml(channel.name)} to section"${movable ? '' : ' disabled'}>${moveOptions(channel)}</select>
       ${canDeleteOrganizerChannel(channel, showOwner) ? `<button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>` : ''}
     </div>`;
@@ -339,7 +358,7 @@ function renderSidebarModal() {
     return `<div class="sidebar-section-channel${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
       <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">&#8942;&#8942;</span>
       ${showOwner ? `<button type="button" class="avatar-mini sidebar-channel-owner" data-avatar-user="${channel.createdBy}" data-user-id="${channel.createdBy}" data-organizer-owner="${channel.id}" title="${escapeHtml(creatorName(channel))}" aria-label="Open ${escapeHtml(creatorName(channel))}'s menu" style="background:${escapeHtml(channel.creatorAvatarColor || '#64748b')}">${escapeHtml(creatorName(channel).charAt(0).toUpperCase())}</button>` : ''}
-      <span>#${escapeHtml(channel.name)}</span>
+      <span>${channel.kind === 'forum' ? forumIconHtml() : '#'}${escapeHtml(channel.name)}</span>
     </div>`;
   };
   const sectionChannels = (section, movable) => section.channelIds
@@ -397,7 +416,7 @@ function renderSidebarModal() {
   let filter = state.sidebarOrganizerFilter || 'all';
   state.sidebarOrganizerFilter = filter;
   const query = String(state.sidebarOrganizerQuery || '').trim().toLowerCase();
-  const poolChannels = state.channels.filter((channel) => {
+  const poolChannels = organizerChannels.filter((channel) => {
     if (channel.isPersonal) return false;
     const matchesFilter = filter === 'all'
       || (filter === 'workspace' && (workspaceChannelIds.has(Number(channel.id)) || Boolean(channel.availableToAll)))
@@ -690,7 +709,7 @@ function renderChannelTabs() {
   const tabs = document.getElementById('channel-tabs');
   if (!tabs) return;
   const current = channelTabState().tab;
-  tabs.innerHTML = CHANNEL_TABS.map(([key, label]) => `<button type="button" class="channel-tab${current === key ? ' active' : ''}" role="tab" aria-selected="${current === key}" data-channel-tab="${key}">${label}</button>`).join('');
+  tabs.innerHTML = CHANNEL_TABS.map(([key, label]) => `<button type="button" class="channel-tab${current === key ? ' active' : ''}" role="tab" aria-selected="${current === key}" data-channel-tab="${key}">${key === 'messages' && typeof forumChannel === 'function' && forumChannel() ? 'Topics' : label}</button>`).join('');
 }
 
 // Called when a channel is opened: always start on the conversation.

@@ -51,6 +51,7 @@ router.patch('/:messageId', authenticateToken, async (req, res) => {
     }
 
     const message = await loadOwnMessage(messageId, req.user.userId);
+    await require('../forums').ensureMessageTopicOpen(query, messageId);
     await ensureNotTimedOut(query, req.user.userId, message.channel_id);
     if (content === message.content) {
       return res.json({ message: { id: message.id, channelId: message.channel_id, content, editedAt: null, unchanged: true } });
@@ -125,6 +126,7 @@ router.delete('/:messageId', authenticateToken, async (req, res) => {
   try {
     const messageId = parseId(req.params.messageId);
     const message = await loadOwnMessage(messageId, req.user.userId);
+    await require('../forums').ensureMessageTopicOpen(query, messageId);
     const channelId = message.channel_id;
 
     const attachments = await query('SELECT id, filename FROM files WHERE message_id = $1', [messageId]);

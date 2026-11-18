@@ -1484,7 +1484,12 @@ async function openChannel(channelId) {
 
   const ch = channel;
   if (ch) {
-    els.channelTitle.textContent = '#' + ch.name;
+    if (ch.kind === 'forum') {
+      els.channelTitle.innerHTML = `<span class="forum-title-icon" title="Forum">${forumIconHtml()}</span>`;
+      els.channelTitle.append(document.createTextNode(ch.name));
+    } else {
+      els.channelTitle.textContent = '#' + ch.name;
+    }
     els.channelTopic.textContent = ch.topic || '';
   }
   updateEditTopicVisibility(channelId);
@@ -1576,7 +1581,8 @@ function applyForumMode() {
 function renderForumTopicBar() {
   const topic = state.forum.topic;
   if (!topic || !els.forumTopicBar) return;
-  els.forumTopicBar.innerHTML = forumTopicHeaderHtml(topic, { canModerate: canModerateChannel(topic.channelId), canRename: Number(topic.authorId) === Number(state.user?.id) && !topic.lockedAt && !topic.archivedAt });
+  const author = messageAuthor(topic.authorId, topic.authorUsername);
+  els.forumTopicBar.innerHTML = forumTopicHeaderHtml({ ...topic, authorUsername: author.name, authorColor: author.color }, { canModerate: canModerateChannel(topic.channelId), canRename: Number(topic.authorId) === Number(state.user?.id) && !topic.lockedAt && !topic.archivedAt });
   const reason = topic.archivedAt ? 'This topic is archived' : (topic.lockedAt ? 'This topic is locked' : null);
   setComposerLocked(reason);
 }
@@ -1584,7 +1590,10 @@ function renderForumTopicBar() {
 function renderForumTopics() {
   if (!els.forumTopicList) return;
   const forum = state.forum;
-  const topics = forum.topics.map((topic) => ({ ...topic, lastActivityText: forumRelativeTime(topic.lastActivityAt) }));
+  const topics = forum.topics.map((topic) => {
+    const author = messageAuthor(topic.authorId, topic.authorUsername);
+    return { ...topic, authorUsername: author.name, authorColor: author.color, lastActivityText: forumRelativeTime(topic.lastActivityAt) };
+  });
   els.forumTopicList.innerHTML = forumTopicListHtml(topics, { canModerate: canModerateChannel(forum.channelId), archived: forum.archived });
   if (els.forumMoreBtn) els.forumMoreBtn.hidden = !forum.hasMore;
   const tabs = document.getElementById('forum-tabs');
@@ -1632,6 +1641,7 @@ async function openForumTopic(topicId) {
     cancelReply();
     applyForumMode();
     await loadChannelMessages(channelId);
+    loadPinnedMessages(channelId);
     api(`/api/channels/${channelId}/read`, { method: 'POST' }).catch(() => {});
   } catch (err) {
     showToast(err.message || 'Could not open the topic.', 'error');
@@ -1804,7 +1814,8 @@ async function loadChannelMessages(channelId, offset = 0) {
 
 async function loadPinnedMessages(channelId) {
   try {
-    const res = await api(`/api/messages/${channelId}/pins`);
+    const forumTopic = forumChannel(channelId) && state.forum.channelId === Number(channelId) && state.forum.topicId ? `?topicId=${state.forum.topicId}` : '';
+    const res = await api(`/api/messages/${channelId}/pins${forumTopic}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load pinned messages');
 

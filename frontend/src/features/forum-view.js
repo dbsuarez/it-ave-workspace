@@ -12,6 +12,17 @@ function forumEscape(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// The forum's icon (speech bubbles), used where a channel shows its #.
+function forumIconHtml() {
+  return '<svg class="forum-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-5 3 1.3-4.6A7.5 7.5 0 1 1 21 11.5z"/><path d="M8 10h8M8 13.5h5"/></svg>';
+}
+
+// A person's name in their role colour (only a plain #rrggbb colour is ever written into the page).
+function forumAuthorHtml(name, color) {
+  const style = /^#[0-9a-fA-F]{6}$/.test(color || '') ? ` style="color:${color}"` : '';
+  return `<span class="forum-author"${style}>${forumEscape(name || 'Someone')}</span>`;
+}
+
 function forumBadgesHtml(topic) {
   const badges = [];
   if (topic.pinnedAt) badges.push(['pinned', FORUM_BADGES.pinned]);
@@ -55,13 +66,18 @@ function forumTopicListHtml(topics, { canModerate = false, archived = false } = 
   if (!list.length) {
     return `<div class="forum-empty">${archived ? 'No archived topics.' : 'No topics yet. Start the first one with “New topic”.'}</div>`;
   }
-  const ordered = [...list.filter((t) => t.pinnedAt), ...list.filter((t) => !t.pinnedAt)];
-  return ordered.map((topic) => `<div class="forum-topic${topic.pinnedAt ? ' pinned' : ''}" data-topic-id="${Number(topic.id)}">
+  const pinned = list.filter((t) => t.pinnedAt);
+  const others = list.filter((t) => !t.pinnedAt);
+  const row = (topic) => `<div class="forum-topic${topic.pinnedAt ? ' pinned' : ''}" data-topic-id="${Number(topic.id)}">
     <button type="button" class="forum-topic-main" data-topic-open="${Number(topic.id)}">
       <span class="forum-topic-title">${forumEscape(topic.title)}</span>${forumBadgesHtml(topic)}
-      <span class="forum-topic-meta">${forumEscape(topic.authorUsername || 'Someone')} · ${forumReplyText(topic.replyCount)}${topic.lastActivityText ? ` · ${forumEscape(topic.lastActivityText)}` : ''}</span>
+      <span class="forum-topic-meta">${forumAuthorHtml(topic.authorUsername, topic.authorColor)} · ${forumReplyText(topic.replyCount)}${topic.lastActivityText ? ` · ${forumEscape(topic.lastActivityText)}` : ''}</span>
     </button>${canModerate ? forumModerationHtml(topic) : ''}
-  </div>`).join('');
+  </div>`;
+  // pinned topics stay on top in their own labelled group (a pinned topic works as that forum's announcement)
+  if (!pinned.length) return others.map(row).join('');
+  const label = (text) => `<div class="forum-group-label">${text}</div>`;
+  return label('Pinned') + pinned.map(row).join('') + (others.length ? label('Topics') + others.map(row).join('') : '');
 }
 
 // The bar above an open topic: the way back, the title, moderator controls, and a notice when replies are off.
@@ -71,7 +87,7 @@ function forumTopicHeaderHtml(topic, { canModerate = false, canRename = false } 
     : (topic.lockedAt ? '<div class="forum-notice" role="status">This topic is locked. Replies are turned off.</div>' : '');
   return `<div class="forum-topic-header" data-topic-id="${Number(topic.id)}">
     <button type="button" class="btn" data-topic-back>&larr; All topics</button>
-    <div class="forum-topic-heading"><h2>${forumEscape(topic.title)}</h2>${forumBadgesHtml(topic)}</div>
+    <div class="forum-topic-heading"><h2>${forumEscape(topic.title)}</h2>${forumBadgesHtml(topic)}<span class="forum-topic-by">by ${forumAuthorHtml(topic.authorUsername, topic.authorColor)}</span></div>
     ${canModerate || canRename ? forumModerationHtml(topic, { moderate: canModerate, rename: true }) : ''}
   </div>${notice}`;
 }
@@ -89,5 +105,5 @@ function forumRelativeTime(iso, now = Date.now()) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { forumTopicListHtml, forumTopicHeaderHtml, forumTabsHtml, forumRelativeTime, FORUM_BADGES };
+  module.exports = { forumIconHtml, forumTopicListHtml, forumTopicHeaderHtml, forumTabsHtml, forumRelativeTime, FORUM_BADGES };
 }

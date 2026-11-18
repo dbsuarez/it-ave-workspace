@@ -30,7 +30,7 @@ test('pinned topics come first with a Pinned badge; Locked and Archived get thei
     topic({ id: 4, title: 'old', archivedAt: '2026-01-01T00:00:00Z' }),
   ]);
   assert.deepEqual(order(html), [2, 1, 3, 4]);
-  assert.equal((html.match(new RegExp(FORUM_BADGES.pinned, 'g')) || []).length, 1);
+  assert.equal((html.match(/forum-badge-pinned/g) || []).length, 1);
   assert.match(html, new RegExp(FORUM_BADGES.locked));
   assert.match(html, new RegExp(FORUM_BADGES.archived));
 });
@@ -119,4 +119,30 @@ test('the Active / Archived toggle shows which one is pressed', () => {
   const archived = forumTabsHtml({ archived: true });
   assert.match(archived, /data-forum-tab="active"[^>]*aria-pressed="false"/);
   assert.match(archived, /data-forum-tab="archived"[^>]*aria-pressed="true"/);
+});
+
+test('a forum has its own icon, different from the # of a channel', () => {
+  const { forumIconHtml } = require('../src/features/forum-view');
+  const icon = forumIconHtml();
+  assert.match(icon, /^<svg/);
+  assert.match(icon, /class="forum-icon"/);
+  assert.match(icon, /aria-hidden="true"/);
+  assert.doesNotMatch(icon, /^#/);
+});
+
+test('author names take their role colour, and only a real hex colour is ever used', () => {
+  const html = forumTopicListHtml([topic({ authorColor: '#aa3300' })]);
+  assert.match(html, /class="forum-author" style="color:#aa3300"/);
+  const bad = forumTopicListHtml([topic({ authorColor: 'red;background:url(x)' })]);
+  assert.doesNotMatch(bad, /style=/);
+  assert.match(bad, /class="forum-author"/);
+  assert.match(forumTopicHeaderHtml(topic({ authorColor: '#112233' })), /style="color:#112233"/);
+});
+
+test('pinned topics sit in a labelled Pinned group at the top; the label only shows when something is pinned', () => {
+  const html = forumTopicListHtml([topic({ id: 1 }), topic({ id: 2, pinnedAt: 'x' })]);
+  assert.match(html, /<div class="forum-group-label">Pinned<\/div>/);
+  assert.match(html, /<div class="forum-group-label">Topics<\/div>/);
+  assert.ok(html.indexOf('Pinned</div>') < html.indexOf('data-topic-open="2"') && html.indexOf('data-topic-open="2"') < html.indexOf('Topics</div>'));
+  assert.doesNotMatch(forumTopicListHtml([topic({ id: 1 })]), /forum-group-label/);
 });
