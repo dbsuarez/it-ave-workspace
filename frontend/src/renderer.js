@@ -3664,6 +3664,13 @@ async function loadModerationChannel(channelId) {
         <h2>Channel rules</h2>
         <div class="moderation-inline"><label>Slow mode (seconds)<input id="moderation-slowmode" type="number" min="0" max="3600" value="${data.channel.slowmodeSeconds}" ${state.moderation.isSuperadmin || state.moderation.moderatorChannelIds.some((id) => Number(id) === Number(channelId)) ? '' : 'disabled'}></label><button class="btn primary" data-action="save-slowmode">Save</button></div>
       </div>
+      ${state.moderation.isSuperadmin && data.channel.canBeBuiltIn !== undefined ? `<div class="moderation-card" data-channel-config-section="overview"><h2>Built-in channel</h2>
+        <p class="admin-help">A built-in channel is mandatory: everyone is in it (new people join automatically), nobody can leave or be removed, and it cannot be renamed, archived or deleted. It is listed in the OFFICIAL section. Turn it off and it is an ordinary channel again.</p>
+        <p><strong>${data.channel.builtIn ? 'On' : 'Off'}</strong>${data.channel.builtInRequired ? ' · required by the app, so it stays on' : ''}</p>
+        ${data.channel.builtInRequired ? '' : (data.channel.builtIn || data.channel.canBeBuiltIn
+    ? `<div class="admin-actions"><button class="btn${data.channel.builtIn ? '' : ' primary'}" type="button" data-action="set-builtin" data-builtin="${data.channel.builtIn ? 'false' : 'true'}">${data.channel.builtIn ? 'Turn off built-in' : 'Make built-in'}</button></div>`
+    : '<p class="admin-help">Only a public, shared channel can be built-in (not personal, private or a department forum).</p>')}
+      </div>` : ''}
       ${state.moderation.canManageChannels && selectedChannel ? `<div class="moderation-card" data-channel-config-section="overview"><h2>Announcement channel</h2>
         <p class="admin-help">In an announcement channel, people with the Announce permission can post with <code>/announce</code> (they see a preview first). Everyone in the channel sees the result.</p>
         ${data.channel.commandScope === 'hr-inquiry' ? '<p class="admin-help">This is the HR Inquiry channel and keeps its own commands.</p>'
@@ -3897,6 +3904,12 @@ async function handleModerationClick(event) {
       showToast(`Slow mode is ${seconds} seconds on ${result.channels} channel${result.channels === 1 ? '' : 's'}.`, 'success');
       await loadModerationChannel(channelId);
       return;
+    } else if (action === 'set-builtin') {
+      const makeBuiltIn = button.dataset.builtin === 'true';
+      if (makeBuiltIn && !(await confirmAction({ title: 'Make this channel built-in?', message: 'Everyone will be added to it, nobody will be able to leave, and it cannot be renamed, archived or deleted until you turn this off.', confirmLabel: 'Make built-in', danger: false }))) return;
+      await checkedApi(`/api/channels/${channelId}/builtin`, 'PATCH', { builtIn: makeBuiltIn });
+      await loadChannels();
+      loadSidebarLayout();
     } else if (action === 'set-announcement-scope') {
       await checkedApi(`/api/moderation/channels/${channelId}/command-scope`, 'PATCH', { scope: button.dataset.scope || null });
     } else if (action === 'save-slowmode') {
@@ -5784,6 +5797,8 @@ async function openCreateChannelModal({ personal = false } = {}) {
   document.getElementById('new-channel-personal-row').hidden = !state.moderation.canManagePersonalChannels;
   document.getElementById('new-channel-available-row').hidden = personal || !state.moderation.canManageWorkspace;
   document.getElementById('new-channel-available-all').checked = false;
+  const builtInRow = document.getElementById('new-channel-builtin-row');
+  if (builtInRow) { builtInRow.hidden = personal || !state.moderation.isSuperadmin; document.getElementById('new-channel-builtin').checked = false; }
   const departmentRow = document.getElementById('new-channel-department-row');
   const departmentSelect = document.getElementById('new-channel-department');
   const canChooseDepartment = !personal && state.moderation.canCreateChannels;
@@ -5858,13 +5873,14 @@ async function saveCreateChannel() {
   const isPersonal = document.getElementById('new-channel-personal').checked;
   const departmentId = Number(document.getElementById('new-channel-department')?.value) || null;
   const availableToAll = Boolean(!isPersonal && !departmentId && state.moderation.canManageWorkspace && document.getElementById('new-channel-available-all').checked);
+  const builtIn = Boolean(state.moderation.isSuperadmin && !isPersonal && !departmentId && document.getElementById('new-channel-builtin')?.checked);
 
   if (!name) return;
 
   try {
     const res = await api('/api/channels', {
       method: 'POST',
-      body: JSON.stringify({ name, topic, availableToAll, isPersonal, departmentId }),
+      body: JSON.stringify({ name, topic, availableToAll, isPersonal, departmentId, builtIn }),
     });
 
     const data = await res.json();

@@ -6,7 +6,7 @@ const { ensureChannelMembership, ensureChannelNotArchived } = require('../securi
 const { superadminMaySee, isEnabled: ownerPrivateAccessOn } = require('../ownerChannelAccess');
 const { viewableChannels, can } = require('../permissions');
 const { ensureNotGuest } = require('../guests');
-const { DEFAULT_CHANNELS } = require('../defaultChannels');
+const { DEFAULT_CHANNELS, setChannelBuiltIn } = require('../defaultChannels');
 
 const DEFAULT_CHANNEL_NAMES = DEFAULT_CHANNELS.map(([name]) => name);
 
@@ -14,7 +14,7 @@ const DEFAULT_CHANNEL_NAMES = DEFAULT_CHANNELS.map(([name]) => name);
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.available_to_all, c.archived_at, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.builtin, c.available_to_all, c.archived_at, c.created_at, c.created_by,
              c.kind, c.forum_department_id,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
@@ -49,6 +49,7 @@ router.get('/', authenticateToken, async (req, res) => {
         isPrivate: ch.is_private,
         isPersonal: ch.is_personal,
         kind: ch.kind || 'channel',
+        builtIn: Boolean(ch.builtin),
         forumDepartmentId: ch.forum_department_id || null,
         availableToAll: ch.available_to_all,
         archivedAt: ch.archived_at,
@@ -73,7 +74,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/my', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.available_to_all, c.archived_at, c.created_at, c.created_by,
+      SELECT c.id, c.name, c.topic, c.is_private, c.is_personal, c.builtin, c.available_to_all, c.archived_at, c.created_at, c.created_by,
              c.kind, c.forum_department_id,
              creator.username AS creator_username, creator.first_name AS creator_first_name,
              creator.middle_name AS creator_middle_name, creator.last_name AS creator_last_name,
@@ -114,6 +115,7 @@ router.get('/my', authenticateToken, async (req, res) => {
         isPrivate: ch.is_private,
         isPersonal: ch.is_personal,
         kind: ch.kind || 'channel',
+        builtIn: Boolean(ch.builtin),
         forumDepartmentId: ch.forum_department_id || null,
         availableToAll: ch.available_to_all,
         archivedAt: ch.archived_at,
@@ -218,7 +220,7 @@ router.patch('/:channelId/name', authenticateToken, async (req, res) => {
        WHERE c.id = $1 AND (c.created_by = u.id OR (c.is_personal = FALSE AND u.is_superadmin = TRUE))`, [channelId, req.user.userId]
     );
     const personal = await query('SELECT is_personal FROM channels WHERE id = $1', [channelId]);
-    const builtIn = await query('SELECT 1 FROM channels WHERE id = $1 AND name = ANY($2::text[])', [channelId, DEFAULT_CHANNEL_NAMES]);
+    const builtIn = await query('SELECT 1 FROM channels WHERE id = $1 AND builtin = TRUE', [channelId]);
     if (builtIn.rows.length) return res.status(409).json({ error: 'Built-in channels cannot be renamed' });
     const canManage = personal.rows[0]?.is_personal
       ? await can(query, req.user.userId, 'manage_personal_channels')
@@ -238,6 +240,33 @@ router.patch('/:channelId/name', authenticateToken, async (req, res) => {
 });
 
 // Keep a channel in every employee's workspace. Superadmin only.
+// An Owner marks a channel built-in (everyone joins, nobody can leave, it cannot be renamed, archived or deleted) or turns that off.
+router.patch('/:channelId/builtin', authenticateToken, async (req, res) => {
+  try {
+    const channelId = Number(req.params.channelId);
+    const builtIn = req.body?.builtIn;
+    if (!Number.isInteger(channelId) || typeof builtIn !== 'boolean') {
+      return res.status(400).json({ error: 'A valid channel and builtIn true or false are required' });
+    }
+    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
+    if (!actor?.is_superadmin) return res.status(403).json({ error: 'Only an Owner can make a channel built-in' });
+    const { changed } = await setChannelBuiltIn({ query }, channelId, builtIn);
+    if (changed) {
+      await query(
+        'INSERT INTO moderation_audit_log (channel_id, actor_id, action, details) VALUES ($1, $2, $3, $4)',
+        [channelId, req.user.userId, builtIn ? 'channel_builtin_on' : 'channel_builtin_off', JSON.stringify({})]
+      );
+    }
+    req.io?.emit?.('channel_availability_updated', { channelId, availableToAll: true });
+    req.io?.emit?.('workspace_sections_updated');
+    res.json({ channelId, builtIn });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Set built-in channel error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.patch('/:channelId/availability', authenticateToken, async (req, res) => {
   try {
     const channelId = Number(req.params.channelId);
@@ -248,7 +277,7 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
     if (!(await can(query, req.user.userId, 'manage_workspace'))) {
       return res.status(403).json({ error: 'Manage workspace permission is required to change channel availability' });
     }
-    if (!availableToAll && (await query('SELECT 1 FROM channels WHERE id = $1 AND name = ANY($2::text[])', [channelId, DEFAULT_CHANNEL_NAMES])).rows.length) {
+    if (!availableToAll && (await query('SELECT 1 FROM channels WHERE id = $1 AND builtin = TRUE', [channelId])).rows.length) {
       return res.status(409).json({ error: 'Built-in channels must remain visible to all' });
     }
     const result = await query(
@@ -276,11 +305,16 @@ router.patch('/:channelId/availability', authenticateToken, async (req, res) => 
 // Create a new channel
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, topic, isPrivate, availableToAll, isPersonal, teamSectionId, departmentId } = req.body;
+    const { name, topic, isPrivate, availableToAll, isPersonal, teamSectionId, departmentId, builtIn } = req.body;
     if (teamSectionId !== undefined && teamSectionId !== null) {
       return res.status(400).json({ error: 'Team channels no longer exist. Use your department forum, or create an ordinary private channel.' });
     }
     await ensureNotGuest(query, req.user.userId, 'Guests cannot create channels');
+    if (builtIn) {
+      const owner = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
+      if (!owner?.is_superadmin) return res.status(403).json({ error: 'Only an Owner can create a built-in channel' });
+      if (isPersonal || isPrivate || departmentId) return res.status(400).json({ error: 'A built-in channel is public and for everyone: it cannot be personal, private or for one department' });
+    }
     const creationPermission = isPersonal ? 'manage_personal_channels' : 'create_channels';
     if (!(await can(query, req.user.userId, creationPermission))) {
       return res.status(403).json({
@@ -345,6 +379,12 @@ router.post('/', authenticateToken, async (req, res) => {
     );
 
     const channel = result.rows[0];
+    if (builtIn) {
+      await setChannelBuiltIn({ query }, channel.id, true);
+      await query('INSERT INTO moderation_audit_log (channel_id, actor_id, action, details) VALUES ($1, $2, $3, $4)', [channel.id, req.user.userId, 'channel_builtin_on', JSON.stringify({ created: true })]);
+      channel.available_to_all = true;
+      req.io?.emit?.('workspace_sections_updated');
+    }
 
     if (channel.available_to_all) {
       await query(

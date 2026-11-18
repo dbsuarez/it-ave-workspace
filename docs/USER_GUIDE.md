@@ -9,7 +9,7 @@ Short answers to the things people ask most. Use the search box at the top of He
 The strip on the left has the main places: **Home** (channels and forums), **DMs**, **Activity** (mentions, replies and reactions to you), **Later** (saved items and reminders), **Files**, **Notes**, **Canvas**, **People**, **Huddle** (audio calls) and **More** (Lists and Canvases). **Moderation** appears only if you are allowed to moderate or manage the workspace.
 
 ### Which channels does everyone have?
-The **OFFICIAL** section at the top of the sidebar holds four channels everyone is in: **#welcome**, **#rules** (the workspace rules and code of conduct, so read it first), **#announcements** and **#general**. They cannot be renamed, archived or deleted.
+The **OFFICIAL** section at the top of the sidebar holds four channels everyone is in: **#welcome**, **#rules** (the workspace rules and code of conduct, so read it first), **#announcements** and **#general**. They are mandatory: everyone is in them, nobody can leave, and they cannot be renamed, archived or deleted. An Owner can make other channels built-in too, and they appear in the same section.
 
 ### Keyboard shortcuts
 - **Ctrl+K** searches messages, people and files.
@@ -101,6 +101,12 @@ Open the **Channel organizer**: click the gear icon beside **Channels** in the s
 3. Press **Save sections**.
 
 Forums appear in the list for administrators by name only: you can place them in a section without being able to read them. Members only see a forum in the section if they are allowed to open it. Forums are created by creating a department, not by hand.
+
+### How do I make a channel built-in, or change the order?
+Only an **Owner** can do this.
+- **Make one built-in:** open the channel's settings (**Moderation** > the channel), find **Built-in channel**, and press **Make built-in**. Everyone is added to it at once, new people join automatically, nobody can leave or be removed, and it cannot be renamed, archived or deleted. It moves into the **OFFICIAL** section. Press **Turn off built-in** to make it an ordinary channel again; people stay in it, but it leaves OFFICIAL. You can also tick **Built-in channel** when creating a channel.
+- **What can be built-in:** a public, shared channel. Personal channels, private channels and department forums cannot. #welcome, #rules, #announcements and #general are required by the app and always stay built-in.
+- **Change the order:** open the **Channel organizer**, and use the up and down arrows next to each channel in the **OFFICIAL** section. The new order is saved straight away and everyone sees it.
 
 ### How do I give someone more rights?
 **Moderation > Roles** holds the roles and the **Assignments** table (the header stays visible as you scroll). Give a role the **Manage messages** permission to let its members moderate every forum and channel they can open. Roles also decide the colour of a person's name.

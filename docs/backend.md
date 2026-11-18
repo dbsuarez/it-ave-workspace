@@ -46,6 +46,15 @@ Posts are ordinary messages carrying `topic_id`. In a forum, `send_message` need
 
 Team Channels and Team Sections no longer exist: the `sidebar/team` routes, the `teamSectionId` creation parameter and the reporting-line membership sync are gone. A migration turned existing team channels into ordinary private channels (messages, files and members kept; team-sourced members became `invited`) and dropped `team_sidebar_sections` and `channels.team_section_id`.
 
+### Built-in channels
+`channels.builtin` marks a channel everyone must be in: every active member is joined (new accounts too), nobody can leave or be removed, and it cannot be renamed, archived, deleted or made "not visible to all". They are listed in the OFFICIAL workspace section. `welcome`, `rules`, `announcements` and `general` are required by the app and always built-in; an Owner can mark others and turn it off again, which makes them ordinary channels (members stay, they leave OFFICIAL). Only public shared channels qualify (not personal, private, forum or archived).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| PATCH | `/api/channels/:id/builtin` | `{ builtIn: true\|false }`, Owner only, audited (`channel_builtin_on` / `channel_builtin_off`) |
+| POST | `/api/channels` | `builtIn: true` (Owner only) creates the channel as built-in |
+| PUT | `/api/settings/sidebar/official` | `{ channelIds }` (every built-in channel once), Owner only: the order of OFFICIAL; remembered across restarts and section saves |
+
 ### Messages
 | Method | Endpoint | Description |
 |--------|----------|-------------|

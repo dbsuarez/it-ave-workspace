@@ -1,4 +1,5 @@
 const express = require('express');
+const { joinBuiltInChannels } = require('../defaultChannels');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -120,6 +121,7 @@ router.post('/register', async (req, res) => {
         [channelId, user.id]
       );
     }
+    if (accountType === 'member') await joinBuiltInChannels(query, user.id);
 
     // Generate JWT
     const token = jwt.sign(

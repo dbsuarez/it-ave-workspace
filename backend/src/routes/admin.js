@@ -1,4 +1,5 @@
 const express = require('express');
+const { joinBuiltInChannels } = require('../defaultChannels');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
@@ -335,6 +336,7 @@ router.post('/users', async (req, res) => {
       for (const channelId of joinIds) {
         await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, userId]);
       }
+      if (accountType === 'member') await joinBuiltInChannels(query, userId);
       if (accountType === 'member') await applyChecklist(userId, 'onboarding');
       await audit(req.user.userId, 'user_created', userId, { accountType, key });
       created.push({ id: userId, username, email, password });

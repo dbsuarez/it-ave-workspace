@@ -2,7 +2,7 @@ const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { can, requirePermission } = require('../permissions');
-const { DEFAULT_CHANNELS, withDefaultSection } = require('../defaultChannels');
+const { withDefaultSection, builtInChannelIds, setBuiltInOrder } = require('../defaultChannels');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -279,15 +279,30 @@ router.put('/sidebar', async (req, res) => {
   }
 });
 
+// An Owner puts the built-in channels (the OFFICIAL section) in order: { channelIds } holds every built-in channel once.
+router.put('/sidebar/official', async (req, res) => {
+  try {
+    const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];
+    if (!actor?.is_superadmin) return res.status(403).json({ error: 'Only an Owner can reorder the built-in channels' });
+    const layout = await setBuiltInOrder({ query }, req.body?.channelIds);
+    req.io?.emit('workspace_sections_updated');
+    res.json({ layout });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Reorder built-in channels error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.put('/sidebar/workspace', async (req, res) => {
   try {
     await requirePermission(query, req.user.userId, 'manage_workspace');
     let layout = normalizeWorkspaceSidebarLayout(req.body?.layout);
-    const defaultRows = (await query(
-      'SELECT id FROM channels WHERE name = ANY($1::text[]) ORDER BY array_position($1::text[], name)',
-      [DEFAULT_CHANNELS.map(([name]) => name)]
-    )).rows;
-    layout = withDefaultSection(layout, defaultRows.map((row) => row.id));
+    // OFFICIAL is kept by the server (the Owner's order of the built-in channels lives there), whatever the client sent back
+    const storedLayout = (await query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1')).rows[0]?.workspace_sidebar_layout;
+    const storedOfficial = (storedLayout?.sections || []).find((section) => section.id === 'builtin-official');
+    if (storedOfficial) layout = { ...layout, sections: [storedOfficial, ...layout.sections] };
+    layout = withDefaultSection(layout, await builtInChannelIds({ query }));
     const ids = layout.sections.flatMap((section) => section.channelIds);
     if (ids.length) {
       const personal = await query('SELECT 1 FROM channels WHERE id = ANY($1::int[]) AND is_personal = TRUE LIMIT 1', [ids]);

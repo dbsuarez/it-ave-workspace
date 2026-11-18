@@ -234,7 +234,7 @@ router.get('/channels/:channelId', async (req, res) => {
       await ensureChannelModerator(query, req.user.userId, channelId);
     }
     const [channel, members, timeouts, reports, auditLog] = await Promise.all([
-      query('SELECT c.id, c.name, c.slowmode_seconds, c.command_scope FROM channels c WHERE c.id = $1', [channelId]),
+      query('SELECT c.id, c.name, c.slowmode_seconds, c.command_scope, c.builtin, c.is_personal, c.is_private, c.kind FROM channels c WHERE c.id = $1', [channelId]),
       query(
         `SELECT u.id, u.username, u.first_name, u.middle_name, u.last_name, cm.role, cm.membership_source
          FROM channel_members cm JOIN users u ON u.id = cm.user_id
@@ -277,6 +277,9 @@ router.get('/channels/:channelId', async (req, res) => {
         name: row.name,
         slowmodeSeconds: row.slowmode_seconds,
         commandScope: row.command_scope,
+        builtIn: Boolean(row.builtin),
+        builtInRequired: DEFAULT_CHANNEL_NAMES.includes(row.name),
+        canBeBuiltIn: !row.is_personal && !row.is_private && row.kind !== 'forum',
       },
       members: members.rows.map((member) => ({
         id: member.id, username: member.username,
@@ -335,7 +338,8 @@ router.delete('/channels/:channelId/members/:userId', async (req, res) => {
     const userId = parseId(req.params.userId);
     if (!channelId || !userId) return res.status(400).json({ error: 'Valid channel and user IDs are required' });
     await requireWorkspacePermission(req.user.userId, 'manage_channels');
-    const channel = (await query('SELECT c.available_to_all FROM channels c WHERE c.id = $1', [channelId])).rows[0];
+    const channel = (await query('SELECT c.available_to_all, c.builtin FROM channels c WHERE c.id = $1', [channelId])).rows[0];
+    if (channel?.builtin) return res.status(409).json({ error: 'This is a built-in channel: everyone is in it and nobody can be removed' });
     if (channel?.available_to_all) return res.status(409).json({ error: 'This channel is available to all and its members cannot be removed' });
     const result = await query(
       'DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2 RETURNING user_id',
@@ -732,9 +736,9 @@ router.post('/channels/:channelId/archive', async (req,res) => {
     if (!channelId) return res.status(400).json({ error: 'Invalid channel ID' });
     await requireChannelManagerOrWorkspace(req.user.userId, channelId);
     if (req.body?.confirmation !== 'ARCHIVE CHANNEL') return res.status(400).json({ error: 'Confirmation ARCHIVE CHANNEL required' });
-    const channel = (await query('SELECT name, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
+    const channel = (await query('SELECT name, is_personal, builtin FROM channels WHERE id = $1', [channelId])).rows[0];
     if (!channel || channel.is_personal) return res.status(404).json({ error: 'Shared channel not found' });
-    if (DEFAULT_CHANNEL_NAMES.includes(channel.name)) return res.status(409).json({ error: 'Built-in channels cannot be archived' });
+    if (channel.builtin) return res.status(409).json({ error: 'Built-in channels cannot be archived' });
     const result = await query('UPDATE channels SET archived_at = COALESCE(archived_at,NOW()), archived_by = COALESCE(archived_by,$2) WHERE id = $1 RETURNING archived_at', [channelId,req.user.userId]);
     await audit(channelId,req.user.userId,'channel_archived');
     req.io?.to(`channel_${channelId}`).emit('channel_archived',{channelId});
@@ -763,9 +767,9 @@ router.delete('/channels/:channelId', async (req, res) => {
   try {
     const channelId = parseId(req.params.channelId);
     if (!channelId) return res.status(400).json({ error: 'A valid channel ID is required' });
-    const channel = (await query('SELECT id, name, created_by, is_personal FROM channels WHERE id = $1', [channelId])).rows[0];
+    const channel = (await query('SELECT id, name, created_by, is_personal, builtin FROM channels WHERE id = $1', [channelId])).rows[0];
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
-    if (DEFAULT_CHANNEL_NAMES.includes(channel.name)) return res.status(409).json({ error: 'Built-in channels cannot be deleted' });
+    if (channel.builtin) return res.status(409).json({ error: 'Built-in channels cannot be deleted' });
     // Authenticate/authorize before exposing lifecycle state: unauthorized callers get 403,
     // not a 409 that reveals whether this private channel is archived.
     const actor = (await query('SELECT is_superadmin FROM users WHERE id = $1', [req.user.userId])).rows[0];

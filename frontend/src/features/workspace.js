@@ -278,6 +278,11 @@ async function toggleSidebarSection(sectionId) {
 // ---- Organize dialog ----
 const BUILT_IN_CHANNEL_NAMES = new Set(['welcome', 'rules', 'announcements', 'general']);
 
+// Built-in channels: mandatory for everyone, never renamed, archived or deleted (the server decides; the four required ones are known here too).
+function isBuiltInChannel(channel) {
+  return Boolean(channel && (channel.builtIn || BUILT_IN_CHANNEL_NAMES.has(channel.name)));
+}
+
 function openSidebarModal() {
   state.sidebarDraft = JSON.parse(JSON.stringify(sidebarLayout()));
   state.workspaceSidebarDraft = { sections: JSON.parse(JSON.stringify(sidebarLayout().workspaceSections || [])) };
@@ -321,10 +326,10 @@ function renderSidebarModal() {
   const builtInWorkspaceChannelIds = new Set(workspaceDraft.sections.filter((section) => section.builtIn)
     .flatMap((section) => section.channelIds.map(Number)));
   const assignedChannelIds = new Set([...workspaceDraft.sections, ...draft.sections].flatMap((section) => section.channelIds.map(Number)));
-  const canRenameChannel = (channel, readOnly) => !readOnly && channel.kind !== 'forum' && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
+  const canRenameChannel = (channel, readOnly) => !readOnly && channel.kind !== 'forum' && !isBuiltInChannel(channel) && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
-  const canDeleteOrganizerChannel = (channel, readOnly) => !readOnly && channel.kind !== 'forum' && !BUILT_IN_CHANNEL_NAMES.has(channel.name) && Boolean(state.user?.isSuperadmin
+  const canDeleteOrganizerChannel = (channel, readOnly) => !readOnly && channel.kind !== 'forum' && !isBuiltInChannel(channel) && Boolean(state.user?.isSuperadmin
     || state.moderation?.canManageChannels
     || Number(channel.createdBy) === Number(state.user?.id));
   const creatorName = (channel) => [channel.creatorFirstName, channel.creatorMiddleName, channel.creatorLastName]
@@ -353,16 +358,22 @@ function renderSidebarModal() {
       <select class="sidebar-channel-move" data-channel-move="${channel.id}" aria-label="Move #${escapeHtml(channel.name)} to section"${movable ? '' : ' disabled'}>${moveOptions(channel)}</select>
       ${canDeleteOrganizerChannel(channel, showOwner) ? `<button class="icon-btn sidebar-channel-delete" type="button" data-organizer-delete-channel="${channel.id}" title="Delete channel" aria-label="Delete #${escapeHtml(channel.name)}">&times;</button>` : ''}
     </div>`;
-  const sectionChannelCard = (channel, movable) => {
+  const sectionChannelCard = (channel, movable, order = null) => {
     const showOwner = false;
     return `<div class="sidebar-section-channel${movable ? '' : ' locked'}" data-sidebar-channel-id="${channel.id}">
       <span class="sidebar-drag-handle" ${movable ? 'draggable="true"' : ''} title="${movable ? 'Drag to another section' : 'Workspace channel'}">&#8942;&#8942;</span>
       ${showOwner ? `<button type="button" class="avatar-mini sidebar-channel-owner" data-avatar-user="${channel.createdBy}" data-user-id="${channel.createdBy}" data-organizer-owner="${channel.id}" title="${escapeHtml(creatorName(channel))}" aria-label="Open ${escapeHtml(creatorName(channel))}'s menu" style="background:${escapeHtml(channel.creatorAvatarColor || '#64748b')}">${escapeHtml(creatorName(channel).charAt(0).toUpperCase())}</button>` : ''}
       <span>${channel.kind === 'forum' ? forumIconHtml() : '#'}${escapeHtml(channel.name)}</span>
+      ${order ? `<span class="builtin-order"><button type="button" class="icon-btn" data-builtin-move="up" data-builtin-channel="${channel.id}" title="Move up" aria-label="Move #${escapeHtml(channel.name)} up"${order.index === 0 ? ' disabled' : ''}>&uarr;</button><button type="button" class="icon-btn" data-builtin-move="down" data-builtin-channel="${channel.id}" title="Move down" aria-label="Move #${escapeHtml(channel.name)} down"${order.index === order.last ? ' disabled' : ''}>&darr;</button></span>` : ''}
     </div>`;
   };
-  const sectionChannels = (section, movable) => section.channelIds
-    .map((id) => channelById.get(Number(id))).filter(Boolean).map((channel) => sectionChannelCard(channel, movable)).join('');
+  // an Owner can put the built-in channels (the OFFICIAL section) in order with the arrows
+  const sectionChannels = (section, movable) => {
+    const channels = section.channelIds.map((id) => channelById.get(Number(id))).filter(Boolean);
+    const reorder = Boolean(section.builtIn && state.user?.isSuperadmin);
+    const builtIns = channels.filter(isBuiltInChannel);
+    return channels.map((channel) => sectionChannelCard(channel, movable, reorder && isBuiltInChannel(channel) ? { index: builtIns.indexOf(channel), last: builtIns.length - 1 } : null)).join('');
+  };
 
   const workspaceEditor = document.getElementById('workspace-sidebar-editor');
   workspaceEditor.classList.toggle('read-only', !canManageWorkspace);
@@ -532,8 +543,31 @@ function clearSidebarDragState() {
     .forEach((element) => element.classList.remove('dragging', 'drag-over'));
 }
 
+// Moves one built-in channel up or down in the OFFICIAL section (Owner only); the new order is saved at once.
+async function moveBuiltInChannel(channelId, direction) {
+  const section = (state.workspaceSidebarDraft?.sections || []).find((item) => item.builtIn);
+  if (!section) return;
+  const known = new Map(state.channels.map((channel) => [Number(channel.id), channel]));
+  const order = section.channelIds.map(Number).filter((id) => isBuiltInChannel(known.get(id)));
+  const at = order.indexOf(channelId);
+  const to = direction === 'up' ? at - 1 : at + 1;
+  if (at < 0 || to < 0 || to >= order.length) return;
+  [order[at], order[to]] = [order[to], order[at]];
+  try {
+    const response = await api('/api/settings/sidebar/official', { method: 'PUT', body: JSON.stringify({ channelIds: order }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not change the order');
+    syncSidebarDraft(); // keep whatever else is typed in the dialog
+    section.channelIds = data.layout.sections[0].channelIds.map(Number);
+    renderSidebarModal();
+    loadSidebarLayout();
+  } catch (err) { showToast(err.message || 'Could not change the order.', 'error'); }
+}
+
 async function handleSidebarModalClick(event) {
   const draft = state.sidebarDraft;
+  const move = event.target.closest('[data-builtin-move]');
+  if (move) { moveBuiltInChannel(Number(move.dataset.builtinChannel), move.dataset.builtinMove); return; }
   if (event.target.closest('#btn-add-personal-channel')) {
     if (state.channels.filter((channel) => isPersonalChannel(channel, state.user?.id)).length >= 5) return;
     state.channelCreationSectionTarget = null;

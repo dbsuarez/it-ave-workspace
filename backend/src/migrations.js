@@ -62,6 +62,10 @@ module.exports = [
   "ALTER TABLE channels ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'channel'",
   'ALTER TABLE channels ADD COLUMN IF NOT EXISTS forum_department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL',
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_forum_department ON channels(forum_department_id) WHERE forum_department_id IS NOT NULL',
+  // Built-in channels: everyone is in them and nobody can leave, rename, archive or delete them. The four the app requires are flagged here;
+  // an Owner can flag others (and unflag them again) from the app.
+  'ALTER TABLE channels ADD COLUMN IF NOT EXISTS builtin BOOLEAN NOT NULL DEFAULT FALSE',
+  "UPDATE channels SET builtin = TRUE WHERE name IN ('welcome', 'rules', 'announcements', 'general')",
   `CREATE TABLE IF NOT EXISTS forum_topics (
      id SERIAL PRIMARY KEY,
      channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
