@@ -928,4 +928,11 @@ $$`,
      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
      PRIMARY KEY (channel_id, user_id)
    )`,
+  // Roles given by department: members of a department receive its roles; rows a rule made are marked auto.
+  `CREATE TABLE IF NOT EXISTS department_roles (
+     department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+     role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+     PRIMARY KEY (department_id, role_id)
+   )`,
+  `ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS auto BOOLEAN NOT NULL DEFAULT false`,
 ];
