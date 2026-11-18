@@ -8130,3 +8130,13 @@ body.view-as .input-area { opacity: 0.45; pointer-events: none; }
 .drawing-share-add input[type="text"] { flex: 1 1 200px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
 .drawing-share-add select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
 .drawing-share-empty, .drawing-share-note { color: var(--text-muted); font-size: 13px; margin: 6px 0; }
+
+/* Mermaid to Excalidraw: a large dialog, the syntax box and the preview each take half of it */
+body .ttd-dialog { padding: 1rem; }
+body .ttd-dialog .Modal__content { width: 96vw; max-width: none; height: 92vh; max-height: none; }
+body .ttd-dialog .ttd-dialog-content { min-height: 0; flex: 1 1 auto; }
+body .ttd-dialog .ttd-dialog-panels { grid-template-columns: 1fr 1fr; gap: 1.5rem; min-height: 0; flex: 1 1 auto; height: auto; }
+body .ttd-dialog .ttd-dialog-panel { min-height: 0; min-width: 0; }
+body .ttd-dialog .ttd-dialog-panel textarea.ttd-dialog-input { flex: 1 1 0; width: 100%; height: auto !important; max-height: none !important; min-height: 0; font-size: 14px; }
+body .ttd-dialog .ttd-dialog-output-wrapper { flex: 1 1 0; width: 100%; height: auto; min-height: 0; }
+body .ttd-dialog .ttd-dialog-panel:first-child .ttd-dialog-panel-button-container:not(.invisible) { margin-bottom: 0.5rem; }
