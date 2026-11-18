@@ -101,6 +101,8 @@ Drawings sit beside Canvas in the rail, in a channel's Drawings tab, and as card
 | `features/drawing-store.js` | The copy kept on this computer (IndexedDB `ita-drawings`, memory fallback) |
 | `features/drawing-session.js` | One open drawing: local save, live send/receive, reconnect merge, drafts made offline |
 | `features/drawing-templates.js` | Template buttons added to Excalidraw's Mermaid dialog when it opens (a MutationObserver fills the box through the browser's own value setter) |
+| `features/notes-view.js` | Notes, Keep style: markup for cards, side menu, floating editor and pickers, the colours, and the rules for what each view and search shows (pure, tested) |
+| `features/notes.js` | The Notes screen: loads, autosaves (800 ms after typing, saves run in order), editor, popovers, labels dialog, pictures fetched with the sign-in |
 | `features/drawing-preview.js` | The picture on a drawing's card: saved by the editing client 5 s after the last change (`handle.exportPng({ maxWidthOrHeight })`, 640 px then 320 px, under 280 KB), fetched with the sign-in and shown as a local object URL, refreshed by the `drawing_preview` event |
 | `features/drawing-file.js` | Saving to and reading a `.excalidraw` file (`drawingFileJson`, `parseDrawingFile`; 20 MB limit) |
 | `features/drawings.js` | Screens, rail section, tab, composer action, share, export; reconnects on the socket's `authenticated` event (the server refuses a join before sign-in) |

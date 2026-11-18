@@ -38,6 +38,7 @@ The `init.sql` file creates:
 - **scheduled_messages** - Messages waiting to be sent to a channel or a person
 - **invitations** - Single-use sign-up codes (stored as hashes) with account type and channels
 - **department_roles** - Roles given to every member of a department (custom roles only); `user_roles.auto` marks assignments a rule made. Both live in `migrations.js`
+- **notes** - Personal notes. Besides `title` and `content`: `kind` (`text` or `checklist`), `items` (JSONB checklist items), `color`, `pinned`, `archived_at`, `deleted_at` (in the trash). **note_labels** (per person, unique ignoring case), **note_label_links**, **note_images** (BYTEA, up to 10 per note) and `reminders.note_id` (a reminder set from a note) are in `migrations.js`
 - **channel_links** - Shared web links shown in a channel's Links tab
 - **drawings** - Excalidraw whiteboards: title, `scene` JSONB (shapes), `revision`, owner, and nullable `channel_id` / `topic_id` / `message_id` (standalone when `channel_id` is null). Chat cards are `messages` rows with `kind = 'drawing'`
 - `drawings.preview` / `preview_at` - the card picture (a small PNG) and when it was saved

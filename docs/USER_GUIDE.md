@@ -73,6 +73,28 @@ Click the **padlock**. Nobody can reply or edit their own posts in a locked topi
 
 Every pin, lock, archive, rename and delete is recorded in the forum's audit log.
 
+## Notes
+
+Notes are your own private notes, laid out like Google Keep: a wall of cards you can colour, pin, label and search. Open **Notes** in the left rail.
+
+### How do I write a note?
+Press **Take a note...** at the top, type a title and the text, and press **Close** (or Esc). There is no Save button: a note saves by itself a moment after you stop typing, and the bottom corner says "Edited at ...". The little tick-list button next to **Take a note...** starts a checklist instead.
+
+### What can I do to a note?
+Open a note by clicking it, or hover a card for quick buttons. The row of buttons at the bottom of an open note does these, left to right: **Background options** (twelve colours), **Remind me** (later today, tomorrow morning, next week, or a date and time you pick), **Add image**, **Show checkboxes** (turns the lines into a checklist and back), **Add label**, **Archive**, **Delete**, and undo and redo. The pin at the top right keeps a note in a **Pinned** section at the top of the wall.
+
+### What are labels?
+Labels group notes, such as Work or Home. Add them from a note, then pick one in the left menu to see only those notes. **Edit labels** in the menu renames or deletes them; deleting a label keeps the notes.
+
+### How do I find a note?
+Type in **Search notes**: it looks in titles, text, checklist items and label names. **Reminders** in the left menu shows the notes that have a reminder set. When a reminder is due you get the usual reminder pop-up, and it also appears in **Later**.
+
+### What do Archive and Trash do?
+**Archive** tucks a note away without deleting it; find it under **Archive**, and unarchive or pin it to bring it back. **Delete** moves a note to **Trash**, where it stays 30 days and can be restored; after that, or when you press **Empty Trash** or **Delete forever**, it is gone. A note you empty out completely is thrown away when you close it.
+
+### Limits
+You can keep 1000 notes, 50 labels, 200 items in a checklist and 10 pictures (PNG, JPEG, GIF or WebP, up to 2 MB each) on a note. Notes are private to you and cannot be shared.
+
 ## Drawings
 
 Drawings are whiteboards for quick sketches, diagrams and documenting how a system or process works. They are built on Excalidraw and work without any internet access beyond your workspace.

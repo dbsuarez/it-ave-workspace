@@ -74,13 +74,21 @@ Team Channels and Team Sections no longer exist: the `sidebar/team` routes, the 
 | GET | `/api/files/:id/download` | Download the stored file |
 | DELETE | `/api/files/:id` | Permanently delete an attachment uploaded by the current user, or let a channel moderator remove a channel attachment with a required `reason` (1-500 characters); notifies its channel or DM participants |
 
-### Notes
+### Notes (Keep style)
+Personal notes: colour, pin, archive, trash, checklists, labels, pictures and a reminder. Every route works only on the signed-in person's own notes (another person's id is a 404). The router parses its own 4 MB JSON bodies, mounted before the general parser, because pictures travel as base64. Rules live in `backend/src/notes.js`.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/notes` | List the current user's notes |
-| POST | `/api/notes` | Create a note (`title`, `content`) |
-| PUT | `/api/notes/:id` | Update a note (`title`, `content`) |
-| DELETE | `/api/notes/:id` | Delete a note |
+| GET | `/api/notes` | `{ notes, labels }`: all the person's notes (archived and trashed too, for the screen to filter) and their labels. Also clears the person's trash older than 30 days |
+| POST | `/api/notes` | Create: any of `title` (max 200, may be empty), `content` (max 100000), `kind` (`text` or `checklist`), `items` (max 200, each `{ id?, text <= 500, done }`), `color` (one of 12), `pinned`, `labelIds`. At most 1000 notes |
+| PUT | `/api/notes/:id` | Change only what is sent (same fields, plus `archived` and `trashed`). Archiving or trashing unpins; pinning un-archives |
+| DELETE | `/api/notes/:id` | Delete for good |
+| POST | `/api/notes/trash/empty` | Delete the person's trashed notes: `{ removed }` |
+| POST / PUT / DELETE | `/api/notes/labels[/:id]` | Labels: `{ name }` 1-30 characters, unique per person ignoring case, at most 50. Deleting one keeps the notes |
+| POST / GET / DELETE | `/api/notes/:id/images[/:imageId]` | Pictures: `{ mime, dataBase64 }` PNG, JPEG, GIF or WebP up to 2 MB, at most 10 per note; served `nosniff` with a sandbox CSP |
+| PUT / DELETE | `/api/notes/:id/reminder` | `{ remindAt }`: an ordinary row in `reminders` (so the pop-up and the Later list work) linked by `reminders.note_id`; setting one replaces the pending one |
+
+Trashed notes are removed after 30 days when the list is loaded and at start-up.
 
 ### Lists
 | Method | Endpoint | Description |

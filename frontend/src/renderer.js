@@ -239,7 +239,6 @@ const els = {
   userProfileMessageBtn: document.getElementById('btn-user-profile-message'),
   userProfileEditBtn: document.getElementById('btn-user-profile-edit'),
   filesGrid: document.getElementById('files-grid'),
-  notesGrid: document.getElementById('notes-grid'),
   listsChannelSelect: document.getElementById('lists-channel-select'),
   listsContainer: document.getElementById('lists-container'),
   canvasChannelSelect: document.getElementById('canvas-channel-select'),
@@ -377,8 +376,7 @@ function setupEventListeners() {
       if (closeAllMenus()) return;
       if (els.emojiPicker && !els.emojiPicker.hidden) { closeEmojiPicker(); return; }
       if (state.replyingTo) { cancelReply(); return; }
-      const noteEditor = document.getElementById('note-editor');
-      if (noteEditor && noteEditor.classList.contains('open')) { closeNoteEditor(); return; }
+      if (noteEditorOpen()) { closeNoteEditor(); return; }
       const modalCreate = document.getElementById('modal-create-channel');
       if (modalCreate && modalCreate.classList.contains('open')) { closeModalCreateChannel(); return; }
       const modalOverlay = document.getElementById('modal-overlay');
@@ -593,14 +591,11 @@ function setupEventListeners() {
 
   // Files / Notes
   on('btn-refresh-files', 'click', () => loadFiles());
-  on('btn-new-note', 'click', () => openNoteEditor(null));
-  on('btn-save-note-editor', 'click', () => saveNoteFromEditor());
-  on('btn-cancel-note', 'click', () => closeNoteEditor());
-  on('btn-close-note-editor', 'click', () => closeNoteEditor());
 
   setupForumScreens();
   setupHelp();
   setupDrawings();
+  setupNotes();
 
   // Compose
   on('btn-compose', 'click', () => els.messageInput?.focus());
@@ -4723,7 +4718,7 @@ function handleAppCommand(cmd) {
       openCreateChannelModal();
       break;
     case 'new-note':
-      openNoteEditor(null);
+      setSection('notes').then(() => openNoteEditor(null));
       break;
     case 'sign-out':
       handleLogout();
@@ -5139,118 +5134,6 @@ async function downloadFile(fileId, name) {
   } catch (err) {
     console.error('Download file error:', err);
     showToast('Could not download file.', 'error');
-  }
-}
-
-// ============================================================
-// Notes view
-// ============================================================
-let notesCache = [];
-
-async function loadNotes() {
-  const grid = els.notesGrid;
-  if (!grid) return;
-  grid.classList.remove('has-empty-record');
-  grid.innerHTML = '<div class="empty-state" style="padding:24px;">Loading notes…</div>';
-  try {
-    const res = await api('/api/notes');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load notes');
-    notesCache = data.notes || [];
-    renderNotes(notesCache);
-  } catch (err) {
-    console.error('Load notes error:', err);
-    grid.classList.remove('has-empty-record');
-    grid.innerHTML = `<div class="empty-state" style="padding:24px;"><h2>Could not load notes</h2><p style="color:var(--text-muted);">Check that the server is running.</p></div>`;
-  }
-}
-
-function renderNotes(notes) {
-  const grid = els.notesGrid;
-  if (!grid) return;
-  grid.classList.toggle('has-empty-record', notes.length === 0);
-  if (!notes.length) {
-    grid.innerHTML = emptyRecordMarkup(
-      'No notes yet',
-      'Use "New note" to write something down.',
-    );
-    return;
-  }
-  grid.innerHTML = '';
-  notes.forEach((n) => {
-    const card = document.createElement('div');
-    card.className = 'card note-card';
-    const preview = (n.content || '').split('\n').slice(0, 2).join(' ');
-    card.innerHTML = `
-      <div class="title">${escapeHtml(n.title)}</div>
-      <div class="meta">${escapeHtml(preview || 'Empty note')}</div>
-      <div class="meta">Updated ${shortTime(n.updatedAt)}</div>
-      <div class="note-actions">
-        <button class="btn-note-delete" title="Delete note" aria-label="Delete note">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-        </button>
-      </div>
-    `;
-    card.onclick = () => openNoteEditor(n);
-    card.querySelector('.btn-note-delete').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (!(await confirmAction({
-        title: 'Delete note',
-        message: `Delete note "${n.title}"?`,
-        confirmLabel: 'Delete',
-        danger: true,
-      }))) return;
-      try {
-        const res = await api(`/api/notes/${n.id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('Delete failed');
-        await loadNotes();
-        showToast('Note deleted.', 'success');
-      } catch (err) {
-        console.error('Delete note error:', err);
-        showToast('Could not delete note.', 'error');
-      }
-    });
-    grid.appendChild(card);
-  });
-}
-
-function openNoteEditor(note) {
-  const editor = document.getElementById('note-editor');
-  const titleInput = document.getElementById('note-title-input');
-  const bodyInput = document.getElementById('note-body-input');
-  if (!editor) return;
-  editor.dataset.noteId = note ? note.id : '';
-  document.getElementById('note-editor-title').textContent = note ? 'Edit note' : 'New note';
-  titleInput.value = note ? note.title : '';
-  bodyInput.value = note ? note.content : '';
-  editor.classList.add('open');
-  document.getElementById('modal-overlay').classList.add('open');
-  setTimeout(() => titleInput.focus(), 40);
-}
-
-function closeNoteEditor() {
-  const editor = document.getElementById('note-editor');
-  if (editor) editor.classList.remove('open');
-  document.getElementById('modal-overlay').classList.remove('open');
-}
-
-async function saveNoteFromEditor() {
-  const editor = document.getElementById('note-editor');
-  const title = document.getElementById('note-title-input').value.trim() || 'Untitled';
-  const content = document.getElementById('note-body-input').value;
-  const id = editor.dataset.noteId;
-  try {
-    const res = await api(id ? `/api/notes/${id}` : '/api/notes', {
-      method: id ? 'PUT' : 'POST',
-      body: JSON.stringify({ title, content }),
-    });
-    if (!res.ok) throw new Error('Save failed');
-    closeNoteEditor();
-    await loadNotes();
-    showToast(id ? 'Note updated.' : 'Note created.', 'success');
-  } catch (err) {
-    console.error('Save note error:', err);
-    showToast('Could not save note.', 'error');
   }
 }
 
