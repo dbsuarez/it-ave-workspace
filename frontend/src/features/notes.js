@@ -152,12 +152,21 @@ async function patchNote(id, change, message) {
 // -------------------------------------------------------------------------------------------------------------- editor
 const noteEditorOpen = () => Boolean(notesState.editing);
 
+// The text box grows with what is written, up to 60% of the window height, and scrolls after that.
+function autosizeNoteBody() {
+  const box = document.querySelector('[data-note-editor] [data-note-body]');
+  if (!box) return;
+  box.style.height = 'auto';
+  box.style.height = `${Math.min(box.scrollHeight, Math.floor(window.innerHeight * 0.6))}px`;
+}
+
 function renderNoteEditor(focus) {
   const overlay = noteHost('note-editor-overlay');
   if (!overlay || !notesState.editing) return;
   overlay.hidden = false;
   overlay.innerHTML = noteEditorHtml(notesState.editing, { labels: notesState.labels });
   fillNoteImages(overlay);
+  autosizeNoteBody();
   if (focus) overlay.querySelector(focus)?.focus();
 }
 
@@ -370,7 +379,7 @@ function handleEditorInput(event) {
   if (!note) return;
   const target = event.target;
   if (target.matches('[data-note-title]')) note.title = target.value;
-  else if (target.matches('[data-note-body]')) note.content = target.value;
+  else if (target.matches('[data-note-body]')) { note.content = target.value; autosizeNoteBody(); }
   else if (target.matches('[data-note-item]')) { const item = note.items.find((i) => i.id === target.dataset.noteItem); if (item) item.text = target.value; }
   else if (target.matches('[data-note-item-done]')) { const item = note.items.find((i) => i.id === target.dataset.noteItemDone); if (item) { item.done = target.checked; } }
   else if (target.matches('[data-note-label-toggle]')) {

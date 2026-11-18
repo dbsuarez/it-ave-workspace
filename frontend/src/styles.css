@@ -8189,7 +8189,7 @@ body .ttd-dialog .ttd-template-restore[hidden] { display: none; }
 .note-card:hover { box-shadow: 0 1px 6px rgba(0,0,0,0.28); }
 .note-card-image { display: block; width: calc(100% + 28px); max-height: 220px; margin: -12px -14px 10px; object-fit: cover; }
 .note-card-title { font-weight: 700; font-size: 15px; padding-right: 26px; margin-bottom: 6px; overflow-wrap: anywhere; }
-.note-card-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; max-height: 280px; overflow: hidden; }
+.note-card-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; max-height: 360px; overflow: hidden; }
 .note-card-body.note-empty { color: var(--text-muted); }
 .note-item { display: flex; gap: 6px; align-items: flex-start; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .note-item.done { color: var(--text-muted); text-decoration: line-through; }
@@ -8246,7 +8246,7 @@ body .ttd-dialog .ttd-template-restore[hidden] { display: none; }
 .note-editor-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; }
 .note-editor-head .note-pin { position: static; opacity: 1; }
 .note-editor-title { flex: 1 1 auto; min-width: 0; padding: 6px 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 18px; font-weight: 700; outline: none; }
-.note-editor-body { flex: 1 1 auto; width: 100%; min-height: 120px; padding: 10px 14px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; line-height: 1.5; resize: none; outline: none; box-sizing: border-box; overflow-y: auto; }
+.note-editor-body { flex: 0 0 auto; width: 100%; min-height: 96px; max-height: 60vh; /* beats the app-wide textarea cap of 110px */ padding: 10px 14px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; line-height: 1.5; resize: none; outline: none; box-sizing: border-box; overflow-y: auto; }
 .note-editor-items { flex: 1 1 auto; padding: 8px 14px; overflow-y: auto; }
 .note-item-row { display: flex; align-items: center; gap: 8px; }
 .note-item-text { flex: 1 1 auto; min-width: 0; padding: 5px 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; outline: none; }
