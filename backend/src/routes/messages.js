@@ -5,6 +5,7 @@ const fs = require('fs');
 const { query, pool } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { pollsForMessages } = require('../polls');
+const { drawingsForMessages } = require('../drawings');
 const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
 const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel, ensureChannelNotArchived } = require('../security');
@@ -232,6 +233,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       });
     }
 
+    const drawingsByMessage = await drawingsForMessages(query, result.rows.filter((m) => m.kind === 'drawing').map((m) => m.id));
     const pollsByMessage = await pollsForMessages(query, result.rows.filter((m) => m.kind === 'poll').map((m) => m.id), req.user.userId);
     const messages = result.rows.map((m) => ({
       id: m.id,
@@ -256,6 +258,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       reactions: reactionsByMessage[m.id] || [],
       attachments: attachmentsByMessage[m.id] || [],
       ...(pollsByMessage.has(m.id) ? { poll: pollsByMessage.get(m.id) } : {}),
+      ...(drawingsByMessage.has(m.id) ? { drawing: drawingsByMessage.get(m.id) } : {}),
     }));
 
     res.json({
