@@ -121,6 +121,16 @@ The rest of the app should never read a sheet someone is half-way through typing
 ### Can I start from the leave records?
 HR can press **New from leave records** on the Sheets screen: it makes a sheet with a copy of the current and upcoming leave (pending and approved), one row per request. It is a copy to work with, not a live link.
 
+### Can a table fill in Leave?
+Yes, for two things: the **company holidays** and each person's **leave credits**. In the Tables dialog (people with Manage sheets), choose **Use this table in Leave**. It fills in the columns Leave needs: `date` and `name` for holidays; `person` (a username), `leave_type` (for example Vacation Leave), `year` and `days` for credits (extra days on top of the type's allowance, in halves, negative to remove). Only one table can feed holidays and one can feed credits at a time; choosing another asks before switching.
+
+Nothing changes in Leave while you type. When you press **Publish**, a preview shows exactly what would change in Leave: what is added, renamed or removed (holidays), and what is set or goes back to the default (credits). Press **Apply and publish** to do it, or **Cancel** to change nothing. The sheet is the whole list for the years it contains: a holiday or credit in one of those years that the sheet does not list is removed (the preview shows these in red). Years the sheet does not mention are left alone. Leave's own holiday editor and the leave adjustment boxes become read-only for those years and say which sheet manages them. Days already counted on existing leave requests do not change.
+
+If you stop using a table for Leave (or delete the sheet), Leave keeps what was applied and can be edited by hand again.
+
+### Can I start next year's holidays from this year's?
+Press **Holidays from last year** on the Sheets screen and type the year. It makes a sheet named "Holidays <year>" with the previous year's company holidays moved to that year (Feb 29 becomes Feb 28) and connects it to Leave when no other sheet does. Correct the moving holidays by hand (Holy Week, Eid and the days announced each year), then Publish and check the preview.
+
 ## Drawings
 
 Drawings are whiteboards for quick sketches, diagrams and documenting how a system or process works. They are built on Excalidraw and work without any internet access beyond your workspace.
