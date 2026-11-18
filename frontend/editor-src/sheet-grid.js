@@ -83,6 +83,10 @@ function mount(element, options = {}) {
         return { id: sheet.options.tabId, name: sheet.options.worksheetName, rows: trimRows(sheet.getData()), widths };
       });
     },
+    // what the cells show (formula results, not the formulas): this is what a table publishes
+    getValues() {
+      return instance.map((sheet) => ({ id: sheet.options.tabId, name: sheet.options.worksheetName, rows: trimRows(sheet.getData(false, true)) }));
+    },
     activeIndex() { return instance.length ? instance[0].parent.getWorksheetActive() : 0; },
     setTabs(tabs) { build(tabs); },
     destroy() {

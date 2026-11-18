@@ -99,6 +99,28 @@ Type in **Search notes**: it looks in titles, text, checklist items and label na
 ### Limits
 You can keep 1000 notes, 50 labels, 200 items in a checklist and 10 pictures (PNG, JPEG, GIF or WebP, up to 2 MB each) on a note. Notes are private to you and cannot be shared.
 
+## Sheets
+
+Sheets are spreadsheets you make inside the app. They look and work like a normal spreadsheet (type, paste from Excel, formulas, several tabs), they save by themselves, and the rest of the app can read the data you publish from them. Open **Sheets** in the left rail.
+
+### Who can make a sheet?
+People with the **Manage sheets** permission (Owners, and the HR role by default). Everyone else sees only the sheets shared with them, under **Shared with me**.
+
+### How do I work in a sheet?
+Press **New sheet**, name it, and type. There is no Save button: the bar says "Unsaved changes", then "Saved" a moment later. The **+** beside the tabs adds a tab; right-click a cell for rows and columns. If someone else saved the sheet while you were editing, your changes are merged into theirs and a note tells you (when you both changed the same cell, yours is kept). Adding or deleting rows while someone else edits the same sheet can mix cells up, so take turns for that.
+
+### How do I share a sheet?
+The owner presses **Share**, picks a person and chooses **Can edit** or **Can view**. Only members can be added. Only the owner can share or delete the sheet. Being an Owner of the workspace does not open other people's sheets.
+
+### How do I get data in and out?
+**Import CSV** adds the rows of a CSV file (from Excel, with commas, semicolons or tabs) as a new tab. **Export CSV** saves the open tab as a CSV that Excel opens; cells that could run as a formula in Excel are marked with a leading apostrophe. Pasting straight from Excel into the grid also works.
+
+### What is a table, and what is Publish?
+The rest of the app should never read a sheet someone is half-way through typing. So a tab can be declared a **table**: press **Tables**, **New table**, choose the tab, name the table (lowercase letters, digits and underscores, for example `holidays`), and give each column a name and a type: text, number, date (YYYY-MM-DD), yes/no or person (a username). **Use the header row of the tab** fills the column names for you; the first row of the tab must match them. **Check** lists every problem by row and column ("Row 3, Date: 2027-02-30 is not a real date"). **Publish** saves the rows only when there are none, and what was published is what the rest of the app reads. Keep editing as much as you like: nothing changes for the app until you press **Publish** again, and the list tells you when the sheet has changed since. Formulas are published as their results.
+
+### Can I start from the leave records?
+HR can press **New from leave records** on the Sheets screen: it makes a sheet with a copy of the current and upcoming leave (pending and approved), one row per request. It is a copy to work with, not a live link.
+
 ## Drawings
 
 Drawings are whiteboards for quick sketches, diagrams and documenting how a system or process works. They are built on Excalidraw and work without any internet access beyond your workspace.

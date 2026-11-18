@@ -74,4 +74,28 @@ function serializeSheet(sheet, role, extra = {}) {
   };
 }
 
-module.exports = { MAX_TITLE, fail, cleanTitle, cleanSheetData, newSheetData, sheetAccess, serializeSheet };
+// What the rest of the app reads: the typed rows last published for a table, or null when there are none.
+// -> { columns: [{ name, type, required }], rows: [{ [column]: value }], publishedAt, publishedBy } | null
+async function readPublishedTable(query, sheetId, name) {
+  const row = (await query(
+    `SELECT t.columns, t.published, t.published_at, u.username AS published_by
+     FROM sheet_tables t LEFT JOIN users u ON u.id = t.published_by
+     WHERE t.sheet_id = $1 AND t.name = $2 AND t.published IS NOT NULL`, [sheetId, name])).rows[0];
+  if (!row) return null;
+  return { columns: row.columns, rows: row.published.rows, publishedAt: row.published_at, publishedBy: row.published_by || null };
+}
+
+// The tab values sent for a check or a publish: rows of text, within the same limits as a sheet.
+function cleanValues(values) {
+  if (!Array.isArray(values) || values.length > MAX_ROWS + 1) throw fail(400, 'Send the tab as a list of rows');
+  return values.map((row) => {
+    if (!Array.isArray(row) || row.length > MAX_COLUMNS) throw fail(400, 'Every row must be a list of cells');
+    return row.map((cell) => {
+      if (typeof cell !== 'string') throw fail(400, 'Every cell must be text');
+      if (cell.length > MAX_CELL) throw fail(400, `A cell can have at most ${MAX_CELL} characters`);
+      return cell;
+    });
+  });
+}
+
+module.exports = { MAX_TITLE, fail, cleanTitle, cleanSheetData, newSheetData, sheetAccess, serializeSheet, readPublishedTable, cleanValues };

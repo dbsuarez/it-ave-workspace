@@ -986,4 +986,18 @@ $$`,
   `CREATE INDEX IF NOT EXISTS idx_sheet_members_user ON sheet_members(user_id)`,
   // the HR role may create sheets
   `UPDATE roles SET permissions = array_append(permissions, 'manage_sheets') WHERE legacy_hr = true AND NOT ('manage_sheets' = ANY(permissions))`,
+  // Sheets: a tab declared as a table with typed columns, and what was last published from it
+  `CREATE TABLE IF NOT EXISTS sheet_tables (
+     id SERIAL PRIMARY KEY,
+     sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+     name VARCHAR(40) NOT NULL,
+     tab_id VARCHAR(20) NOT NULL,
+     columns JSONB NOT NULL,
+     published JSONB,
+     published_at TIMESTAMPTZ,
+     published_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     published_revision INTEGER,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     UNIQUE (sheet_id, name)
+   )`,
 ];

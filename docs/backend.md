@@ -393,6 +393,26 @@ Live editing (`sockets/drawings.js`, `createDrawingHub`): the server keeps one r
 ### Announcements
 `POST /api/announcements` `{ channelId, text }` posts an announcement from the "Post announcement" dialog, with the same rules as `/announce`: the channel must be an announcement channel (`command_scope = 'announcements'`, set in Moderation), the person must be a member holding the `announce` permission in it, the text is 1 to 2000 characters (kept exactly, line breaks included), and the channel must be open and not a forum. No second confirmation step: the dialog is the confirmation. An announcement is edited with the ordinary `PATCH /api/messages/:id`, which for an announcement also requires the announcement channel, the `announce` permission and at most 2000 characters (ordinary messages allow 10000); the old text is kept in `message_edits`. Returns `201 { message }`; the channel gets the usual `new_message`.
 
+### Sheets (`/api/sheets`)
+Spreadsheets HR makes in the app (design: `docs/superpowers/specs/2026-11-19-sheets-design.md`). A sheet is `{ tabs: [{ id, name, rows: [[string...]...], widths? }] }` (at most 20 tabs, 5000 rows, 200 columns, 5000 characters per cell, 5 MB); a formula is just text starting with `=` and runs only in the browser. The router parses its own 6 MB JSON bodies, mounted before the general parser. Creating needs the **`manage_sheets`** permission (Owners always; the HR role gets it by migration); everything else depends on the person's role on that sheet (owner, editor, viewer). Owners of the workspace get no access to other people's sheets.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sheets?scope=mine\|shared` | `{ sheets, canCreate }` |
+| POST | `/api/sheets` | `{ title, data? }` (a new sheet has one empty tab) |
+| GET | `/api/sheets/:id` | `{ sheet, data, members? }` (members only for the owner) |
+| PATCH | `/api/sheets/:id` | `{ title }` (editor) |
+| PUT | `/api/sheets/:id/data` | `{ baseRevision, data }` (editor): saves the whole sheet; if the revision moved on the answer is **409** with the latest `revision` and `data`, and the browser merges cell by cell (`sheet-merge.js`) |
+| DELETE | `/api/sheets/:id` | owner |
+| PUT / DELETE | `/api/sheets/:id/members/:userId` | owner shares (`{ role: editor\|viewer }`, members only, not guests) or removes |
+| GET | `/api/sheets/:id/tables` | the declared tables with their tab, columns and publish state (`published.stale` is true when the sheet changed since) |
+| PUT / DELETE | `/api/sheets/:id/tables/:name` | editor: declare a tab as a table `{ tabId, columns: [{ name, type, required }] }` (types: text, number, date YYYY-MM-DD, yesno, person; name is lowercase letters, digits and underscores; at most 30 tables, 50 columns) |
+| POST | `/api/sheets/:id/tables/:name/check` | `{ values }` (the tab as the grid shows it, results rather than formulas) -> `{ ok, rowCount, problems: [{ row, column, message }], problemCount }` (at most 50 problems listed) |
+| POST | `/api/sheets/:id/tables/:name/publish` | same check; clean -> saves the typed rows as the published snapshot, otherwise 400 with the problems and the last good snapshot kept |
+| GET | `/api/sheets/:id/tables/:name` | the published snapshot `{ columns, rows, publishedAt, publishedBy }` (404 until published) |
+
+Server code reads a table through **`readPublishedTable(query, sheetId, name)`** in `backend/src/sheets.js`: typed rows or `null`. Editing a sheet never changes the published rows until the next Publish. Rules for a table are in `backend/src/sheetTables.js` (pure, tested).
+
 ### Socket.io Events
 
 | Event | Direction | Description |

@@ -5,6 +5,7 @@ const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { can } = require('../permissions');
 const sheets = require('../sheets');
+const sheetTables = require('../sheetTables');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -137,6 +138,121 @@ router.delete('/:id/members/:userId', async (req, res) => {
     await query('DELETE FROM sheet_members WHERE sheet_id = $1 AND user_id = $2', [id, parseId(req.params.userId) || 0]);
     res.json({ removed: true });
   } catch (err) { sendError(res, err, 'Unshare sheet error'); }
+});
+
+// ---- tables: a tab declared as a table with typed columns; Publish checks it and saves the typed rows ----
+const MAX_TABLES = 30;
+
+async function loadTable(sheetId, name) {
+  const table = (await query('SELECT id, name, tab_id, columns FROM sheet_tables WHERE sheet_id = $1 AND name = $2', [sheetId, sheetTables.cleanTableName(name)])).rows[0];
+  if (!table) throw sheets.fail(404, 'No table with that name in this sheet');
+  return table;
+}
+
+// The usernames the person columns refer to -> Map(lowercase username -> id), looked up in one query.
+async function peopleFor(columns, values) {
+  const wanted = new Set();
+  columns.forEach((column, index) => {
+    if (column.type !== 'person') return;
+    for (let r = 1; r < values.length; r += 1) {
+      const text = values[r] && values[r][index] ? String(values[r][index]).trim().toLowerCase() : '';
+      if (text) wanted.add(text);
+    }
+  });
+  if (!wanted.size) return new Map();
+  const rows = (await query("SELECT id, LOWER(username) AS username FROM users WHERE LOWER(username) = ANY($1::text[]) AND deactivated_at IS NULL AND account_type = 'member'", [[...wanted]])).rows;
+  return new Map(rows.map((row) => [row.username, row.id]));
+}
+
+async function runCheck(table, rawValues) {
+  const values = sheets.cleanValues(rawValues);
+  return sheetTables.validateTable(table.columns, values, { people: await peopleFor(table.columns, values) });
+}
+
+router.get('/:id/tables', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    const { sheet } = await sheets.sheetAccess(query, req.user.userId, id);
+    const data = (await query('SELECT data FROM sheets WHERE id = $1', [id])).rows[0].data;
+    const rows = (await query(
+      `SELECT t.name, t.tab_id, t.columns, t.published_at, t.published_revision, u.username AS published_by,
+              CASE WHEN t.published IS NULL THEN NULL ELSE jsonb_array_length(t.published->'rows') END AS row_count
+       FROM sheet_tables t LEFT JOIN users u ON u.id = t.published_by WHERE t.sheet_id = $1 ORDER BY t.name`, [id])).rows;
+    res.json({
+      tables: rows.map((row) => ({
+        name: row.name, tabId: row.tab_id, tabName: (data.tabs.find((tab) => tab.id === row.tab_id) || {}).name || null, columns: row.columns,
+        published: row.published_at ? { at: row.published_at, by: row.published_by || null, rowCount: row.row_count, stale: Number(row.published_revision) < Number(sheet.revision) } : null,
+      })),
+    });
+  } catch (err) { sendError(res, err, 'List tables error'); }
+});
+
+router.put('/:id/tables/:name', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    const { role } = await sheets.sheetAccess(query, req.user.userId, id);
+    if (role !== 'editor') throw sheets.fail(403, 'You can only look at this sheet');
+    const name = sheetTables.cleanTableName(req.params.name);
+    const columns = sheetTables.cleanColumns(req.body && req.body.columns);
+    const data = (await query('SELECT data FROM sheets WHERE id = $1', [id])).rows[0].data;
+    const tabId = req.body && req.body.tabId;
+    if (typeof tabId !== 'string' || !data.tabs.some((tab) => tab.id === tabId)) throw sheets.fail(400, 'Choose one of the tabs of this sheet');
+    const exists = (await query('SELECT 1 FROM sheet_tables WHERE sheet_id = $1 AND name = $2', [id, name])).rows.length > 0;
+    if (!exists && (await query('SELECT COUNT(*)::int AS n FROM sheet_tables WHERE sheet_id = $1', [id])).rows[0].n >= MAX_TABLES) throw sheets.fail(400, `A sheet can have at most ${MAX_TABLES} tables`);
+    await query(
+      `INSERT INTO sheet_tables (sheet_id, name, tab_id, columns) VALUES ($1, $2, $3, $4::jsonb)
+       ON CONFLICT (sheet_id, name) DO UPDATE SET tab_id = EXCLUDED.tab_id, columns = EXCLUDED.columns`, [id, name, tabId, JSON.stringify(columns)]);
+    res.json({ name, tabId, columns });
+  } catch (err) { sendError(res, err, 'Define table error'); }
+});
+
+router.delete('/:id/tables/:name', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    const { role } = await sheets.sheetAccess(query, req.user.userId, id);
+    if (role !== 'editor') throw sheets.fail(403, 'You can only look at this sheet');
+    const table = await loadTable(id, req.params.name);
+    await query('DELETE FROM sheet_tables WHERE id = $1', [table.id]);
+    res.json({ removed: true });
+  } catch (err) { sendError(res, err, 'Remove table error'); }
+});
+
+// POST { values } -> { ok, rowCount, problems, problemCount }: what Publish would say, without publishing.
+router.post('/:id/tables/:name/check', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    const { role } = await sheets.sheetAccess(query, req.user.userId, id);
+    if (role !== 'editor') throw sheets.fail(403, 'You can only look at this sheet');
+    const result = await runCheck(await loadTable(id, req.params.name), req.body && req.body.values);
+    res.json({ ok: result.problemCount === 0, rowCount: result.rows.length, problems: result.problems, problemCount: result.problemCount });
+  } catch (err) { sendError(res, err, 'Check table error'); }
+});
+
+// POST { values }: checks the table and, when every row is good, saves the typed rows as the published version.
+router.post('/:id/tables/:name/publish', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    const { role, sheet } = await sheets.sheetAccess(query, req.user.userId, id);
+    if (role !== 'editor') throw sheets.fail(403, 'You can only look at this sheet');
+    const table = await loadTable(id, req.params.name);
+    const result = await runCheck(table, req.body && req.body.values);
+    if (result.problemCount) return res.status(400).json({ error: 'The table has problems, so nothing was published', problems: result.problems, problemCount: result.problemCount });
+    const saved = (await query(
+      'UPDATE sheet_tables SET published = $2::jsonb, published_at = NOW(), published_by = $3, published_revision = $4 WHERE id = $1 RETURNING published_at',
+      [table.id, JSON.stringify({ rows: result.rows }), req.user.userId, sheet.revision])).rows[0];
+    res.json({ ok: true, rowCount: result.rows.length, publishedAt: saved.published_at });
+  } catch (err) { sendError(res, err, 'Publish table error'); }
+});
+
+// The published version (nothing from the sheet's unpublished edits): for people who can open the sheet.
+router.get('/:id/tables/:name', async (req, res) => {
+  try {
+    const id = needId(req.params.id);
+    await sheets.sheetAccess(query, req.user.userId, id);
+    const table = await sheets.readPublishedTable(query, id, sheetTables.cleanTableName(req.params.name));
+    if (!table) throw sheets.fail(404, 'Nothing has been published for this table yet');
+    res.json({ name: req.params.name, ...table });
+  } catch (err) { sendError(res, err, 'Read table error'); }
 });
 
 module.exports = router;

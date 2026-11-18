@@ -160,3 +160,122 @@ test('a person who loses the Manage sheets permission keeps and can still edit t
   assert.equal((await call('hr', 'PUT', `/${made.json.sheet.id}/data`, { baseRevision: open.json.sheet.revision, data: open.json.data })).status, 200);
   assert.equal((await call('hr', 'POST', '', { title: 'New one' })).status, 403, 'but cannot make new ones');
 });
+
+// ------------------------------------------------------------------------------------------------- tables: define, check, publish, read
+const { readPublishedTable } = require('../src/sheets');
+
+const holidayColumns = [{ name: 'Date', type: 'date', required: true }, { name: 'Name', type: 'text', required: true }, { name: 'Paid', type: 'yesno' }, { name: 'Owner', type: 'person' }];
+const goodValues = [['Date', 'Name', 'Paid', 'Owner'], ['2027-01-01', 'New Year', 'yes', 'sh-ed'], ['2027-12-25', 'Christmas', 'no', '']];
+
+async function freshSheet(user = 'hr') {
+  await admin.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE name = 'sh-sheet-makers' ON CONFLICT DO NOTHING", [ids[user]]);
+  const made = await call(user, 'POST', '', { title: 'Tables test', data: data(tab('Holidays', goodValues.map((r) => [...r]), 'tabH'), tab('Notes', [['free text']], 'tabN')) });
+  assert.equal(made.status, 201, JSON.stringify(made.json));
+  return made.json.sheet.id;
+}
+
+test('an editor declares a tab as a table; viewers cannot; names, tabs and columns are checked', async (t) => {
+  if (skip(t)) return;
+  const id = await freshSheet();
+  ids.tsheet = id;
+  await call('hr', 'PUT', `/${id}/members/${ids.ed}`, { role: 'editor' });
+  await call('hr', 'PUT', `/${id}/members/${ids.vi}`, { role: 'viewer' });
+  const body = { tabId: 'tabH', columns: holidayColumns };
+  assert.equal((await call('vi', 'PUT', `/${id}/tables/holidays`, body)).status, 403);
+  assert.equal((await call('out', 'PUT', `/${id}/tables/holidays`, body)).status, 403);
+  assert.equal((await call('hr', 'PUT', `/${id}/tables/Holidays`, body)).status, 400, 'a table name is lowercase');
+  assert.equal((await call('hr', 'PUT', `/${id}/tables/holidays`, { tabId: 'nope', columns: holidayColumns })).status, 400, 'the tab must exist');
+  assert.equal((await call('hr', 'PUT', `/${id}/tables/holidays`, { tabId: 'tabH', columns: [] })).status, 400);
+  assert.equal((await call('hr', 'PUT', `/${id}/tables/holidays`, { tabId: 'tabH', columns: [{ name: 'A', type: 'colour' }] })).status, 400);
+  assert.equal((await call('ed', 'PUT', `/${id}/tables/holidays`, body)).status, 200, 'an editor may');
+  const list = await call('vi', 'GET', `/${id}/tables`);
+  assert.equal(list.status, 200, 'a viewer may see what tables there are');
+  assert.deepEqual(list.json.tables.map((x) => [x.name, x.tabId, x.tabName, x.published]), [['holidays', 'tabH', 'Holidays', null]]);
+});
+
+test('checking lists the problems and publishes nothing; a viewer cannot check', async (t) => {
+  if (skip(t)) return;
+  const id = ids.tsheet;
+  const bad = [['Date', 'Name', 'Paid', 'Owner'], ['2027-02-30', '', 'maybe', 'nobody']];
+  const checked = await call('hr', 'POST', `/${id}/tables/holidays/check`, { values: bad });
+  assert.equal(checked.status, 200);
+  assert.equal(checked.json.ok, false);
+  assert.ok(checked.json.problems.length >= 4);
+  assert.deepEqual(Object.keys(checked.json.problems[0]).sort(), ['column', 'message', 'row']);
+  const fine = await call('hr', 'POST', `/${id}/tables/holidays/check`, { values: goodValues });
+  assert.deepEqual([fine.json.ok, fine.json.rowCount], [true, 2]);
+  assert.equal((await call('vi', 'POST', `/${id}/tables/holidays/check`, { values: goodValues })).status, 403);
+  assert.equal((await call('hr', 'POST', `/${id}/tables/missing/check`, { values: goodValues })).status, 404);
+  assert.equal((await call('hr', 'POST', `/${id}/tables/holidays/check`, { values: 'x' })).status, 400);
+  assert.equal((await call('hr', 'GET', `/${id}/tables/holidays`)).status, 404, 'nothing is published yet');
+});
+
+test('publishing a clean table saves typed rows that people with access can read; a table with problems is refused and keeps the last good version', async (t) => {
+  if (skip(t)) return;
+  const id = ids.tsheet;
+  const refused = await call('hr', 'POST', `/${id}/tables/holidays/publish`, { values: [['Date', 'Name', 'Paid', 'Owner'], ['bad', 'x', '', '']] });
+  assert.equal(refused.status, 400);
+  assert.ok(refused.json.problems.length > 0);
+  assert.equal((await call('hr', 'GET', `/${id}/tables/holidays`)).status, 404, 'still nothing published');
+  const published = await call('ed', 'POST', `/${id}/tables/holidays/publish`, { values: goodValues });
+  assert.equal(published.status, 200, JSON.stringify(published.json));
+  assert.equal(published.json.rowCount, 2);
+  const read = await call('vi', 'GET', `/${id}/tables/holidays`);
+  assert.equal(read.status, 200);
+  assert.deepEqual(read.json.rows, [
+    { Date: '2027-01-01', Name: 'New Year', Paid: true, Owner: 'sh-ed' },
+    { Date: '2027-12-25', Name: 'Christmas', Paid: false, Owner: null },
+  ]);
+  assert.deepEqual(read.json.columns.map((c) => [c.name, c.type]), [['Date', 'date'], ['Name', 'text'], ['Paid', 'yesno'], ['Owner', 'person']]);
+  assert.ok(read.json.publishedAt);
+  assert.equal(read.json.publishedBy, 'sh-ed');
+  assert.equal((await call('out', 'GET', `/${id}/tables/holidays`)).status, 403);
+  // a later bad publish does not touch the good one
+  assert.equal((await call('hr', 'POST', `/${id}/tables/holidays/publish`, { values: [['Date', 'Name', 'Paid', 'Owner'], ['bad', 'x', '', '']] })).status, 400);
+  assert.equal((await call('hr', 'GET', `/${id}/tables/holidays`)).json.rows.length, 2);
+});
+
+test('the rest of the app reads the published snapshot through one function, and editing the sheet does not change it until the next publish', async (t) => {
+  if (skip(t)) return;
+  const id = ids.tsheet;
+  const query = (sql, params) => admin.query(sql, params);
+  const snapshot = await readPublishedTable(query, id, 'holidays');
+  assert.equal(snapshot.rows.length, 2);
+  assert.equal(snapshot.rows[0].Name, 'New Year');
+  assert.equal(await readPublishedTable(query, id, 'nope'), null);
+  const open = (await call('hr', 'GET', `/${id}`)).json;
+  const edited = open.data.tabs.map((tb) => (tb.id === 'tabH' ? { ...tb, rows: [...tb.rows, ['2027-07-04', 'Independence Day', 'yes', '']] } : tb));
+  assert.equal((await call('hr', 'PUT', `/${id}/data`, { baseRevision: open.sheet.revision, data: { tabs: edited } })).status, 200);
+  assert.equal((await readPublishedTable(query, id, 'holidays')).rows.length, 2, 'unchanged until published again');
+  const listed = (await call('hr', 'GET', `/${id}/tables`)).json.tables[0];
+  assert.equal(listed.published.rowCount, 2);
+  assert.equal(listed.published.stale, true, 'the sheet changed since it was published');
+  const again = await call('hr', 'POST', `/${id}/tables/holidays/publish`, { values: [...goodValues, ['2027-07-04', 'Independence Day', 'yes', '']] });
+  assert.equal(again.status, 200);
+  assert.equal((await readPublishedTable(query, id, 'holidays')).rows.length, 3);
+  assert.equal((await call('hr', 'GET', `/${id}/tables`)).json.tables[0].published.stale, false);
+});
+
+test('a formula that was not turned into a value is refused, and a table can be removed with the sheet', async (t) => {
+  if (skip(t)) return;
+  const id = ids.tsheet;
+  const withFormula = await call('hr', 'POST', `/${id}/tables/holidays/publish`, { values: [['Date', 'Name', 'Paid', 'Owner'], ['2027-01-01', '=A1', '', '']] });
+  assert.equal(withFormula.status, 400);
+  assert.match(withFormula.json.problems[0].message, /formula/i);
+  assert.equal((await call('vi', 'DELETE', `/${id}/tables/holidays`)).status, 403);
+  assert.equal((await call('ed', 'DELETE', `/${id}/tables/holidays`)).status, 200);
+  assert.equal((await call('hr', 'GET', `/${id}/tables`)).json.tables.length, 0);
+  assert.equal(await readPublishedTable((sql, p) => admin.query(sql, p), id, 'holidays'), null);
+  await call('hr', 'PUT', `/${id}/tables/holidays`, { tabId: 'tabH', columns: holidayColumns });
+  assert.equal((await call('hr', 'DELETE', `/${id}`)).status, 200);
+  assert.equal((await admin.query('SELECT COUNT(*)::int AS n FROM sheet_tables WHERE sheet_id = $1', [id])).rows[0].n, 0, 'tables go with the sheet');
+});
+
+test('at most 30 tables in a sheet, and a table name is used once per sheet', async (t) => {
+  if (skip(t)) return;
+  const id = await freshSheet();
+  for (let i = 0; i < 30; i += 1) assert.equal((await call('hr', 'PUT', `/${id}/tables/t${i}`, { tabId: 'tabH', columns: [{ name: 'A', type: 'text' }] })).status, 200);
+  assert.equal((await call('hr', 'PUT', `/${id}/tables/t30`, { tabId: 'tabH', columns: [{ name: 'A', type: 'text' }] })).status, 400);
+  assert.equal((await call('hr', 'PUT', `/${id}/tables/t0`, { tabId: 'tabN', columns: [{ name: 'B', type: 'number' }] })).status, 200, 'the same name redefines it');
+  assert.equal((await call('hr', 'GET', `/${id}/tables`)).json.tables.find((x) => x.name === 't0').tabId, 'tabN');
+});

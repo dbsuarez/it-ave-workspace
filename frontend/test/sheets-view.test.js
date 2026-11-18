@@ -36,7 +36,7 @@ const { sheetShareHtml } = require('../src/features/sheets-view');
 
 test('the bar has export for everyone, import for editors, and share and delete only for the owner', () => {
   const owner = sheetBarHtml({ sheet: sheet(), status: 'saved', isOwner: true });
-  for (const hook of ['data-sheet-export', 'data-sheet-import', 'data-sheet-share', 'data-sheet-delete']) assert.ok(owner.includes(hook), hook);
+  for (const hook of ['data-sheet-export', 'data-sheet-import', 'data-sheet-share', 'data-sheet-delete', 'data-sheet-tables']) assert.ok(owner.includes(hook), hook);
   const editor = sheetBarHtml({ sheet: sheet(), status: 'saved', isOwner: false });
   assert.match(editor, /data-sheet-export/);
   assert.match(editor, /data-sheet-import/);
