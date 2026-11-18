@@ -269,6 +269,9 @@ including on channel-room joins, message sends, replies, channel timeouts, and s
 | Public sign-up helpers | `GET /api/admin/registration`, `GET /api/admin/invitations/lookup?code=` |
 | Departments (for `@department` mentions) | `GET /api/hr/departments` (any member). User groups were folded into roles: a former group is now a zero-permission role |
 | Webhooks | `GET|POST /api/webhooks`, `DELETE /api/webhooks/:id` (channel moderators); `POST /api/hooks/:token` (public, `{"text": "..."}`, 30 per minute) |
+| Slash commands | `GET /api/commands?channelId=` (what you can run here); `POST /api/commands/execute` `{channelId, command, requestId}`; `POST /api/commands/confirm` `{channelId, token}` runs a previewed shared command (single use, 5 minutes). 30 requests per minute per user. |
+| Polls | `GET /api/polls/:id`; `POST /api/polls/:id/vote` `{optionIds}` (replaces your vote); `DELETE /api/polls/:id/vote`; `POST /api/polls/:id/close` (creator or channel moderator). Created with `/poll`. Socket event `poll_updated {pollId, channelId}` (ids only; clients refetch). |
+| Announcement channels | `PATCH /api/moderation/channels/:id/command-scope` `{scope: "announcements" | null}` (needs manage_channels; audited) |
 
 `POST /api/auth/register` accepts an optional `inviteCode`, required when sign-up is
 invitation-only.

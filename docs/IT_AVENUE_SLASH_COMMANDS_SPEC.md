@@ -13,7 +13,17 @@
 - Requester-only responses that are neither inserted into message history nor broadcast through channel sockets.
 - Metadata-only command auditing and tests for scope, identity isolation, invalid input, cancellation authorization and non-persistence.
 
-Attendance commands, policy/document commands, HR tickets and privileged administrative commands remain later roadmap work.
+### Workspace-wide commands (November 18, 2026)
+
+The framework now supports three scope types per command: `global` (any channel), `any-channel` (shared, non-personal channels) and `channel-scope` (a channel tag), plus per-command permissions, categories, usage text and shared results that post a message. Design: `docs/superpowers/specs/2026-11-18-slash-commands-extension-design.md`.
+
+- `/help [command]` (global) lists what you can use in this channel, grouped by category.
+- `/search <keywords>` (global) shows the same results as the Search box (up to 5 of each kind) with an "Open all results" button.
+- `/announce <text>` works only in channels tagged `announcements` (the built-in `#announcements`, or any channel an Owner tags in Moderation) and needs the `announce` permission. It shows a preview with the audience size, then posts an announcement message (`messages.kind = 'announcement'`).
+- `/poll "Question?" "Option A" "Option B" [--multi] [--anonymous] [--closes 2h]` works in shared channels except `#hr-inquiry`: 2 to 10 options, single choice by default, named voters unless anonymous, optional closing time (at most 30 days). Members vote on a card in the channel; the creator or a channel moderator can close it.
+- Shared commands are previewed and confirmed with a single-use token, or de-duplicated by request ID, so a retry never posts twice.
+
+Attendance commands, policy/document commands, HR tickets and privileged administrative commands remain later roadmap work. The other commands in `IT_AVENUE_SLASH_COMMANDS_SPEC_EXTENDED.md` are a catalog for later slices; each is a registry entry plus a handler.
 
 ## 1. Objectives
 
