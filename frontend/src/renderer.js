@@ -114,6 +114,7 @@ let state = {
   directMessages: {}, // userId -> []
   replyingTo: null,
   readReceipts: {},   // channelId -> [{id, username, avatarColor, readAt}]
+  readReceiptsOpen: {}, // channelId -> true while the whole "Seen by" list is open
   currentChannelId: null,
   currentDMId: null,
   view: 'channel',
@@ -597,6 +598,12 @@ function setupEventListeners() {
   setupDrawings();
   setupNotes();
   setupPollDialog();
+  on('channel-read-receipts', 'click', (event) => {
+    if (!event.target.closest('[data-read-receipts-toggle]')) return;
+    const id = state.currentChannelId;
+    state.readReceiptsOpen[id] = !state.readReceiptsOpen[id];
+    renderReadReceipts(id);
+  });
 
   // Compose
   on('btn-compose', 'click', () => els.messageInput?.focus());
@@ -1955,16 +1962,19 @@ function renderReadReceipts(channelId) {
     return;
   }
 
-  const visibleUsers = users.slice(0, 4);
-  const names = visibleUsers.map((u) => u.name || u.username).join(', ');
-  const more = users.length > visibleUsers.length ? ` +${users.length - visibleUsers.length} more` : '';
+  const summary = readReceiptsSummary(users, state.readReceiptsOpen[channelId]);
+  const visibleUsers = summary.visible;
+  const names = summary.text;
+  const toggle = summary.canToggle
+    ? `<button type="button" class="read-receipt-more" data-read-receipts-toggle aria-expanded="${summary.expanded}">${summary.expanded ? 'show less' : `+${summary.hidden} more`}</button>` : '';
+  container.classList.toggle('expanded', summary.expanded);
 
   container.style.display = 'flex';
   container.innerHTML = `
     <div class="read-receipt-avatars">
       ${visibleUsers.map((u) => { const name = u.name || u.username || 'User'; return `<span class="read-receipt-avatar" title="${escapeHtml(name)}" style="background:${escapeHtml(u.avatarColor || '#A855F7')};" data-user-id="${escapeHtml(String(u.id ?? u.userId ?? ''))}" role="button" tabindex="0" aria-label="View ${escapeHtml(name.trim())}'s profile">${escapeHtml(name.charAt(0).toUpperCase())}</span>`; }).join('')}
     </div>
-    <span class="read-receipt-text">Seen by ${escapeHtml(names)}${escapeHtml(more)}</span>
+    <span class="read-receipt-text">Seen by ${escapeHtml(names)}</span>${toggle}
   `;
 }
 

@@ -8305,3 +8305,10 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 
 .org-tools-sep { align-self: stretch; width: 1px; margin: 4px 6px; background: var(--border); }
 .org-save-label { font-size: 11px; color: var(--text-muted); padding-right: 2px; }
+
+/* "Seen by": the whole list opens in place */
+.read-receipt-more { padding: 0 2px; border: 0; background: transparent; color: var(--purple); font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.read-receipt-more:hover { text-decoration: underline; }
+.read-receipts.expanded { flex-wrap: wrap; align-items: flex-start; row-gap: 4px; }
+.read-receipts.expanded .read-receipt-avatars { flex-wrap: wrap; row-gap: 2px; }
+.read-receipts.expanded .read-receipt-text { white-space: normal; overflow: visible; text-overflow: clip; flex: 1 1 260px; }
