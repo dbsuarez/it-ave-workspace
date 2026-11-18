@@ -35,6 +35,7 @@ require.cache[dbPath] = {
       if (sql.includes('FROM files f')) {
         return { rows: [{ id: 23, original_name: 'budget.xlsx', uploader_username: 'alice', channel_id: 7, channel_name: 'general' }] };
       }
+      if (sql.includes('FROM forum_topics t')) return { rows: [] };
       throw new Error('Unexpected search query');
     },
   },
@@ -80,12 +81,13 @@ test('search returns messages, DMs, people, and only authorized file result grou
   assert.equal(data.directMessages[0].userId, 2);
   assert.equal(data.people[0].username, 'budget-owner');
   assert.equal(data.files[0].name, 'budget.xlsx');
-  assert.equal(queries.length, 4);
+  assert.deepEqual(data.topics, []);
+  assert.equal(queries.length, 5);
   assert.ok(queries.every(({ params }) => params[0] === 1 && params[1] === '%budget\\_\\%%'));
   assert.match(queries[0].sql, /channel_members WHERE user_id = \$1/);
   assert.match(queries[1].sql, /dm\.sender_id = \$1 OR dm\.receiver_id = \$1/);
   assert.match(queries[3].sql, /dm\.sender_id = \$1 OR dm\.receiver_id = \$1/);
-  for (const index of [0, 3]) {
+  for (const index of [0, 3, 4]) { // messages, files and forum topics all use the shared visibility predicate
     const sql = queries[index].sql;
     assert.match(sql, /NOT EXISTS \(\s*SELECT 1 FROM channel_bans/);
     assert.match(sql, /channel_department_grants cdg/);

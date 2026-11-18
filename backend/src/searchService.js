@@ -18,16 +18,17 @@ function validateSearchTerm(value) {
   return term;
 }
 
-// -> { messages, directMessages, people, files }, at most 5 of each kind (the JSON GET /api/search returns).
+// -> { messages, directMessages, people, files, topics }, at most 5 of each kind (the JSON GET /api/search returns).
 async function searchWorkspace(query, userId, searchTerm) {
   const pattern = `%${escapeLike(searchTerm)}%`;
-  const [messages, directMessages, people, files] = await Promise.all([
+  const [messages, directMessages, people, files, topics] = await Promise.all([
     query(
       `SELECT m.id, m.channel_id, c.name AS channel_name, m.content, m.created_at,
-              u.username
+              u.username, m.topic_id, ft.title AS topic_title
        FROM messages m
        JOIN channels c ON c.id = m.channel_id
        JOIN users u ON u.id = m.user_id
+       LEFT JOIN forum_topics ft ON ft.id = m.topic_id
        WHERE ${channelVisibleToUser('m.channel_id')}
          AND m.content ILIKE $2 ESCAPE '\\'
        ORDER BY m.created_at DESC, m.id DESC
@@ -57,7 +58,7 @@ async function searchWorkspace(query, userId, searchTerm) {
     ),
     query(
       `SELECT f.id, f.original_name, f.uploaded_at, u.username AS uploader_username,
-              c.id AS channel_id, c.name AS channel_name,
+              c.id AS channel_id, c.name AS channel_name, m.topic_id, ft.title AS topic_title,
               dm.sender_id, dm.receiver_id,
               CASE WHEN dm.sender_id = $1 THEN dm.receiver_id ELSE dm.sender_id END AS other_user_id,
               other_user.username AS other_username
@@ -65,6 +66,7 @@ async function searchWorkspace(query, userId, searchTerm) {
        JOIN users u ON u.id = f.uploaded_by
        LEFT JOIN messages m ON m.id = f.message_id
        LEFT JOIN channels c ON c.id = m.channel_id
+       LEFT JOIN forum_topics ft ON ft.id = m.topic_id
        LEFT JOIN direct_messages dm ON dm.id = f.dm_message_id
        LEFT JOIN users other_user
          ON other_user.id = CASE WHEN dm.sender_id = $1 THEN dm.receiver_id ELSE dm.sender_id END
@@ -78,6 +80,17 @@ async function searchWorkspace(query, userId, searchTerm) {
        LIMIT 5`,
       [userId, pattern]
     ),
+    // forum topics by title, in forums the person can see (same visibility as messages)
+    query(
+      `SELECT t.id, t.channel_id, c.name AS channel_name, t.title
+       FROM forum_topics t
+       JOIN channels c ON c.id = t.channel_id
+       WHERE ${channelVisibleToUser('t.channel_id')}
+         AND t.title ILIKE $2 ESCAPE '\\'
+       ORDER BY t.last_activity_at DESC, t.id DESC
+       LIMIT 5`,
+      [userId, pattern]
+    ),
   ]);
 
   return {
@@ -88,6 +101,8 @@ async function searchWorkspace(query, userId, searchTerm) {
       username: message.username,
       content: message.content,
       createdAt: message.created_at,
+      topicId: message.topic_id || null,
+      topicTitle: message.topic_title || null,
     })),
     directMessages: directMessages.rows.map((message) => ({
       id: message.id,
@@ -109,6 +124,14 @@ async function searchWorkspace(query, userId, searchTerm) {
       channelName: file.channel_name,
       userId: file.other_user_id,
       username: file.other_username,
+      topicId: file.topic_id || null,
+      topicTitle: file.topic_title || null,
+    })),
+    topics: topics.rows.map((topic) => ({
+      id: Number(topic.id),
+      channelId: topic.channel_id,
+      channelName: topic.channel_name,
+      title: topic.title,
     })),
   };
 }

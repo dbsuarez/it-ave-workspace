@@ -57,12 +57,18 @@ async function channelRecipientCandidates(query, channelId, excludedUserId) {
 async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
   try {
     const channel = await query('SELECT name FROM channels WHERE id = $1', [messageData.channelId]);
+    // a post in a department forum belongs to a topic; notifications say which
+    const topicTitle = messageData.topicId
+      ? ((await query('SELECT title FROM forum_topics WHERE id = $1', [messageData.topicId])).rows[0] || {}).title || null
+      : null;
+    const topicLabel = messageData.topicId ? { topicId: messageData.topicId, topicTitle } : {};
     const recipients = await channelRecipientCandidates(query, messageData.channelId, messageData.userId);
     for (const recipient of recipients) {
       if (!(await mayReceiveChannelActivity(query, recipient.id, messageData.channelId))) continue;
       io.to(`user_${recipient.id}`).emit('channel_activity', {
         channelId: messageData.channelId,
         channelName: channel.rows[0]?.name || '',
+        ...topicLabel,
         messageId: messageData.id,
         userId: messageData.userId,
         username: messageData.username,
@@ -74,6 +80,7 @@ async function notifyMessageActivity(io, query, messageData, parentAuthorId) {
       messageId: messageData.id,
       channelId: messageData.channelId,
       channelName: channel.rows[0]?.name || '',
+      ...topicLabel,
       actorId: messageData.userId,
       actorUsername: messageData.username,
       actorAvatarColor: messageData.avatarColor,

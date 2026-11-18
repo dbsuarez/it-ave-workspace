@@ -19,7 +19,7 @@ router.get('/', authenticateToken, async (req, res) => {
       `SELECT f.id, f.original_name, f.size, f.mime_type, f.uploaded_at, f.uploaded_by,
               u.username AS uploader_username,
               c.name AS channel_name,
-              m.channel_id,
+              m.channel_id, m.topic_id, ft.title AS topic_title,
               m.content AS message_content,
               dm.id AS dm_id,
               dm.sender_id,
@@ -28,6 +28,7 @@ router.get('/', authenticateToken, async (req, res) => {
        JOIN users u ON u.id = f.uploaded_by
        LEFT JOIN messages m ON m.id = f.message_id
        LEFT JOIN channels c ON c.id = m.channel_id
+       LEFT JOIN forum_topics ft ON ft.id = m.topic_id
        LEFT JOIN direct_messages dm ON dm.id = f.dm_message_id
        WHERE (
          (f.message_id IS NOT NULL AND ${channelVisibleToUser('m.channel_id')})
@@ -50,6 +51,8 @@ router.get('/', authenticateToken, async (req, res) => {
         uploaderUsername: f.uploader_username,
         channelName: f.channel_name,
         channelId: f.channel_id,
+        topicId: f.topic_id || null,
+        topicTitle: f.topic_title || null,
         messageContent: f.message_content,
       })),
     });

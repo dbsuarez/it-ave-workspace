@@ -33,11 +33,13 @@ const preview = (text) => String(text || '').replace(/\s+/g, ' ').slice(0, 120);
 async function search(ctx, args) {
   const term = validateSearchTerm(args.join(' '));
   const found = await searchWorkspace(ctx.query, ctx.userId, term);
+  const where = (item) => `#${item.channelName}${item.topicTitle ? ` › ${item.topicTitle}` : ''}`;
   const rows = [
-    ...found.messages.map((m) => ['Message', `${m.username}: ${preview(m.content)}`, `#${m.channelName}`]),
+    ...found.topics.map((t) => ['Topic', t.title, `#${t.channelName}`]),
+    ...found.messages.map((m) => ['Message', `${m.username}: ${preview(m.content)}`, where(m)]),
     ...found.directMessages.map((m) => ['Direct message', `${m.username}: ${preview(m.content)}`, 'Direct']),
     ...found.people.map((p) => ['Person', p.username, '']),
-    ...found.files.map((f) => ['File', f.name, f.channelName ? `#${f.channelName}` : 'Direct']),
+    ...found.files.map((f) => ['File', f.name, f.channelName ? where(f) : 'Direct']),
   ];
   const actions = [{ type: 'open-route', route: 'search', query: term }];
   if (!rows.length) return privateCard('search-results', `Search results for "${term}"`, { message: `Nothing found for "${term}".` }, actions);

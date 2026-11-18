@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { superadminMaySee } = require('../ownerChannelAccess');
+const { channelVisibleToUser } = require('../channelVisibilitySql');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -17,9 +17,10 @@ const SOURCES = {
            u.avatar_color AS actor_avatar_color,
            CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
              THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
-           m.content AS preview, NULL::text AS emoji, mm.created_at
+           m.content AS preview, NULL::text AS emoji, mm.created_at, m.topic_id, ft.title AS topic_title
     FROM message_mentions mm
     JOIN messages m ON m.id = mm.message_id
+    LEFT JOIN forum_topics ft ON ft.id = m.topic_id
     JOIN channels c ON c.id = m.channel_id
     JOIN users u ON u.id = m.user_id
     WHERE mm.user_id = $1 AND m.user_id <> $1`,
@@ -30,9 +31,10 @@ const SOURCES = {
            u.avatar_color AS actor_avatar_color,
            CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
              THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
-           m.content AS preview, NULL::text AS emoji, m.created_at
+           m.content AS preview, NULL::text AS emoji, m.created_at, m.topic_id, ft.title AS topic_title
     FROM messages m
     JOIN messages parent ON parent.id = m.reply_to
+    LEFT JOIN forum_topics ft ON ft.id = m.topic_id
     JOIN channels c ON c.id = m.channel_id
     JOIN users u ON u.id = m.user_id
     WHERE parent.user_id = $1 AND m.user_id <> $1`,
@@ -43,9 +45,10 @@ const SOURCES = {
            u.avatar_color AS actor_avatar_color,
            CASE WHEN u.photo_file IS NOT NULL AND u.photo_updated_at IS NOT NULL
              THEN EXTRACT(EPOCH FROM u.photo_updated_at) * 1000 END AS actor_photo_version,
-           m.content AS preview, r.emoji::text AS emoji, r.created_at
+           m.content AS preview, r.emoji::text AS emoji, r.created_at, m.topic_id, ft.title AS topic_title
     FROM reactions r
     JOIN messages m ON m.id = r.message_id
+    LEFT JOIN forum_topics ft ON ft.id = m.topic_id
     JOIN channels c ON c.id = m.channel_id
     JOIN users u ON u.id = r.user_id
     WHERE m.user_id = $1 AND r.user_id <> $1`,
@@ -103,21 +106,11 @@ function mapCanvasItem(row, seenAt) {
 
 function feedSql(types) {
   const union = types.map((type) => SOURCES[type]).join('\n UNION ALL \n');
+  // the shared visibility predicate (membership, department and direct grants, bans, the Owner switch), so a forum
+  // opened by department membership shows its mentions and a ban or a move out of the department hides them at once
   return `
     SELECT e.* FROM (${union}) e
-    WHERE EXISTS (
-      SELECT 1 FROM users me JOIN channels visible ON visible.id = e.channel_id
-      WHERE me.id = $1 AND (
-        (visible.is_personal = TRUE AND visible.created_by = me.id)
-        OR (visible.is_personal = FALSE AND (${superadminMaySee('me', 'visible')} OR EXISTS (
-          SELECT 1 FROM channel_members cm WHERE cm.channel_id = e.channel_id AND cm.user_id = me.id
-        ) OR EXISTS (
-          SELECT 1 FROM channel_overrides co WHERE co.channel_id = e.channel_id
-            AND co.subject_type = 'department' AND co.subject_id = me.department_id
-            AND 'view_channel' = ANY(co.allow)
-        )))
-      )
-    )`;
+    WHERE ${channelVisibleToUser('e.channel_id')}`;
 }
 
 // GET /api/activity?type=all|mention|reply|reaction&limit=50
@@ -156,6 +149,8 @@ router.get('/', async (req, res) => {
         messageId: row.message_id,
         channelId: row.channel_id,
         channelName: row.channel_name,
+        topicId: row.topic_id || null,
+        topicTitle: row.topic_title || null,
         actorId: row.actor_id,
         actorUsername: row.actor_username,
         actorDisplayName: row.actor_display_name,
