@@ -37,6 +37,7 @@ The `init.sql` file creates:
 - **reminders** - Per-user reminders, optionally linked to a message
 - **scheduled_messages** - Messages waiting to be sent to a channel or a person
 - **invitations** - Single-use sign-up codes (stored as hashes) with account type and channels
+- **department_roles** - Roles given to every member of a department (custom roles only); `user_roles.auto` marks assignments a rule made. Both live in `migrations.js`
 - **channel_links** - Shared web links shown in a channel's Links tab
 - **drawings** - Excalidraw whiteboards: title, `scene` JSONB (shapes), `revision`, owner, and nullable `channel_id` / `topic_id` / `message_id` (standalone when `channel_id` is null). Chat cards are `messages` rows with `kind = 'drawing'`
 - **drawing_members** - Who a standalone drawing is shared with (`editor` or `viewer`)

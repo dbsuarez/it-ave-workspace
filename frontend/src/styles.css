@@ -8150,3 +8150,6 @@ body .ttd-dialog .ttd-template, body .ttd-dialog .ttd-template-restore { font: i
 body .ttd-dialog .ttd-template:hover, body .ttd-dialog .ttd-template-restore:hover { background: #f0efff; border-color: #6965db; }
 body .ttd-dialog .ttd-template-restore { border-style: dashed; }
 body .ttd-dialog .ttd-template-restore[hidden] { display: none; }
+
+/* Roles: departments that give a role */
+.role-dept-list { max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }

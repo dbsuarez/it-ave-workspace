@@ -4,7 +4,7 @@
 // custom roles up and down, and gives custom roles to people. Owner and HR are built in: they are given with the
 // Superadmin and HR switches on a person's record. The server enforces the rules; this only shows what is allowed.
 
-const rolesState = { roles: [], permissions: [], people: [], loaded: false };
+const rolesState = { roles: [], permissions: [], people: [], departments: [], loaded: false };
 
 function roleDot(role) {
   return `<span class="role-dot" style="background:${escapeHtml(role.color)}"></span>`;
@@ -31,7 +31,7 @@ function renderRolesPanel() {
     return `<div class="role-row" data-role-id="${role.id}">
       ${roleDot(role)}
       <div class="role-row-main"><strong>${escapeHtml(role.name)}</strong>${role.builtin ? ` <span class="role-tag">Built in</span>` : ''}
-        <small>${escapeHtml(roleSummary(role))} · ${role.memberCount} ${role.memberCount === 1 ? 'person' : 'people'}${role.builtin === 'everyone' || role.builtin === 'owner' ? '' : ` · mention with @${escapeHtml(roleHandleOf(role.name))}`}</small></div>
+        <small>${escapeHtml(roleSummary(role))} · ${role.memberCount} ${role.memberCount === 1 ? 'person' : 'people'}${role.builtin === 'everyone' || role.builtin === 'owner' ? '' : ` · mention with @${escapeHtml(roleHandleOf(role.name))}`}${roleDepartmentsText(role, rolesState.departments) ? ` · ${escapeHtml(roleDepartmentsText(role, rolesState.departments))}` : ''}</small></div>
       <div class="role-row-actions">
         ${movable ? `<button type="button" class="btn small" data-role-move="up" ${customIndex <= 0 ? 'disabled' : ''} aria-label="Move ${escapeHtml(role.name)} up">&uarr;</button>
         <button type="button" class="btn small" data-role-move="down" ${customIndex === custom.length - 1 ? 'disabled' : ''} aria-label="Move ${escapeHtml(role.name)} down">&darr;</button>` : ''}
@@ -46,7 +46,7 @@ function renderRolesPanel() {
     </div>
     <div class="moderation-card roles-card" id="admin-role-assignments" data-admin-control-panel="assignments">
       <h2>Who has which role</h2>
-      <p class="moderation-help">Tick a box to give or take a role; it saves at once. Owner and HR are shown for reference: they are set on the person's record (Superadmin and HR switches).</p>
+      <p class="moderation-help">Tick a box to give or take a role; it saves at once. A box that is ticked and cannot be changed is a role the person's department gives (set it on the role, under Edit). Owner and HR are shown for reference: they are set on the person's record (Superadmin and HR switches).</p>
       <div class="role-table-tools"><input id="role-table-search" type="search" placeholder="Search people" aria-label="Search people"></div>
       <div class="role-table-wrap" id="role-table-host"><div class="loading-state">Loading…</div></div>
     </div>
@@ -99,7 +99,7 @@ async function runAccessCheck() {
     <div class="role-table-wrap"><table class="role-table"><thead><tr><th>Channel</th><th class="role-col">Can see it</th>${keys.slice(1).map((k) => `<th class="role-col">${escapeHtml(k.label)}</th>`).join('')}<th>Why</th></tr></thead><tbody>${chans}</tbody></table></div>`;
 }
 
-const roleTable = { assignments: {}, owners: [], hr: [], query: '' };
+const roleTable = { assignments: {}, auto: {}, owners: [], hr: [], query: '' };
 
 async function loadRoleTable() {
   try {
@@ -107,6 +107,7 @@ async function loadRoleTable() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not load assignments');
     roleTable.assignments = data.assignments || {};
+    roleTable.auto = data.auto || {};
     roleTable.owners = data.owners || [];
     roleTable.hr = data.hr || [];
     renderRoleTable();
@@ -125,10 +126,11 @@ function renderRoleTable() {
   const head = `<tr><th>Person</th><th class="role-col">Owner</th>${custom.map((r) => `<th class="role-col">${roleDot(r)} ${escapeHtml(r.name)}</th>`).join('')}</tr>`;
   const rows = people.map((p) => {
     const held = new Set(roleTable.assignments[p.id] || []);
+    const given = new Set(roleTable.auto[p.id] || []);
     return `<tr data-role-person="${p.id}">
       <td><strong>${escapeHtml(personName(p))}</strong><small>${escapeHtml(p.jobTitle || '')}</small></td>
       <td class="role-col">${roleTable.owners.includes(p.id) ? '&#10003;' : ''}</td>
-      ${custom.map((r) => `<td class="role-col"><input type="checkbox" data-role-toggle="${r.id}" aria-label="${escapeHtml(r.name)} for ${escapeHtml(personName(p))}"${held.has(r.id) ? ' checked' : ''}${r.canManage ? '' : ' disabled'}></td>`).join('')}
+      ${custom.map((r) => `<td class="role-col"><input type="checkbox" data-role-toggle="${r.id}" aria-label="${escapeHtml(r.name)} for ${escapeHtml(personName(p))}"${held.has(r.id) ? ' checked' : ''}${r.canManage && !given.has(r.id) ? '' : ' disabled'}${given.has(r.id) ? ' title="Given by their department"' : ''}></td>`).join('')}
     </tr>`;
   }).join('');
   host.innerHTML = custom.length
@@ -179,8 +181,9 @@ async function loadRolesPanel() {
   if (!host) return;
   host.innerHTML = '<div class="loading-state">Loading roles…</div>';
   try {
-    const [rolesRes, permsRes, peopleRes] = await Promise.all([api('/api/roles'), api('/api/roles/permissions'), api('/api/people')]);
+    const [rolesRes, permsRes, peopleRes, deptRes] = await Promise.all([api('/api/roles'), api('/api/roles/permissions'), api('/api/people'), api('/api/hr/departments')]);
     const roles = await rolesRes.json();
+    rolesState.departments = deptRes.ok ? ((await deptRes.json().catch(() => ({}))).departments || []) : [];
     const perms = await permsRes.json();
     const people = await peopleRes.json();
     if (!rolesRes.ok) throw new Error(roles.error || 'Could not load roles');
@@ -220,6 +223,9 @@ function openRoleEditor(roleId) {
           <input id="role-color" type="color" value="${escapeHtml(role ? role.color : '#6B21A8')}"></div>
         <h4 class="modal-section-title">Permissions</h4>
         <div class="role-perms">${checks}</div>
+        ${editable && !(role && role.builtin) ? `<h4 class="modal-section-title">Given automatically to members of</h4>
+        <p class="moderation-help">Everyone in a ticked department gets this role, and loses it when they leave. A role someone was given by hand is never taken away.</p>
+        ${roleDepartmentChecklistHtml(rolesState.departments, role ? role.departmentIds : [], { disabled: Boolean(role && !role.canManage) })}` : ''}
         <p class="role-error" id="role-error" role="alert" hidden></p>
       </div>
       <div class="modal-footer">
@@ -253,9 +259,23 @@ function openRoleEditor(roleId) {
       permissions: [...overlay.querySelectorAll('input[name="perm"]:checked')].map((box) => box.value),
     };
     if (!role || role.canRename) body.name = overlay.querySelector('#role-name').value;
+    const deptBoxes = [...overlay.querySelectorAll('input[name="roleDept"]')];
+    const chosenDepartments = deptBoxes.filter((box) => box.checked).map((box) => Number(box.value));
+    const departmentsChanged = deptBoxes.length > 0 && !(role && role.builtin) && !sameDepartmentList(role ? role.departmentIds : [], chosenDepartments);
+    if (departmentsChanged) {
+      const name = body.name || (role && role.name) || 'this role';
+      const ok = await confirmAction({ title: 'Give this role by department?', message: roleDepartmentConfirmText(name, rolesState.departments, role ? role.departmentIds : [], chosenDepartments), confirmLabel: 'Save' });
+      if (!ok) return;
+    }
     const res = await api(role ? `/api/roles/${role.id}` : '/api/roles', { method: role ? 'PUT' : 'POST', body: JSON.stringify(body) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { showError(data.error || 'Could not save the role'); return; }
+    if (departmentsChanged) {
+      const savedId = role ? role.id : data.role.id;
+      const set = await api(`/api/roles/${savedId}/departments`, { method: 'PUT', body: JSON.stringify({ departmentIds: chosenDepartments }) });
+      const result = await set.json().catch(() => ({}));
+      if (!set.ok) { showError(`The role was saved, but the departments were not: ${result.error || 'try again'}`); loadRolesPanel(); return; }
+    }
     closeRoleModal();
     showToast(role ? 'Role saved.' : 'Role created.', 'success');
     loadRolesPanel();
@@ -271,11 +291,12 @@ async function showPersonRoles(personId, boxId = 'role-assign-box') {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { box.innerHTML = `<p class="role-error">${escapeHtml(data.error || 'Could not load their roles')}</p>`; return; }
   const held = new Set(data.roleIds);
+  const given = new Set(data.autoRoleIds || []);
   const custom = rolesState.roles.filter((r) => !r.builtin);
   box.innerHTML = custom.length ? `
     <div class="role-assign-list">${custom.map((r) => `
-      <label class="role-perm"><input type="checkbox" name="assign" value="${r.id}"${held.has(r.id) ? ' checked' : ''}${r.canManage ? '' : ' disabled'}>
-        <span>${roleDot(r)} <strong>${escapeHtml(r.name)}</strong></span></label>`).join('')}</div>
+      <label class="role-perm"><input type="checkbox" name="assign" value="${r.id}"${held.has(r.id) ? ' checked' : ''}${r.canManage && !given.has(r.id) ? '' : ' disabled'}>
+        <span>${roleDot(r)} <strong>${escapeHtml(r.name)}</strong>${given.has(r.id) ? ' <small>given by their department</small>' : ''}</span></label>`).join('')}</div>
     <button type="button" class="btn primary" data-role-assign-save data-role-person-id="${personId}" data-box="${boxId}">Save roles</button>`
     : '<p class="moderation-help">Create a role first.</p>';
 }

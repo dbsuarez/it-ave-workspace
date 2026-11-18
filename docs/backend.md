@@ -372,6 +372,15 @@ Live editing (`sockets/drawings.js`, `createDrawingHub`): the server keeps one r
 | `drawing:role` / `drawing:revoked` / `drawing:removed` / `drawing:error` | Server → Client | Role changed, access lost, drawing deleted, refusal |
 | `drawing_created` | Server → Client | A drawing was added to a conversation |
 
+### Roles given by department
+`department_roles (department_id, role_id)` marks a custom role as given to every member of those departments; `user_roles.auto = true` marks the assignments a rule made (a hand-given assignment of the same role stays `auto = false` and is never removed by a rule). `departmentRoles.js` holds `reconcileUser`, `reconcileDepartment` and `reconcileEveryone` (add what the person's departments give, remove automatic rows that no longer apply, keep `users.is_hr` in step) and `announceRoleChanges` (audit `roles_assigned` with `source: 'department rule'`, plus a live `permissions_updated`). It runs after the edit-person form, account import, `PUT /api/organization/users/:id/departments`, deleting a department, and once at start-up. A person's departments are all rows in `user_departments`, not only the primary one.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| PUT | `/api/roles/:id/departments` | `{ departmentIds }`: which departments give the role. Role managers only, roles below their rank, custom roles only. Returns `{ departmentIds, gained, lost }`; audited as `role_departments_changed` |
+| GET | `/api/roles` | each role also carries `departmentIds` |
+| GET | `/api/roles/assignments` | also returns `auto: { userId: [roleId] }`; `PUT /api/roles/users/:id` leaves automatic roles in place, `GET /api/roles/users/:id` returns `autoRoleIds` |
+
 ### Socket.io Events
 
 | Event | Direction | Description |

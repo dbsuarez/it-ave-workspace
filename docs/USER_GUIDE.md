@@ -142,6 +142,11 @@ Only an **Owner** can do this.
 ### How do I give someone more rights?
 **Moderation > Roles** holds the roles and the **Assignments** table (the header stays visible as you scroll). Give a role the **Manage messages** permission to let its members moderate every forum and channel they can open. Roles also decide the colour of a person's name.
 
+### How do I give a role to everyone in a department automatically?
+In **Moderation > Roles**, press **Edit** on a role and tick the departments under **Given automatically to members of**. Everyone in those departments gets the role now, anyone who joins later gets it too, and anyone who leaves loses it. In the Assignments table such a box is ticked and cannot be changed by hand (hover it to see why); to take the role away from one person, remove them from the department or change the role's departments. A role someone was given by hand is never taken away by this, and the built-in Owner and Everyone roles can never be given this way.
+
+Good to know: a person belongs to every department listed on their record, not only their main one. Changing someone's **main** department on their record keeps the old one as an extra, so they keep what it gave. To take them out of the old department, remove it in the department list on their record. You can only choose roles below your own rank, and every change appears in the audit log.
+
 ### Why can an Owner not read a private channel or forum?
 By design. Owners see private channels and forums they are not members of only when the **private-channel switch** (Moderation, Superadmin tab) is on, and turning it on is recorded.
 

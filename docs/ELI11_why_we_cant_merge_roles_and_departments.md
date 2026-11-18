@@ -92,8 +92,8 @@ You can have that today, in two honest ways:
 The real wish behind the question is usually: "I don't want to tick two things for every new hire." That is a fair
 wish, and the answer is not merging. It would be a **rule that links them on purpose**: for example "anyone added to the
 MIS department automatically gets the 'MIS tools' role, and loses it when they leave". The two boxes stay separate, but
-one fills in the other, so a human decided it once. **This is not built.** If you want it, say so and it can be added as
-an optional setting per department.
+one fills in the other, so a human decided it once. **This is built now:** in **Moderation > Roles**, edit a role and tick the departments under
+"Given automatically to members of". Details in the User Guide.
 
 ## Three questions to settle it next time
 
