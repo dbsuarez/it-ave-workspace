@@ -8,6 +8,7 @@ const authenticateToken = require('../middleware/auth');
 const { PERMISSIONS, can, loadAccess, explainPermission } = require('../permissions');
 const { VIEW_AS_MINUTES } = require('../viewAs');
 const { actorProfile, canManageRole, ungrantable, cleanRoleInput, roleHandle, MAX_CUSTOM_ROLES } = require('../roles');
+const departmentRoles = require('../departmentRoles');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -47,7 +48,7 @@ async function roleById(id) {
 
 const mapRole = (row, actor) => ({
   id: row.id, name: row.name, color: row.color, position: row.position, permissions: row.permissions,
-  builtin: row.builtin_key || null, memberCount: Number(row.member_count || 0),
+  builtin: row.builtin_key || null, memberCount: Number(row.member_count || 0), departmentIds: (row.department_ids || []).map(Number),
   canManage: canManageRole(actor, row), canRename: !row.builtin_key,
 });
 
@@ -180,7 +181,8 @@ router.get('/', async (req, res) => {
                 WHEN 'owner' THEN (SELECT COUNT(*) FROM users WHERE is_superadmin AND deactivated_at IS NULL)
                 WHEN 'everyone' THEN (SELECT COUNT(*) FROM users WHERE account_type = 'member' AND deactivated_at IS NULL)
                 ELSE (SELECT COUNT(*) FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_id = r.id AND u.deactivated_at IS NULL)
-              END AS member_count
+              END AS member_count,
+              COALESCE((SELECT array_agg(dr.department_id ORDER BY dr.department_id) FROM department_roles dr WHERE dr.role_id = r.id), '{}') AS department_ids
        FROM roles r ORDER BY r.position, r.id`
     );
     res.json({ roles: result.rows.map((row) => mapRole(row, actor)) });
@@ -208,6 +210,38 @@ router.post('/', async (req, res) => {
     await audit(req.user.userId, 'role_created', null, { roleId: created.id, name: clean.name, permissions: clean.permissions });
     res.status(201).json({ role: mapRole({ ...(await roleById(created.id)), member_count: 0 }, actor) });
   } catch (err) { sendError(res, err, 'Create role error'); }
+});
+
+// Which departments give this role to their members: PUT { departmentIds }. Members gain it now; people who no longer qualify
+// lose it (a role someone was given by hand is never taken). Returns { departmentIds, gained, lost } (how many people).
+router.put('/:id/departments', async (req, res) => {
+  try {
+    const actor = await requireRoleManager(req.user.userId);
+    const role = await roleById(parseId(req.params.id));
+    if (!role) throw fail(404, 'Role not found');
+    if (role.builtin_key) throw fail(400, 'The built-in roles cannot be given by a department');
+    if (!canManageRole(actor, role)) throw fail(403, 'You cannot change a role at or above your own');
+    const wanted = req.body && req.body.departmentIds;
+    if (!Array.isArray(wanted) || wanted.some((id) => !Number.isInteger(id) || id < 1)) throw fail(400, 'departmentIds must be a list of department ids');
+    const departmentIds = [...new Set(wanted)].sort((a, b) => a - b);
+    if (departmentIds.length) {
+      const found = (await query('SELECT id FROM departments WHERE id = ANY($1::int[])', [departmentIds])).rows;
+      if (found.length !== departmentIds.length) throw fail(400, 'Unknown department');
+    }
+    const before = (await query('SELECT department_id FROM department_roles WHERE role_id = $1 ORDER BY department_id', [role.id])).rows.map((r) => r.department_id);
+    await query('DELETE FROM department_roles WHERE role_id = $1 AND NOT (department_id = ANY($2::int[]))', [role.id, departmentIds]);
+    if (departmentIds.length) {
+      await query('INSERT INTO department_roles (department_id, role_id) SELECT d, $1 FROM unnest($2::int[]) AS d ON CONFLICT DO NOTHING', [role.id, departmentIds]);
+    }
+    const changes = await departmentRoles.reconcileEveryone(query);
+    await audit(req.user.userId, 'role_departments_changed', null, { roleId: role.id, name: role.name, before, after: departmentIds });
+    await departmentRoles.announceRoleChanges(query, changes, { actorId: req.user.userId, io: req.io });
+    res.json({
+      departmentIds,
+      gained: changes.filter((c) => c.added.includes(role.id)).length,
+      lost: changes.filter((c) => c.removed.includes(role.id)).length,
+    });
+  } catch (err) { sendError(res, err, 'Role departments error'); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -284,7 +318,9 @@ router.put('/users/:userId', async (req, res) => {
     const byId = new Map(custom.map((r) => [r.id, r]));
     if (wanted.some((id) => !byId.has(id))) throw fail(400, 'Unknown role');
     const held = new Set((await query('SELECT role_id FROM user_roles WHERE user_id = $1', [userId])).rows.map((r) => r.role_id));
-    const want = new Set(wanted);
+    // roles a department gives cannot be taken off one person by hand: they stay in the list
+    const given = (await query('SELECT role_id FROM user_roles WHERE user_id = $1 AND auto', [userId])).rows.map((r) => r.role_id);
+    const want = new Set([...wanted, ...given]);
     const toAdd = [...want].filter((id) => !held.has(id));
     const toRemove = [...held].filter((id) => !want.has(id));
     for (const id of [...toAdd, ...toRemove]) {
@@ -305,11 +341,14 @@ router.put('/users/:userId', async (req, res) => {
 router.get('/assignments', async (req, res) => {
   try {
     await requireRoleManager(req.user.userId);
-    const held = (await query('SELECT user_id, role_id FROM user_roles')).rows;
-    const assignments = {};
-    for (const row of held) (assignments[row.user_id] = assignments[row.user_id] || []).push(row.role_id);
+    const held = (await query('SELECT user_id, role_id, auto FROM user_roles')).rows;
+    const assignments = {}; const auto = {};
+    for (const row of held) {
+      (assignments[row.user_id] = assignments[row.user_id] || []).push(row.role_id);
+      if (row.auto) (auto[row.user_id] = auto[row.user_id] || []).push(row.role_id);
+    }
     const flags = (await query("SELECT id, is_superadmin, is_hr FROM users WHERE account_type = 'member' AND deactivated_at IS NULL")).rows;
-    res.json({ assignments, owners: flags.filter((u) => u.is_superadmin).map((u) => u.id), hr: flags.filter((u) => u.is_hr).map((u) => u.id) });
+    res.json({ assignments, auto, owners: flags.filter((u) => u.is_superadmin).map((u) => u.id), hr: flags.filter((u) => u.is_hr).map((u) => u.id) });
   } catch (err) { sendError(res, err, 'Role assignments error'); }
 });
 
@@ -319,8 +358,8 @@ router.get('/users/:userId', async (req, res) => {
     await requireRoleManager(req.user.userId);
     const userId = parseId(req.params.userId);
     if (!userId) throw fail(400, 'A valid person is required');
-    const result = await query('SELECT role_id FROM user_roles WHERE user_id = $1', [userId]);
-    res.json({ roleIds: result.rows.map((r) => r.role_id) });
+    const result = await query('SELECT role_id, auto FROM user_roles WHERE user_id = $1', [userId]);
+    res.json({ roleIds: result.rows.map((r) => r.role_id), autoRoleIds: result.rows.filter((r) => r.auto).map((r) => r.role_id) });
   } catch (err) { sendError(res, err, 'Person roles error'); }
 });
 
