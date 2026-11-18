@@ -12,7 +12,6 @@ const channelAccessPolicyRoutes = require('./src/routes/channelAccessPolicies');
 const messageRoutes = require('./src/routes/messages');
 const userRoutes = require('./src/routes/users');
 const filesRoutes = require('./src/routes/files');
-const notesRoutes = require('./src/routes/notes');
 const searchRoutes = require('./src/routes/search');
 const listsRoutes = require('./src/routes/lists');
 const canvasesRoutes = require('./src/routes/canvases');
@@ -72,6 +71,8 @@ app.use('/m', (req, res, next) => {
 if (config.LOG_REQUESTS) app.use(requestLogger());
 // Drawings take large bodies (a scene or a picture), so the router has its own JSON limit and is mounted before the general parser.
 app.use('/api/drawings', (req, res, next) => { req.io = io; next(); }, require('./src/routes/drawings'));
+// Notes take pictures as base64 in JSON, so the notes router parses its own (larger) bodies, before the general parser
+app.use('/api/notes', require('./src/routes/notes'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -99,7 +100,6 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/messages', messageEditRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/files', filesRoutes);
-app.use('/api/notes', notesRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/lists', listsRoutes);
 app.use('/api/canvases', canvasesRoutes);
