@@ -71,6 +71,34 @@ module.exports = [
   "ALTER TABLE messages ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'message'",
   // The built-in #announcements channel is where /announce works
   "UPDATE channels SET command_scope = 'announcements' WHERE name = 'announcements' AND command_scope IS NULL AND created_by IS NULL AND is_personal = FALSE",
+  // Polls created with /poll: the poll, its options, and one row per person per chosen option
+  `CREATE TABLE IF NOT EXISTS polls (
+     id BIGSERIAL PRIMARY KEY,
+     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+     message_id INTEGER NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE,
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     question VARCHAR(200) NOT NULL,
+     multiple BOOLEAN NOT NULL DEFAULT FALSE,
+     anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+     closes_at TIMESTAMP WITH TIME ZONE,
+     closed_at TIMESTAMP WITH TIME ZONE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS poll_options (
+     id BIGSERIAL PRIMARY KEY,
+     poll_id BIGINT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+     position INTEGER NOT NULL,
+     label VARCHAR(100) NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS poll_votes (
+     poll_id BIGINT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+     option_id BIGINT NOT NULL REFERENCES poll_options(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     voted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     PRIMARY KEY (poll_id, option_id, user_id)
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_poll_options_poll ON poll_options(poll_id, position)',
+  'CREATE INDEX IF NOT EXISTS idx_poll_votes_user ON poll_votes(poll_id, user_id)',
   // One-time confirmation tokens for shared slash commands (only a hash of the token is stored)
   `CREATE TABLE IF NOT EXISTS command_pending (
      id BIGSERIAL PRIMARY KEY,

@@ -10,6 +10,29 @@ async function loadSender(query, userId) {
   return result.rows[0];
 }
 
+// Builds the message payload, tells the channel room and notifies people. `extra` adds fields such as `poll`.
+async function broadcastChannelMessage(io, query, message, sender, extra = {}) {
+  const messageData = {
+    id: message.id,
+    channelId: message.channel_id,
+    userId: message.user_id,
+    username: sender.username,
+    avatarColor: sender.avatar_color,
+    content: message.content,
+    kind: message.kind || 'message',
+    replyTo: null,
+    replyToMessage: null,
+    createdAt: message.created_at,
+    attachments: [],
+    reactions: [],
+    clientMessageId: null,
+    ...extra,
+  };
+  io.to(`channel_${message.channel_id}`).emit('new_message', messageData);
+  await notifyMessageActivity(io, query, messageData, null);
+  return messageData;
+}
+
 async function postChannelMessage(io, query, { userId, channelId, content, kind = 'message' }) {
   await ensureCanPostToChannel(query, userId, channelId);
   const sender = await loadSender(query, userId);
@@ -19,25 +42,7 @@ async function postChannelMessage(io, query, { userId, channelId, content, kind 
      RETURNING id, channel_id, user_id, content, reply_to, created_at, kind`,
     [channelId, userId, content, kind]
   );
-  const message = result.rows[0];
-  const messageData = {
-    id: message.id,
-    channelId: message.channel_id,
-    userId: message.user_id,
-    username: sender.username,
-    avatarColor: sender.avatar_color,
-    content: message.content,
-    kind: message.kind,
-    replyTo: null,
-    replyToMessage: null,
-    createdAt: message.created_at,
-    attachments: [],
-    reactions: [],
-    clientMessageId: null,
-  };
-  io.to(`channel_${channelId}`).emit('new_message', messageData);
-  await notifyMessageActivity(io, query, messageData, null);
-  return messageData;
+  return broadcastChannelMessage(io, query, result.rows[0], sender);
 }
 
 async function postDirectMessage(io, query, { userId, receiverId, content }) {
@@ -66,4 +71,4 @@ async function postDirectMessage(io, query, { userId, receiverId, content }) {
   return dmData;
 }
 
-module.exports = { postChannelMessage, postDirectMessage };
+module.exports = { postChannelMessage, postDirectMessage, broadcastChannelMessage, loadSender };

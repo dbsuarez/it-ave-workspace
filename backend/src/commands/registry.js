@@ -1,6 +1,7 @@
 const leave = require('./handlers/leave');
 const general = require('./handlers/general');
 const announce = require('./handlers/announce');
+const pollHandler = require('./handlers/poll');
 
 // Where a command may run. A definition lists one or more of:
 //   { type: 'global' }                              any channel, including personal ones
@@ -80,6 +81,12 @@ register({
   name: 'announce', category: 'announcements', usage: '/announce <text>', description: 'Post an announcement to this channel',
   scopes: [{ type: 'channel-scope', value: 'announcements' }], permission: 'announce', visibility: 'shared', maxLength: 2000,
   confirm: { preview: announce.preview }, handler: announce.announce,
+});
+
+register({
+  name: 'poll', category: 'polls', usage: '/poll "Question?" "Option A" "Option B" [--multi] [--anonymous] [--closes 2h]',
+  description: 'Ask the channel a question with 2 to 10 options', scopes: [{ type: 'any-channel' }], excludeTags: ['hr-inquiry'],
+  visibility: 'shared', options: { multi: false, anonymous: false, closes: true }, maxLength: 1000, handler: pollHandler.poll,
 });
 
 function publicDefinition(definition) {

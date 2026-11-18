@@ -31,6 +31,7 @@ async function commandContext(userId, channelId, io) {
 }
 
 function inScope(definition, context) {
+  if (definition.excludeTags && definition.excludeTags.includes(context.channelScope)) return false; // e.g. /poll is not offered in #hr-inquiry
   return definition.enabled && definition.scopes.some((scope) => scope.type === 'global'
     || (scope.type === 'any-channel' && !context.isPersonal)
     || (scope.type === 'channel-scope' && scope.value === context.channelScope));
@@ -118,6 +119,19 @@ async function dispatch({ userId, channelId, input, requestId, io }) {
       requestId: safeRequestId, category: definition.category, visibility: 'private', kind: 'confirm', title: preview.title,
       confirmLabel: preview.confirmLabel || 'Confirm', data: { message: preview.message }, token, actions: [],
     };
+  }
+  if (definition.visibility === 'shared' && typeof requestId === 'string' && requestId === safeRequestId) {
+    // a retry of the same request (reconnect, double click) must not post twice
+    const done = await query(
+      `SELECT 1 FROM command_audit_log WHERE actor_id = $1 AND request_id = $2 AND command_name = $3 AND outcome = 'success'`,
+      [userId, safeRequestId, definition.name]
+    );
+    if (done.rows.length) {
+      return {
+        requestId: safeRequestId, category: definition.category, visibility: 'private', kind: 'card', title: 'Already done',
+        data: { message: 'This command already ran, so it was not repeated.' }, actions: [],
+      };
+    }
   }
   return runHandler(definition, context, parsed, safeRequestId);
 }

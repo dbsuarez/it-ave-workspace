@@ -452,6 +452,7 @@ function setupEventListeners() {
 
   // Image action buttons (kebab + inline hover) share the same delegation
   document.addEventListener('click', handleImageAction);
+  document.addEventListener('click', handlePollClick);
 
   // App menu (hamburger)
   on('btn-app-menu', 'click', (e) => { e.stopPropagation(); toggleMenu('app-menu', 'btn-app-menu'); });
@@ -1119,6 +1120,7 @@ function connectSocket() {
   state.socket.on('message_updated', handleMessageUpdated);
   state.socket.on('reminder_due', handleReminderDue);
   state.socket.on('channel_activity', handleChannelActivity);
+  state.socket.on('poll_updated', ({ pollId }) => refreshPollCard(pollId));
   state.socket.on('channel_topic_updated', (event) => {
     const channelId = Number(event.channelId);
     const channel = state.channels.find((c) => Number(c.id) === channelId);
@@ -2091,7 +2093,7 @@ function renderMessageEl(msg, allowReply = false) {
         <span class="message-reply-content">${escapeHtml(replyPreview.content || 'Attachment')}</span>
       </button>` : ''}
       <div class="message-bubble-row">
-        <div class="message-text">${formatMessageText(msg.content)}${reactionsHtml && !reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
+        <div class="message-text">${msg.kind === 'poll' && msg.poll ? pollCardHtml(msg.poll, { canClose: isYou || canModerate }) : formatMessageText(msg.content)}${reactionsHtml && !reactOnAttachment ? `<span class="reactions">${reactionsHtml}</span>` : ''}</div>
         ${!attachmentsHtml && allowReply && !msg.pending && msg.id != null ? `<span class="message-actions" aria-label="Message actions">
           <button class="msg-action-btn" type="button" data-open-reactions="${escapeHtml(String(msg.id))}" aria-label="React with an emoji" title="React with an emoji">${ICON_REACT}</button>
           <button class="msg-action-btn" type="button" data-reply-message="${escapeHtml(String(msg.id))}" aria-label="Reply to this message" title="Reply to this message">${ICON_REPLY}</button>
@@ -2338,6 +2340,51 @@ function renderPrivateCommandResponse(response, commandText) {
   card.className = 'command-private-card';
   card.innerHTML = commandCardHtml(response, commandText);
   els.commandPrivateResponses.prepend(card);
+}
+
+// ---- Polls (card markup comes from features/polls.js) ----
+async function refreshPollCard(pollId) {
+  const cards = [...document.querySelectorAll(`.poll-card[data-poll-id="${Number(pollId)}"]`)];
+  if (!cards.length) return;
+  try {
+    const res = await api(`/api/polls/${Number(pollId)}`);
+    const poll = await res.json().catch(() => ({}));
+    if (!res.ok) return;
+    for (const card of cards) {
+      const holder = document.createElement('div');
+      holder.innerHTML = pollCardHtml(poll, { canClose: card.dataset.pollCanClose === '1' });
+      card.replaceWith(holder.firstElementChild);
+    }
+  } catch (_) { /* the next update will refresh it */ }
+}
+
+async function handlePollClick(event) {
+  const button = event.target.closest('[data-poll-vote], [data-poll-withdraw], [data-poll-close]');
+  const card = button && button.closest('.poll-card');
+  if (!card) return;
+  const pollId = Number(card.dataset.pollId);
+  try {
+    let res;
+    if (button.matches('[data-poll-close]')) {
+      if (!(await confirmAction({ title: 'Close poll', message: 'Nobody will be able to vote after this.', confirmLabel: 'Close poll' }))) return;
+      res = await api(`/api/polls/${pollId}/close`, { method: 'POST' });
+    } else if (button.matches('[data-poll-withdraw]')) {
+      res = await api(`/api/polls/${pollId}/vote`, { method: 'DELETE' });
+    } else {
+      const optionId = Number(button.dataset.pollVote);
+      const mine = card.dataset.pollMine ? card.dataset.pollMine.split(',').map(Number) : [];
+      let next = [optionId];
+      if (card.dataset.pollMultiple === '1') next = mine.includes(optionId) ? mine.filter((id) => id !== optionId) : [...mine, optionId];
+      res = next.length
+        ? await api(`/api/polls/${pollId}/vote`, { method: 'POST', body: JSON.stringify({ optionIds: next }) })
+        : await api(`/api/polls/${pollId}/vote`, { method: 'DELETE' });
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not update the poll');
+    refreshPollCard(pollId);
+  } catch (error) {
+    showToast(error.message || 'Could not update the poll.', 'error');
+  }
 }
 
 async function executeSlashCommand(commandText) {

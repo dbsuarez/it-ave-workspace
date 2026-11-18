@@ -4,6 +4,7 @@ const multer = require('multer');
 const fs = require('fs');
 const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
+const { pollsForMessages } = require('../polls');
 const config = require('../config');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
 const { getUploadValidationError, ensureChannelMembership, ensureCanPostToChannel, ensureChannelNotArchived } = require('../security');
@@ -225,6 +226,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       });
     }
 
+    const pollsByMessage = await pollsForMessages(query, result.rows.filter((m) => m.kind === 'poll').map((m) => m.id), req.user.userId);
     const messages = result.rows.map((m) => ({
       id: m.id,
       channelId: m.channel_id,
@@ -246,6 +248,7 @@ router.get('/:channelId', authenticateToken, async (req, res) => {
       pinnedBy: m.pinned_by,
       reactions: reactionsByMessage[m.id] || [],
       attachments: attachmentsByMessage[m.id] || [],
+      ...(pollsByMessage.has(m.id) ? { poll: pollsByMessage.get(m.id) } : {}),
     }));
 
     res.json({

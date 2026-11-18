@@ -117,6 +117,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/scheduled', scheduledRoutes);
 app.use('/api/webhooks', webhookRoutes.manage);
 app.use('/api/hooks', webhookRoutes.receive);
+app.use('/api/polls', require('./src/routes/polls'));
 app.use('/api/commands', commandRoutes);
 
 // Health check
