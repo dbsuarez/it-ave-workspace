@@ -44,7 +44,7 @@ function commandCardHtml(response, commandText) {
     <li><strong>${commandCardEscape(row.typeName)}</strong> · ${commandCardEscape(row.startDate)}${row.endDate !== row.startDate ? ` – ${commandCardEscape(row.endDate)}` : ''} · ${commandCardEscape(String(row.days))} day${Number(row.days) === 1 ? '' : 's'} <span class="command-status">${commandCardEscape(row.status)}</span></li>`).join('');
   const commands = (data.commands || []).map((row) => `<li><strong>/${commandCardEscape(row.name)}</strong> — ${commandCardEscape(row.description)}</li>`).join('');
   const table = data.table && Array.isArray(data.table.head) && Array.isArray(data.table.rows)
-    ? `<div class="command-table-wrap"><table><thead><tr>${data.table.head.map((cell) => `<th>${commandCardEscape(cell)}</th>`).join('')}</tr></thead><tbody>${data.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${commandCardEscape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+    ? `<div class="command-table-wrap command-table-text"><table><thead><tr>${data.table.head.map((cell) => `<th>${commandCardEscape(cell)}</th>`).join('')}</tr></thead><tbody>${data.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${commandCardEscape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
     : '';
   const list = Array.isArray(data.list) && data.list.length
     ? `<ul class="command-records">${data.list.map((row) => `<li><strong>${commandCardEscape(row.title)}</strong>${row.text ? ` — ${commandCardEscape(row.text)}` : ''}</li>`).join('')}</ul>`

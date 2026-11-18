@@ -2293,7 +2293,7 @@ async function updateCommandMenu() {
     const index = position++;
     return `<button type="button" class="command-option${index === state.commands.activeIndex ? ' active' : ''}"
       role="option" aria-selected="${index === state.commands.activeIndex}" data-command-name="${escapeHtml(item.name)}">
-      <strong>/${escapeHtml(item.name)}</strong><span>${escapeHtml(item.description)}</span>${item.usage && item.usage !== `/${item.name}` ? `<small class="command-usage">${escapeHtml(item.usage)}</small>` : ''}
+      <strong>/${escapeHtml(item.name)}</strong><span>${escapeHtml(item.description)}${item.usage && item.usage !== `/${item.name}` ? `<small class="command-usage">${escapeHtml(item.usage)}</small>` : ''}</span>
     </button>`;
   }).join('')}`).join('');
   els.commandMenu.hidden = false;

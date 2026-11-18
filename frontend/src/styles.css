@@ -1952,6 +1952,8 @@ body.iav-dev .demo-banner {
 .command-private-card table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .command-private-card th, .command-private-card td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
 .command-private-card th:first-child { text-align: left; }
+/* tables of text (search results, help) read left to right; the leave table keeps its right-aligned numbers */
+.command-private-card .command-table-text th, .command-private-card .command-table-text td { text-align: left; vertical-align: top; }
 .command-records { margin: 8px 0; padding-left: 20px; }
 .command-records li { margin: 6px 0; }
 .command-status { color: var(--text-muted); text-transform: capitalize; }
