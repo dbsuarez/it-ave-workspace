@@ -107,6 +107,15 @@ test('a full canvas becomes a valid Word file with every block type', async () =
   assert.match(text('word/_rels/document.xml.rels'), /https:\/\/example\.com\/page/, 'the link target is kept');
 });
 
+test('font colour, font size and a header aligned apart from its rows reach the Word file', async () => {
+  const md = '<span data-color="#c2410c">red</span> <span data-size="32">big</span>\n\n| <span data-align="center">Head</span> | B |\n| :--- | :--- |\n| x | y |\n';
+  const { text } = await docxParts({ title: 'x', doc: documentJson(md) });
+  const xml = text('word/document.xml');
+  assert.match(xml, /<w:color w:val="C2410C"\/>/i);
+  assert.match(xml, /<w:sz w:val="48"\/>/);
+  assert.match(xml, /<w:jc w:val="center"\/>[\s\S]*Head|Head[\s\S]*<w:jc w:val="center"\/>/);
+});
+
 test('picture size follows the percentage and never exceeds the page', async () => {
   const sized = await docxParts({ title: 'x', doc: documentJson('![a](file:7 "50%")\n'), images: { 7: { data: PNG, width: 2000, height: 1000 } } });
   const sizedXml = sized.text('word/document.xml');

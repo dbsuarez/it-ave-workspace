@@ -44,6 +44,11 @@ function plainText(node) {
 
 function runFor(node, extra = {}) {
   const marks = new Set((node.marks || []).map((mark) => mark.type));
+  const colorMark = (node.marks || []).find((mark) => mark.type === 'textColor');
+  const sizeMark = (node.marks || []).find((mark) => mark.type === 'textSize');
+  const markColor = /^#[0-9a-f]{6}$/i.test(colorMark?.attrs?.color || '') ? colorMark.attrs.color.slice(1).toUpperCase() : undefined;
+  const px = Math.round(Number(sizeMark?.attrs?.size));
+  const markSize = px >= 8 && px <= 96 ? Math.round(px * 1.5) : undefined; // pixels -> Word half-points
   return new TextRun({
     text: node.text || '',
     bold: marks.has('bold') || extra.bold,
@@ -51,8 +56,8 @@ function runFor(node, extra = {}) {
     strike: marks.has('strike'),
     font: marks.has('code') ? 'Consolas' : undefined,
     shading: marks.has('code') ? { type: ShadingType.CLEAR, fill: 'F3F4F6' } : undefined,
-    color: extra.color,
-    size: extra.size,
+    color: markColor || extra.color,
+    size: markSize || extra.size,
   });
 }
 

@@ -8315,3 +8315,11 @@ mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; 
 .kb-toc-level-2 { padding-left: 18px; }
 .kb-toc-level-3 { padding-left: 28px; }
 .kb-toc-level-4 { padding-left: 38px; }
+
+/* Canvas font size menu */
+.cw-size-palette { width: 236px; }
+.cw-size-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+.cw-size-option { padding: 4px 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); line-height: 1.2; cursor: pointer; }
+.cw-size-option:hover, .cw-size-option:focus-visible { background: var(--muted-bg); border-color: var(--purple); }
+.cw-size-custom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
+.cw-size-custom input[type="number"] { width: 56px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }

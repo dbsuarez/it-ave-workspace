@@ -18,19 +18,55 @@ const CV_CALLOUT = /^>\s*\[!(info|note|tip|warning|danger)\]\s*(.*)$/i;
 const CV_CHECK = /^(\s*(?:[-*+]|\d+[.)])\s+)\[( |x|X)\](\s.*|)$/;
 const CV_CALLOUT_ICON = { info: 'i', note: '✎', tip: '✦', warning: '!', danger: '⛔' };
 
-function cvInline(text, ctx) {
-  const source = String(text || '');
-  const color = /<span data-color=["'](#[0-9a-f]{6})["']>(.*?)<\/span>/gi;
-  let html = '';
-  let at = 0;
-  let match;
-  while ((match = color.exec(source))) {
-    html += cvFormat.inline(source.slice(at, match.index), ctx || {});
-    const safeColor = match[1].toLowerCase();
-    html += `<span data-color="${safeColor}" style="color:${safeColor}">${cvFormat.inline(match[2], ctx || {})}</span>`;
-    at = match.index + match[0].length;
+// Font colour and font size are small spans in the text: <span data-color="#rrggbb"> and <span data-size="24">. They can sit inside or
+// around bold/italic and inside each other, so they are swapped for markers first, the ordinary formatting runs over the whole text
+// (so **<span …>bold red</span>** stays bold), and the markers are turned back into spans (only with a valid colour or size) after.
+const CV_SPAN_OPEN = /<span data-(color|size)=["']([^"']*)["']>/gi;
+
+function cvSpanAttrs(kind, value) {
+  if (kind.toLowerCase() === 'color') return /^#[0-9a-f]{6}$/i.test(value) ? `data-color="${value.toLowerCase()}" style="color:${value.toLowerCase()}"` : null;
+  const size = Math.round(Number(value));
+  return /^\d{1,3}$/.test(value) && size >= 8 && size <= 96 ? `data-size="${size}" style="font-size:${size}px"` : null;
+}
+
+function cvSpanClose(source, from) {
+  const lower = source.toLowerCase();
+  let depth = 1;
+  let at = from;
+  for (;;) {
+    const open = lower.indexOf('<span', at);
+    const close = lower.indexOf('</span>', at);
+    if (close < 0) return -1;
+    if (open >= 0 && open < close) { depth += 1; at = open + 5; continue; }
+    depth -= 1;
+    if (depth === 0) return close;
+    at = close + 7;
   }
-  return html + cvFormat.inline(source.slice(at), ctx || {});
+}
+
+function cvMaskSpans(source, spans) {
+  let out = '';
+  let at = 0;
+  const open = new RegExp(CV_SPAN_OPEN.source, 'gi');
+  let match;
+  while ((match = open.exec(source))) {
+    const attrs = cvSpanAttrs(match[1], match[2]);
+    const close = attrs ? cvSpanClose(source, match.index + match[0].length) : -1;
+    if (close < 0) continue;
+    spans.push(attrs);
+    out += `${source.slice(at, match.index)}\uE000${spans.length - 1}\uE001${cvMaskSpans(source.slice(match.index + match[0].length, close), spans)}\uE002`;
+    at = close + 7;
+    open.lastIndex = at;
+  }
+  return out + source.slice(at);
+}
+
+function cvInline(text, ctx) {
+  const spans = [];
+  const masked = cvMaskSpans(String(text || '').replace(/[\uE000-\uE002]/g, ''), spans);
+  return cvFormat.inline(masked, ctx || {})
+    .replace(/\uE000(\d+)\uE001/g, (_, index) => `<span ${spans[Number(index)]}>`)
+    .replace(/\uE002/g, '</span>');
 }
 
 function cvTextBlock(text, ctx) {
@@ -100,12 +136,17 @@ function cvTableHtml(text, ctx) {
     const right = cell.endsWith(':');
     return left && right ? 'center' : right ? 'right' : left ? 'left' : '';
   });
-  const align = (i) => (aligns[i] ? ` style="text-align:${aligns[i]}"` : '');
-  const header = head.map((cell, i) => `<th${align(i)}>${cvCellHtml(cell, ctx)}</th>`).join('');
+  const align = (i, own) => { const value = own || aligns[i]; return value ? ` style="text-align:${value}"` : ''; };
+  // a cell may carry its own alignment: <span data-align="center">…</span> around everything in it
+  const cell = (tag, raw, i) => {
+    const own = /^\s*<span data-align=["'](left|center|right)["']>([\s\S]*)<\/span>\s*$/i.exec(raw);
+    return `<${tag}${align(i, own && own[1].toLowerCase())}>${cvCellHtml(own ? own[2] : raw, ctx)}</${tag}>`;
+  };
+  const header = head.map((raw, i) => cell('th', raw, i)).join('');
   const body = lines.slice(2).map((line) => {
     const cells = cvSplitRow(line).slice(0, head.length);
     while (cells.length < head.length) cells.push('');
-    return `<tr>${cells.map((cell, i) => `<td${align(i)}>${cvCellHtml(cell, ctx)}</td>`).join('')}</tr>`;
+    return `<tr>${cells.map((raw, i) => cell('td', raw, i)).join('')}</tr>`;
   }).join('');
   return `<div class="cv-table-wrap"><table class="cv-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
 }

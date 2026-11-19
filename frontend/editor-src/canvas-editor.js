@@ -21,6 +21,23 @@ const { Markdown } = require('@tiptap/markdown');
 
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 
+// The </span> that closes a span opened just before `from`, counting spans nested inside it
+// (a colour can wrap a size and the other way round). -1 when it is never closed.
+function findSpanClose(src, from) {
+  const lower = src.toLowerCase();
+  let depth = 1;
+  let at = from;
+  for (;;) {
+    const open = lower.indexOf('<span', at);
+    const close = lower.indexOf('</span>', at);
+    if (close < 0) return -1;
+    if (open >= 0 && open < close) { depth += 1; at = open + 5; continue; }
+    depth -= 1;
+    if (depth === 0) return close;
+    at = close + 7;
+  }
+}
+
 // Markdown has no native font-color syntax. Keep the color in a small, explicit span that survives
 // source mode and exports without allowing arbitrary style or HTML attributes.
 const TextColor = Mark.create({
@@ -42,7 +59,7 @@ const TextColor = Mark.create({
     tokenize(src, _tokens, lexer) {
       const open = /^<span data-color=["'](#[0-9a-f]{6})["']>/i.exec(src);
       if (!open) return undefined;
-      const close = src.toLowerCase().indexOf('</span>', open[0].length);
+      const close = findSpanClose(src, open[0].length);
       if (close < 0) return undefined;
       const text = src.slice(open[0].length, close);
       if (!text) return undefined;
@@ -60,6 +77,54 @@ const TextColor = Mark.create({
     return {
       setTextColor: (color) => ({ commands }) => COLOR_RE.test(color || '') && commands.setMark(this.name, { color: color.toLowerCase() }),
       unsetTextColor: () => ({ commands }) => commands.unsetMark(this.name),
+    };
+  },
+});
+
+// Font size, in pixels, kept the same way as the colour: <span data-size="24">…</span>.
+const MIN_TEXT_SIZE = 8;
+const MAX_TEXT_SIZE = 96;
+const cleanTextSize = (value) => {
+  const size = Math.round(Number(value));
+  return Number.isFinite(size) && size >= MIN_TEXT_SIZE && size <= MAX_TEXT_SIZE ? size : null;
+};
+
+const TextSize = Mark.create({
+  name: 'textSize',
+  addAttributes() {
+    return { size: { default: 16 } };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-size]', getAttrs: (el) => { const size = cleanTextSize(el.getAttribute('data-size')); return size ? { size } : false; } }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const size = cleanTextSize(HTMLAttributes.size) || 16;
+    return ['span', { 'data-size': String(size), style: `font-size: ${size}px` }, 0];
+  },
+  markdownTokenizer: {
+    name: 'textSize',
+    level: 'inline',
+    start: (src) => src.toLowerCase().indexOf('<span data-size='),
+    tokenize(src, _tokens, lexer) {
+      const open = /^<span data-size=["'](\d{1,3})["']>/i.exec(src);
+      if (!open || !cleanTextSize(open[1])) return undefined;
+      const close = findSpanClose(src, open[0].length);
+      if (close < 0) return undefined;
+      const text = src.slice(open[0].length, close);
+      if (!text) return undefined;
+      return { type: 'textSize', raw: src.slice(0, close + 7), size: cleanTextSize(open[1]), tokens: lexer.inlineTokens(text) };
+    },
+  },
+  parseMarkdown(token, helpers) {
+    return helpers.applyMark('textSize', helpers.parseInline(token.tokens || []), { size: token.size });
+  },
+  renderMarkdown(node, helpers) {
+    return `<span data-size="${cleanTextSize(node.attrs?.size) || 16}">${helpers.renderChildren(node)}</span>`;
+  },
+  addCommands() {
+    return {
+      setTextSize: (size) => ({ commands }) => cleanTextSize(size) !== null && commands.setMark(this.name, { size: cleanTextSize(size) }),
+      unsetTextSize: () => ({ commands }) => commands.unsetMark(this.name),
     };
   },
 });
@@ -279,9 +344,35 @@ const PX_PER_DASH = 10;
 const baseTableParse = Table.config.parseMarkdown;
 const baseTableRender = Table.config.renderMarkdown;
 
+// Markdown keeps one alignment per column (the separator row, which follows the body rows). A header cell or a body
+// cell that differs from its column keeps its own in a small wrapper: <span data-align="center">…</span>.
+const CELL_ALIGNS = ['left', 'center', 'right'];
+const CELL_ALIGN_OPEN = /^<span data-align=["'](left|center|right)["']>$/i;
+const plainAlign = (align) => (CELL_ALIGNS.includes(align) && align !== 'left' ? align : null);
+
+// If a cell's tokens are wrapped in one alignment span, take the wrapper off and say which alignment it was.
+function takeCellAlign(cell) {
+  const tokens = cell && cell.tokens;
+  if (!Array.isArray(tokens) || tokens.length < 2) return null;
+  const first = tokens[0];
+  const last = tokens[tokens.length - 1];
+  const open = first && first.type === 'html' ? CELL_ALIGN_OPEN.exec(String(first.raw || first.text || '').trim()) : null;
+  if (!open || !last || last.type !== 'html' || String(last.raw || last.text || '').trim().toLowerCase() !== '</span>') return null;
+  cell.tokens = tokens.slice(1, -1);
+  return open[1].toLowerCase();
+}
+
 const CanvasTable = Table.extend({
   parseMarkdown(token, helpers) {
+    const own = (token.header || []).map((cell) => takeCellAlign(cell));
+    const ownRows = (token.rows || []).map((row) => row.map((cell) => takeCellAlign(cell)));
     const node = baseTableParse(token, helpers);
+    const rows = node.content || [];
+    [own, ...ownRows].forEach((aligns, r) => {
+      (rows[r]?.content || []).forEach((cell, i) => {
+        if (aligns[i]) cell.attrs = { ...(cell.attrs || {}), align: aligns[i] };
+      });
+    });
     const separator = String(token.raw || '').split('\n')[1] || '';
     const widths = separator.split('|').map((cell) => cell.trim()).filter(Boolean).map((cell) => {
       const dashes = (cell.match(/-/g) || []).length;
@@ -298,7 +389,53 @@ const CanvasTable = Table.extend({
   },
 
   renderMarkdown(node, helpers) {
-    const markdown = baseTableRender(node, helpers);
+    // Each column's alignment is the one its body rows share (the header when there are no rows). A cell that
+    // differs from it is wrapped in its own alignment marker.
+    const rows = node.content || [];
+    const columns = rows.reduce((max, row) => Math.max(max, (row.content || []).length), 0);
+    const column = Array.from({ length: columns }, (_, i) => {
+      const votes = new Map();
+      for (const row of (rows.length > 1 ? rows.slice(1) : rows)) {
+        const align = row.content?.[i]?.attrs?.align;
+        const key = CELL_ALIGNS.includes(align) ? align : null;
+        votes.set(key, (votes.get(key) || 0) + 1);
+      }
+      let best = null;
+      let most = 0;
+      for (const [key, count] of votes) if (count > most) { best = key; most = count; }
+      // a tie goes to the header's own alignment, so a table whose header matches one of its rows reads back the same
+      const head = rows[0]?.content?.[i]?.attrs?.align;
+      const headKey = CELL_ALIGNS.includes(head) ? head : null;
+      return rows.length > 1 && votes.get(headKey) === most ? headKey : best;
+    });
+    const tagged = {
+      ...node,
+      content: rows.map((row) => ({
+        ...row,
+        content: (row.content || []).map((cell, i) => {
+          const own = CELL_ALIGNS.includes(cell.attrs?.align) ? cell.attrs.align : null;
+          const paragraphs = (cell.content || []).map((child) => ({ ...child }));
+          const hasText = paragraphs.some((child) => (child.content || []).length);
+          const differs = hasText && plainAlign(own) !== plainAlign(column[i]);
+          if (differs) {
+            paragraphs[0].attrs = { ...(paragraphs[0].attrs || {}), cvAlignOpen: own || 'left' };
+            paragraphs[paragraphs.length - 1].attrs = { ...(paragraphs[paragraphs.length - 1].attrs || {}), cvAlignClose: true };
+          }
+          return { ...cell, attrs: { ...(cell.attrs || {}), align: column[i] }, content: paragraphs };
+        }),
+      })),
+    };
+    const wrapped = {
+      ...helpers,
+      renderChildren(target, ...rest) {
+        const list = Array.isArray(target) ? target : [target];
+        const text = helpers.renderChildren(target, ...rest);
+        const open = list[0]?.attrs?.cvAlignOpen;
+        const close = list[list.length - 1]?.attrs?.cvAlignClose;
+        return `${open ? `<span data-align="${open}">` : ''}${text}${close ? '</span>' : ''}`;
+      },
+    };
+    const markdown = baseTableRender(tagged, wrapped);
     const first = (node.content && node.content[0] && node.content[0].content) || [];
     const widths = first.map((cell) => (cell.attrs && cell.attrs.colwidth && cell.attrs.colwidth[0]) || null);
     const lines = markdown.split('\n');
@@ -526,6 +663,7 @@ function buildExtensions({ placeholder } = {}) {
     CanvasImage.configure({ inline: true }),
     Mention,
     TextColor,
+    TextSize,
     Placeholder.configure({ placeholder: placeholder || "Write something, or press / for commands" }),
     Markdown,
   ];

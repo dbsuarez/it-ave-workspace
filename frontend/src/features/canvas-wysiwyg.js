@@ -51,6 +51,7 @@ const canvasWysiwyg = (() => {
     { id: 'italic', label: 'I', cls: 'italic', title: 'Italic (Ctrl+I)', active: (e) => e.isActive('italic'), run: (c) => c.toggleItalic() },
     { id: 'strike', label: 'S', cls: 'strike', title: 'Strikethrough', active: (e) => e.isActive('strike'), run: (c) => c.toggleStrike() },
     { id: 'color', label: 'Color ▾', title: 'Font color', active: (e) => e.isActive('textColor'), run: null },
+    { id: 'size', label: 'Size ▾', title: 'Font size', active: (e) => e.isActive('textSize'), run: null },
     { id: 'link', label: 'Link', title: 'Link (Ctrl+K)', active: (e) => e.isActive('link'), run: null },
     { sep: true },
     { id: 'h1', label: 'H1', title: 'Heading 1', active: (e) => e.isActive('heading', { level: 1 }), run: (c) => c.toggleHeading({ level: 1 }) },
@@ -106,6 +107,7 @@ const canvasWysiwyg = (() => {
   };
   // commands where text typed after "/cmd " belongs inside the new block
   const TEXT_ITEMS = new Set(['h1', 'h2', 'h3', 'text', 'list', 'numbered', 'todo', 'quote', 'info', 'tip', 'warning', 'danger', 'code']);
+  const TEXT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64];
   const TEXT_COLORS = [
     '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2',
     '#2563eb', '#7c3aed', '#c026d3', '#db2777', '#64748b',
@@ -123,7 +125,11 @@ const canvasWysiwyg = (() => {
     { menu: 'Row', items: [['rowBefore', 'Insert row above'], ['rowAfter', 'Insert row below'], ['rowDelete', 'Delete row']] },
     { menu: 'Column', items: [['colBefore', 'Insert column left'], ['colAfter', 'Insert column right'], ['colDelete', 'Delete column']] },
     { menu: 'Widths', items: [['equalize', 'Equalize all columns'], ['autofit', 'Auto-fit to contents']] },
-    { menu: 'Align', items: [['alignLeft', 'Align column left'], ['alignCenter', 'Center column'], ['alignRight', 'Align column right']] },
+    { menu: 'Align', items: [
+      ['alignLeft', 'Whole column: left'], ['alignCenter', 'Whole column: center'], ['alignRight', 'Whole column: right'],
+      ['headerAlignLeft', 'Header cell: left'], ['headerAlignCenter', 'Header cell: center'], ['headerAlignRight', 'Header cell: right'],
+      ['rowsAlignLeft', 'Rows below: left'], ['rowsAlignCenter', 'Rows below: center'], ['rowsAlignRight', 'Rows below: right'],
+    ] },
     { act: 'header', label: 'Header row', title: 'Turn the header row on or off' },
     { act: 'tableDelete', label: 'Delete table', title: 'Delete the whole table', danger: true },
   ];
@@ -171,6 +177,10 @@ const canvasWysiwyg = (() => {
     inst.colorPalette.innerHTML = `<div class="cw-color-swatches">${TEXT_COLORS.map((color) => `<button type="button" class="cw-color-swatch" data-text-color="${color}" style="--swatch:${color}" title="${color}" aria-label="Use ${color}"></button>`).join('')}</div><div class="cw-color-custom"><label>Custom <input type="color" value="#2563eb" aria-label="Custom font color"></label><button type="button" class="btn" data-clear-text-color>Default</button></div>`;
     inst.toolbar.appendChild(inst.colorPalette);
     inst.colorInput = inst.colorPalette.querySelector('input[type="color"]');
+    inst.sizePalette = make('div', 'cw-color-palette cw-size-palette', { role: 'dialog', 'aria-label': 'Font sizes' });
+    inst.sizePalette.hidden = true;
+    inst.sizePalette.innerHTML = `<div class="cw-size-list">${TEXT_SIZES.map((size) => `<button type="button" class="cw-size-option" data-text-size="${size}" style="font-size:${Math.min(size, 26)}px">${size}</button>`).join('')}</div><form class="cw-size-custom"><label>Custom <input type="number" min="8" max="96" step="1" value="16" aria-label="Custom font size in pixels"> px</label><button type="submit" class="btn">Apply</button><button type="button" class="btn" data-clear-text-size>Default</button></form>`;
+    inst.toolbar.appendChild(inst.sizePalette);
     inst.contextual = make('div', 'cw-context');
     inst.contextual.hidden = true;
     inst.calloutBar = make('span', 'cw-callout-types');
@@ -361,7 +371,8 @@ const canvasWysiwyg = (() => {
   }
 
   // Set the alignment of every cell in the column the cursor is in.
-  function setColumnAlign(inst, align) {
+  // scope: 'all' = the whole column, 'header' = its header cell, 'rows' = the cells below the header
+  function setColumnAlign(inst, align, scope = 'all') {
     const { state, view } = inst.editor;
     const { $from } = state.selection;
     let depth = $from.depth;
@@ -373,7 +384,8 @@ const canvasWysiwyg = (() => {
     const tr = state.tr;
     table.forEach((row, rowOffset) => {
       row.forEach((cell, cellOffset, index) => {
-        if (index === column) tr.setNodeMarkup(tableStart + rowOffset + 1 + cellOffset, undefined, { ...cell.attrs, align });
+        const isHeader = cell.type.name === 'tableHeader';
+        if (index === column && (scope === 'all' || (scope === 'header') === isHeader)) tr.setNodeMarkup(tableStart + rowOffset + 1 + cellOffset, undefined, { ...cell.attrs, align });
       });
     });
     view.dispatch(tr);
@@ -439,6 +451,8 @@ const canvasWysiwyg = (() => {
       closeMenus(inst.tableBar);
       const act = item.dataset.act;
       if (act.startsWith('align')) { setColumnAlign(inst, act.slice(5).toLowerCase()); return; }
+      const scoped = /^(header|rows)Align(Left|Center|Right)$/.exec(act);
+      if (scoped) { setColumnAlign(inst, scoped[2].toLowerCase(), scoped[1]); return; }
       if (act === 'equalize') { setColumnWidths(inst, null); return; }
       if (act === 'autofit') { autoFitColumns(inst); return; }
       const run = TABLE_ACTS[act];
@@ -547,6 +561,7 @@ const canvasWysiwyg = (() => {
 
   function wireToolbar(inst) {
     const closeColorPalette = () => { inst.colorPalette.hidden = true; };
+    const closeSizePalette = () => { inst.sizePalette.hidden = true; };
     const handle = (event) => {
       const button = event.target.closest('button[data-tool]');
       if (!button) return;
@@ -554,7 +569,17 @@ const canvasWysiwyg = (() => {
       const id = button.dataset.tool;
       if (id === 'link') { openLink(inst); return; }
       if (id === 'color') {
+        closeSizePalette();
         inst.colorPalette.hidden = !inst.colorPalette.hidden;
+        return;
+      }
+      if (id === 'size') {
+        closeColorPalette();
+        inst.sizePalette.hidden = !inst.sizePalette.hidden;
+        if (!inst.sizePalette.hidden) {
+          inst.sizePalette.style.left = `${button.offsetLeft}px`;
+          inst.sizePalette.querySelector('input[type="number"]').value = String(editor.getAttributes('textSize').size || 16);
+        }
         return;
       }
       if (id === 'image') {
@@ -577,6 +602,18 @@ const canvasWysiwyg = (() => {
         inst.editor.chain().focus().unsetTextColor().run();
         closeColorPalette();
       }
+    });
+    const applySize = (size) => {
+      if (inst.editor.chain().focus().setTextSize(size).run()) closeSizePalette();
+    };
+    inst.sizePalette.addEventListener('click', (event) => {
+      const option = event.target.closest('[data-text-size]');
+      if (option) applySize(Number(option.dataset.textSize));
+      else if (event.target.closest('[data-clear-text-size]')) { inst.editor.chain().focus().unsetTextSize().run(); closeSizePalette(); }
+    });
+    inst.sizePalette.querySelector('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      applySize(Number(inst.sizePalette.querySelector('input[type="number"]').value));
     });
     // Focusing the editor dismisses the native picker as soon as its handle moves.
     // The editor keeps its last selection, so applying without focus lets dragging work.

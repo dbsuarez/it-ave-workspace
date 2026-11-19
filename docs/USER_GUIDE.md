@@ -106,6 +106,14 @@ The rail on the left lists the sections of the app. If your window is short, scr
 ### Can the rail be rearranged?
 Yes, by an Owner (anyone who manages the workspace), and it applies to **everyone**. Open your picture menu and choose **Customize the rail**: move sections up and down, or send a section into the **More** menu (and bring it back). Home always stays first. **Save for everyone** applies it at once for everybody who is signed in; **Reset to default** puts it back as it was. Employees cannot change it. A section such as Moderation still only shows for the people who may use it.
 
+## Canvas text: size, colour and table alignment
+
+### Can I choose the font size?
+Yes. Select the text and open **Size** in the Canvas toolbar: pick one of the ready sizes (10 to 64) or type your own between 8 and 96 pixels and press **Apply**. **Default** brings the text back to normal. Size works together with colour, bold and italic, and it is kept when you export to PDF or Word. Headings (H1 to H3) still work as before.
+
+### Can the header and the rows of a table be aligned differently?
+Yes. Click in a cell, open **Align** in the table bar and choose what to align: **Whole column** (header and rows together, as before), **Header cell** (only this column's header) or **Rows below** (only the cells under the header). So you can centre the headers and keep the numbers on the right.
+
 ## Knowledge Base
 
 The Knowledge Base is where HR keeps the answers to common questions and the employee handbook. Open **Knowledge Base** in the left rail.

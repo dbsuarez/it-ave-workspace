@@ -48,6 +48,57 @@ test('font colors survive Markdown round trips and reject arbitrary style markup
   assert.ok(!roundTrip('<span style="color:red" onclick="bad()">unsafe</span>\n').includes('onclick'));
 });
 
+test('a font size survives Markdown round trips, nests with colours, and rejects odd sizes', () => {
+  const md = 'Normal <span data-size="24">big</span> and <span data-color="#c2410c"><span data-size="12">small orange</span></span> text.\n';
+  assert.equal(roundTrip(md), md);
+  const editor = open('Size me');
+  editor.chain().selectAll().setTextSize(30).run();
+  assert.equal(getCanvasMarkdown(editor), '<span data-size="30">Size me</span>\n');
+  assert.equal(editor.view.dom.querySelector('[data-size]').style.fontSize, '30px');
+  assert.equal(editor.chain().selectAll().setTextSize(500).run(), false, 'too big is refused');
+  assert.equal(editor.chain().selectAll().setTextSize(2).run(), false, 'too small is refused');
+  editor.chain().selectAll().unsetTextSize().run();
+  assert.equal(getCanvasMarkdown(editor), 'Size me\n');
+  editor.destroy();
+  assert.ok(!roundTrip('<span data-size="9999" onclick="bad()">x</span>\n').includes('9999'));
+});
+
+test('a table header and its rows can be aligned independently, and it survives a round trip', () => {
+  const md = '| <span data-align="center">Name</span> | Qty |\n| :--- | ---: |\n| a | 1 |\n| b | 2 |\n';
+  const editor = open(md);
+  const aligns = [];
+  editor.state.doc.descendants((node) => { if (node.type.name === 'tableHeader' || node.type.name === 'tableCell') aligns.push(node.attrs.align || null); });
+  assert.deepEqual(aligns, ['center', 'right', 'left', 'right', 'left', 'right']);
+  const out = getCanvasMarkdown(editor);
+  editor.destroy();
+  assert.match(out, /<span data-align="center">Name<\/span>/);
+  assert.match(out.split('\n')[1], /^\| :-+ \| -+: \|$/);
+  assert.equal(roundTrip(out), out);
+  // a header differing from its column, and a body cell differing from its column, both keep their own alignment
+  const mixed = roundTrip('| H1 | H2 |\n| :-: | :-: |\n| a | <span data-align="right">b</span> |\n| c | d |\n');
+  assert.match(mixed, /\| :-+: \| :-+: \|/);
+  assert.match(mixed, /<span data-align="right">b<\/span>/);
+  assert.ok(!/data-align="center"/.test(mixed), 'a cell that matches its column has no marker');
+});
+
+test('legacy tables (one alignment for the whole column) read exactly as before', () => {
+  const out = roundTrip('| a | b |\n| :-: | --: |\n| 1 | 2 |\n');
+  assert.match(out.split('\n')[1], /^\| :-+: \| -+: \|$/);
+  assert.ok(!out.includes('data-align'));
+});
+
+test('a header aligned differently from its rows keeps a multi-line cell whole', () => {
+  const editor = open('| H |\n| --- |\n| a<br>b |\n');
+  const tr = editor.state.tr;
+  editor.state.doc.descendants((node, pos) => { if (node.type.name === 'tableCell') tr.setNodeMarkup(pos, undefined, { ...node.attrs, align: 'center' }); });
+  editor.view.dispatch(tr);
+  const out = getCanvasMarkdown(editor);
+  editor.destroy();
+  assert.match(out, /<span data-align="left">H<\/span>/);
+  assert.match(out.split('\n')[1], /^\| :-+: \|$/);
+  assert.equal(roundTrip(out), out);
+});
+
 test('a second round trip changes nothing (the saved form is stable)', () => {
   const md = '# Plan\n\n> [!info] Goal\n> Ship it.\n\n## Tasks\n\n- [ ] First\n- [x] Second\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n![pic](file:3)\n';
   const once = roundTrip(md);

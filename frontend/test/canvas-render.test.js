@@ -67,6 +67,22 @@ test('entities in a cell are read as text once, and nothing in a cell can become
   assert.match(render('table', '| A |\n| --- |\n| Tom&nbsp;&amp;&nbsp;Jerry |'), /Tom\u00a0&amp;\u00a0Jerry/);
 });
 
+test('bold or italic around a coloured or sized span keeps its formatting instead of printing the markers', () => {
+  const html = render('paragraph', '**<span data-color="#c2410c">Absence (AWOL)</span>** - failure to report');
+  assert.equal(html.includes('**'), false, html);
+  assert.match(html, /<strong><span data-color="#c2410c" style="color:#c2410c">Absence \(AWOL\)<\/span><\/strong>/);
+  const nested = render('paragraph', 'a <span data-size="24"><span data-color="#2563eb">big blue</span></span> b');
+  assert.match(nested, /<span data-size="24" style="font-size:24px"><span data-color="#2563eb" style="color:#2563eb">big blue<\/span><\/span>/);
+  assert.equal(/<span[^>]*(data-size|onclick)/.test(render('paragraph', '<span data-size="9999" onclick="x">no</span>')), false, 'an odd size is text, never a live element');
+});
+
+test('a table header and a cell can have their own alignment on top of the column alignment', () => {
+  const html = render('table', '| <span data-align="center">Name</span> | Qty |\n| :--- | ---: |\n| a | <span data-align="left">1</span> |');
+  assert.match(html, /<th style="text-align:center">Name<\/th><th style="text-align:right">Qty<\/th>/);
+  assert.match(html, /<td style="text-align:left">a<\/td><td style="text-align:left">1<\/td>/);
+  assert.equal(html.includes('data-align'), false);
+});
+
 test('tables render a header, body and column alignment', () => {
   const html = render('table', '| Name | Qty | Note |\n| :-- | --: | :-: |\n| apples | 3 | **good** |\n| pears | 4 |');
   assert.ok(html.includes('<th style="text-align:left">Name</th>'));
