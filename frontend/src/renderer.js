@@ -151,11 +151,6 @@ let state = {
   lists: [],
   listMembers: [],
   listsRequestId: 0,
-  canvases: [],
-  currentCanvasId: null,
-  canvasChannelId: null,
-  canvasDirty: false,
-  canvasRequestId: 0,
   canvasDetailRequestId: 0,
   emojiPicker: { messageId: null, category: 'Smileys' },
   commands: { channelId: null, items: [], activeIndex: 0, loading: false },
@@ -170,7 +165,6 @@ const els = {
   viewFiles: document.getElementById('view-files'),
   viewNotes: document.getElementById('view-notes'),
   viewLists: document.getElementById('view-lists'),
-  viewCanvases: document.getElementById('view-canvases'),
   viewHuddle: document.getElementById('view-huddle'),
   messages: document.getElementById('messages'),
   dmMessages: document.getElementById('dm-messages'),
@@ -242,18 +236,11 @@ const els = {
   filesGrid: document.getElementById('files-grid'),
   listsChannelSelect: document.getElementById('lists-channel-select'),
   listsContainer: document.getElementById('lists-container'),
-  canvasChannelSelect: document.getElementById('canvas-channel-select'),
-  canvasDocList: document.getElementById('canvas-doc-list'),
-  canvasEditorForm: document.getElementById('canvas-editor-form'),
-  canvasTitleInput: document.getElementById('canvas-title-input'),
-  canvasContentInput: document.getElementById('canvas-content-input'),
-  canvasPreview: document.getElementById('canvas-preview'),
   canvasSheet: document.getElementById('canvas-sheet'),
   canvasSheetKind: document.getElementById('canvas-sheet-kind'),
   canvasSheetTitle: document.getElementById('canvas-sheet-title'),
   canvasSheetEditor: document.getElementById('canvas-sheet-editor'),
   canvasSheetStatus: document.getElementById('canvas-sheet-status'),
-  canvasEmptyState: document.getElementById('canvas-empty-state'),
   emojiPicker: document.getElementById('emoji-picker'),
   emojiSearch: document.getElementById('emoji-search'),
   emojiPickerCategories: document.getElementById('emoji-picker-categories'),
@@ -569,13 +556,6 @@ function setupEventListeners() {
   on('lists-container', 'change', handleListContainerChange);
   on('lists-container', 'click', handleListContainerClick);
   on('lists-container', 'submit', handleListContainerSubmit);
-  on('canvas-channel-select', 'change', handleCanvasChannelChange);
-  on('btn-new-canvas', 'click', createNewCanvas);
-  on('canvas-doc-list', 'click', handleCanvasDocSelect);
-  on('canvas-editor-form', 'submit', saveCanvas);
-  on('canvas-title-input', 'input', markCanvasDirty);
-  on('canvas-content-input', 'input', markCanvasDirty);
-  on('btn-delete-canvas', 'click', deleteCanvas);
   on('messages', 'click', handleReactionClick);
   on('messages', 'click', handleMessagePinClick);
   on('messages', 'click', handleModerationMessageClick);
@@ -3128,7 +3108,6 @@ const SECTIONS = {
   files:    { pane: null,       view: 'files' },
   notes:    { pane: null,       view: 'notes' },
   lists:    { pane: null,       view: 'lists' },
-  canvases: { pane: null,       view: 'canvases' },
   canvas2:  { pane: null,       view: 'canvas2' },
   drawings: { pane: null,       view: 'drawings' },
   sheets:   { pane: null,       view: 'sheets' },
@@ -3139,7 +3118,7 @@ const SECTIONS = {
 };
 
 // Sections reached from the rail's More menu rather than their own rail buttons.
-const MORE_SECTIONS = ['lists', 'canvases'];
+const MORE_SECTIONS = ['lists'];
 
 function updateRail(section) {
   document.querySelectorAll('.rail-item[data-rail]').forEach((btn) => {
@@ -3217,9 +3196,6 @@ async function setSection(section) {
   } else if (section === 'lists') {
     populateListsChannelSelect();
     await loadLists();
-  } else if (section === 'canvases') {
-    populateCanvasChannelSelect();
-    await loadCanvases();
   } else if (section === 'canvas2') {
     showPane(null);
     showView('canvas2');
@@ -5484,299 +5460,12 @@ async function updateListItem(listId, itemId, changes) {
 }
 
 // ============================================================
-// Channel-shared Markdown canvases
+// Canvas, from the Create menu
 // ============================================================
-function populateCanvasChannelSelect() {
-  const select = els.canvasChannelSelect;
-  if (!select) return;
-  const selectedChannelId = select.value
-    || String(state.canvasChannelId || state.currentChannelId || state.channels[0]?.id || '');
-  select.innerHTML = '';
-  state.channels.forEach((channel) => {
-    const option = document.createElement('option');
-    option.value = channel.id;
-    option.textContent = `#${channel.name}`;
-    select.appendChild(option);
-  });
-  if (state.channels.some((channel) => String(channel.id) === selectedChannelId)) {
-    select.value = selectedChannelId;
-  }
-  select.disabled = state.channels.length === 0;
-  const createButton = document.getElementById('btn-new-canvas');
-  if (createButton) createButton.disabled = state.channels.length === 0;
-}
-
 // The Create menu's Canvas: a new standalone canvas on the Canvas screen (the old channel canvases are the Wiki now).
 async function openCreateCanvas() {
   await setSection('canvas2');
   await createCanvas2Standalone();
-}
-
-async function handleCanvasChannelChange() {
-  if (state.canvasDirty && !(await confirmAction({
-    title: 'Discard changes?',
-    message: 'Discard unsaved canvas changes?',
-    confirmLabel: 'Discard',
-    danger: true,
-  }))) {
-    els.canvasChannelSelect.value = String(state.canvasChannelId || '');
-    return;
-  }
-  state.canvasDirty = false;
-  state.currentCanvasId = null;
-  state.canvasChannelId = null;
-  await loadCanvases();
-}
-
-async function loadCanvases() {
-  const channelId = Number(els.canvasChannelSelect?.value);
-  const requestId = ++state.canvasRequestId;
-  if (!Number.isSafeInteger(channelId) || channelId < 1) {
-    state.canvasDetailRequestId += 1;
-    state.canvases = [];
-    state.currentCanvasId = null;
-    state.canvasChannelId = null;
-    renderCanvasDocList();
-    clearCanvasEditor('Join a channel to create a canvas.');
-    return;
-  }
-  if (state.canvasDirty && state.canvasChannelId === channelId) return;
-
-  state.canvasDetailRequestId += 1;
-  els.canvasDocList.innerHTML = '<div class="empty-state"><p>Loading canvases…</p></div>';
-  try {
-    const res = await api(`/api/canvases?channelId=${channelId}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load canvases');
-    if (requestId !== state.canvasRequestId) return;
-    state.canvases = data.canvases || [];
-    state.canvasChannelId = channelId;
-    renderCanvasDocList();
-    const currentExists = state.canvases.some((canvas) => canvas.id === state.currentCanvasId);
-    if (currentExists) {
-      await openCanvas(state.currentCanvasId, false);
-    } else if (state.canvases.length > 0) {
-      await openCanvas(state.canvases[0].id, false);
-    } else {
-      clearCanvasEditor('No canvases in this channel yet. Create one to get started.');
-    }
-  } catch (err) {
-    if (requestId !== state.canvasRequestId) return;
-    console.error('Load canvases error:', err);
-    state.canvases = [];
-    els.canvasDocList.innerHTML = '<div class="empty-state canvas-doc-list-error">Could not load canvases.</div>';
-    clearCanvasEditor('Check your channel access and try again.', true);
-  }
-}
-
-async function openCanvas(canvasId, confirmDiscard = true) {
-  if (confirmDiscard && state.canvasDirty && !(await confirmAction({
-    title: 'Discard changes?',
-    message: 'Discard unsaved canvas changes?',
-    confirmLabel: 'Discard',
-    danger: true,
-  }))) return;
-  const requestId = ++state.canvasDetailRequestId;
-  try {
-    const res = await api(`/api/canvases/${canvasId}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load canvas');
-    if (requestId !== state.canvasDetailRequestId) return;
-    const canvas = data.canvas;
-    state.currentCanvasId = canvas.id;
-    state.canvasChannelId = canvas.channelId;
-    state.canvasDirty = false;
-    els.canvasTitleInput.value = canvas.title;
-    els.canvasContentInput.value = canvas.content;
-    els.canvasEditorForm.hidden = false;
-    els.canvasEmptyState.hidden = true;
-    document.getElementById('btn-delete-canvas').disabled = false;
-    renderCanvasDocList();
-    renderCanvasPreview();
-  } catch (err) {
-    if (requestId !== state.canvasDetailRequestId) return;
-    console.error('Open canvas error:', err);
-    showToast('Could not open canvas.', 'error');
-  }
-}
-
-function renderCanvasDocList() {
-  if (!els.canvasDocList) return;
-  if (state.canvases.length === 0) {
-    els.canvasDocList.innerHTML = emptyRecordMarkup(
-      'No canvases',
-      'Create one to get started.',
-      'compact canvas-doc-empty-record',
-    );
-    return;
-  }
-  els.canvasDocList.innerHTML = state.canvases.map((canvas) => `
-    <button class="canvas-doc-item${canvas.id === state.currentCanvasId ? ' active' : ''}"
-      type="button" data-canvas-id="${canvas.id}" aria-current="${canvas.id === state.currentCanvasId ? 'page' : 'false'}">
-      <span>${escapeHtml(canvas.title)}</span>
-      <small>Updated ${shortTime(canvas.updatedAt)}</small>
-    </button>`).join('');
-}
-
-function handleCanvasDocSelect(event) {
-  const button = event.target.closest('[data-canvas-id]');
-  if (button) openCanvas(button.dataset.canvasId);
-}
-
-async function createNewCanvas() {
-  if (els.canvasChannelSelect?.disabled) {
-    showToast('Join a channel before creating a canvas.', 'error');
-    return;
-  }
-  if (state.canvasDirty && !(await confirmAction({
-    title: 'Discard changes?',
-    message: 'Discard unsaved canvas changes?',
-    confirmLabel: 'Discard',
-    danger: true,
-  }))) return;
-  state.canvasDetailRequestId += 1;
-  state.currentCanvasId = null;
-  state.canvasChannelId = Number(els.canvasChannelSelect.value);
-  state.canvasDirty = false;
-  els.canvasTitleInput.value = '';
-  els.canvasContentInput.value = '';
-  els.canvasEditorForm.hidden = false;
-  els.canvasEmptyState.hidden = true;
-  document.getElementById('btn-delete-canvas').disabled = true;
-  els.canvasTitleInput.focus();
-  renderCanvasDocList();
-  renderCanvasPreview();
-}
-
-function clearCanvasEditor(message, isError = false) {
-  state.currentCanvasId = null;
-  state.canvasDirty = false;
-  els.canvasEditorForm.hidden = true;
-  els.canvasEmptyState.hidden = false;
-  document.getElementById('btn-delete-canvas').disabled = true;
-  els.canvasEmptyState.innerHTML = isError
-    ? `<div class="canvas-empty-message"><h2>Could not load canvases</h2><p>${escapeHtml(message)}</p></div>`
-    : emptyRecordMarkup('No canvas selected', message);
-}
-
-function markCanvasDirty() {
-  state.canvasDirty = true;
-  renderCanvasPreview();
-}
-
-async function saveCanvas(event) {
-  event.preventDefault();
-  const channelId = Number(els.canvasChannelSelect.value);
-  const title = els.canvasTitleInput.value.trim();
-  const content = els.canvasContentInput.value;
-  if (!Number.isSafeInteger(channelId) || channelId < 1) {
-    showToast('Choose a channel before saving.', 'error');
-    return;
-  }
-  if (!title) {
-    els.canvasTitleInput.focus();
-    showToast('Canvas title is required.', 'error');
-    return;
-  }
-
-  const isNew = state.currentCanvasId === null;
-  try {
-    const res = await api(isNew ? '/api/canvases' : `/api/canvases/${state.currentCanvasId}`, {
-      method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify({ channelId, title, content }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not save canvas');
-    state.currentCanvasId = data.canvas.id;
-    state.canvasChannelId = data.canvas.channelId;
-    state.canvasDirty = false;
-    await loadCanvases();
-    showToast('Canvas saved.', 'success');
-  } catch (err) {
-    console.error('Save canvas error:', err);
-    showToast(err.message || 'Could not save canvas.', 'error');
-  }
-}
-
-async function deleteCanvas() {
-  if (!state.currentCanvasId || !(await confirmAction({
-    title: 'Delete canvas',
-    message: `Delete "${els.canvasTitleInput.value}"?`,
-    confirmLabel: 'Delete',
-    danger: true,
-  }))) return;
-  try {
-    const res = await api(`/api/canvases/${state.currentCanvasId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Could not delete canvas');
-    state.currentCanvasId = null;
-    state.canvasDirty = false;
-    await loadCanvases();
-    showToast('Canvas deleted.', 'success');
-  } catch (err) {
-    console.error('Delete canvas error:', err);
-    showToast('Could not delete canvas.', 'error');
-  }
-}
-
-function renderCanvasPreview() {
-  if (!els.canvasPreview || !els.canvasContentInput) return;
-  els.canvasPreview.innerHTML = renderMarkdown(els.canvasContentInput.value);
-}
-
-function renderMarkdown(markdown) {
-  const lines = String(markdown).split(/\r?\n/);
-  const output = [];
-  let listOpen = false;
-  let codeLines = null;
-  const closeList = () => {
-    if (!listOpen) return;
-    output.push('</ul>');
-    listOpen = false;
-  };
-  const renderInline = (value) => escapeHtml(value)
-    .split(/(`[^`]+`|\*\*.+?\*\*|\*[^*]+\*)/g)
-    .map((token) => {
-      if (token.startsWith('`') && token.endsWith('`')) return `<code>${token.slice(1, -1)}</code>`;
-      if (token.startsWith('**') && token.endsWith('**')) return `<strong>${token.slice(2, -2)}</strong>`;
-      if (token.startsWith('*') && token.endsWith('*')) return `<em>${token.slice(1, -1)}</em>`;
-      return token;
-    }).join('');
-
-  lines.forEach((line) => {
-    if (line.startsWith('```')) {
-      closeList();
-      if (codeLines === null) codeLines = [];
-      else {
-        output.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
-        codeLines = null;
-      }
-      return;
-    }
-    if (codeLines !== null) {
-      codeLines.push(line);
-      return;
-    }
-    const heading = /^(#{1,3})\s+(.+)$/.exec(line);
-    if (heading) {
-      closeList();
-      const level = heading[1].length;
-      output.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
-    } else if (/^\s*[-*]\s+/.test(line)) {
-      if (!listOpen) {
-        output.push('<ul>');
-        listOpen = true;
-      }
-      output.push(`<li>${renderInline(line.replace(/^\s*[-*]\s+/, ''))}</li>`);
-    } else if (line.trim() === '') {
-      closeList();
-    } else {
-      closeList();
-      output.push(`<p>${renderInline(line)}</p>`);
-    }
-  });
-  if (codeLines !== null) output.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
-  closeList();
-  return output.join('') || '<p class="canvas-preview-empty">Nothing to preview yet.</p>';
 }
 
 // ============================================================

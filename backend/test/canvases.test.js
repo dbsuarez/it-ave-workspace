@@ -1,3 +1,5 @@
+// GET /api/canvases?channelId=: the canvases shared into a channel (the channel's Canvases tab). The old Wiki (channel Markdown pages)
+// was retired: its routes are gone, so creating, reading, editing and deleting a Wiki page all answer 404.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
@@ -12,9 +14,10 @@ const config = require('../src/config');
 const dbPath = require.resolve('../src/db');
 const previousDbModule = require.cache[dbPath];
 const memberships = new Set(['1:7']);
-const archivedChannels = new Set();
-const canvases = new Map();
-let nextCanvasId = 10;
+const shared = [{
+  id: 31, title: 'Release plan', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-02T00:00:00Z', role: 'editor',
+  owner_id: 1, owner_username: 'alice', owner_first_name: 'Alice', owner_middle_name: null, owner_last_name: 'Lee', owner_avatar_color: '#112233', owner_photo_updated_at: null,
+}];
 
 require.cache[dbPath] = {
   id: dbPath,
@@ -22,51 +25,9 @@ require.cache[dbPath] = {
   loaded: true,
   exports: {
     query: async (sql, params = []) => {
-      if (sql.includes('SELECT token_version FROM users')) {
-        return { rows: [{ token_version: 0 }] };
-      }
-      if (sql.includes('SELECT 1 FROM channel_members')) {
-        return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{}] : [] };
-      }
-      if (sql.includes('SELECT id, channel_id, title, created_at, updated_at')) {
-        return {
-          rows: [...canvases.values()]
-            .filter((canvas) => canvas.channel_id === Number(params[0]))
-            .map(({ content, ...canvas }) => canvas),
-        };
-      }
-      if (sql.includes('SELECT id, channel_id, title, content, created_at, updated_at FROM channel_canvases')) {
-        const canvas = canvases.get(Number(params[0]));
-        return { rows: canvas ? [canvas] : [] };
-      }
-      if (sql.includes('INSERT INTO channel_canvases')) {
-        const canvas = {
-          id: nextCanvasId++,
-          channel_id: params[0],
-          title: params[1],
-          content: params[2],
-          created_at: '2026-01-01T00:00:00Z',
-          updated_at: '2026-01-01T00:00:00Z',
-        };
-        canvases.set(canvas.id, canvas);
-        return { rows: [canvas] };
-      }
-      if (sql.includes('UPDATE channel_canvases')) {
-        const canvas = canvases.get(Number(params[2]));
-        if (!canvas) return { rows: [] };
-        canvas.title = params[0];
-        canvas.content = params[1];
-        canvas.updated_at = '2026-01-02T00:00:00Z';
-        return { rows: [canvas] };
-      }
-      if (sql.includes('DELETE FROM channel_canvases')) {
-        canvases.delete(Number(params[0]));
-        return { rows: [], rowCount: 1 };
-      }
-      if (sql.includes('SELECT archived_at FROM channels')) {
-        return { rows: [{ archived_at: archivedChannels.has(Number(params[0])) ? '2026-01-03T00:00:00Z' : null }] };
-      }
-      if (sql.includes('FROM canvas_channel_grants')) return { rows: [] }; // canvases shared into the channel: none here
+      if (sql.includes('SELECT token_version FROM users')) return { rows: [{ token_version: 0 }] };
+      if (sql.includes('SELECT 1 FROM channel_members')) return { rows: memberships.has(`${params[1]}:${params[0]}`) ? [{}] : [] };
+      if (sql.includes('FROM canvas_channel_grants')) return { rows: Number(params[0]) === 7 ? shared : [] };
       throw new Error(`Unexpected canvas query: ${sql}`);
     },
   },
@@ -86,16 +47,10 @@ test.before(async () => {
 
 test.after(async () => {
   if (server) await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
-  if (previousDbModule) {
-    require.cache[dbPath] = previousDbModule;
-  } else {
-    delete require.cache[dbPath];
-  }
-  if (previousJwtSecret === undefined) {
-    delete process.env.JWT_SECRET;
-  } else {
-    process.env.JWT_SECRET = previousJwtSecret;
-  }
+  if (previousDbModule) require.cache[dbPath] = previousDbModule;
+  else delete require.cache[dbPath];
+  if (previousJwtSecret === undefined) delete process.env.JWT_SECRET;
+  else process.env.JWT_SECRET = previousJwtSecret;
 });
 
 function authHeader(userId = 1) {
@@ -103,109 +58,28 @@ function authHeader(userId = 1) {
   return { Authorization: `Bearer ${token}` };
 }
 
-test('canvases require authentication and channel membership', async () => {
-  const unauthenticated = await fetch(`${baseUrl}/api/canvases?channelId=7`);
-  assert.equal(unauthenticated.status, 401);
-
-  const forbidden = await fetch(`${baseUrl}/api/canvases?channelId=7`, { headers: authHeader(2) });
-  assert.equal(forbidden.status, 403);
+test('the list needs a sign-in, a channel and membership of it', async () => {
+  assert.equal((await fetch(`${baseUrl}/api/canvases?channelId=7`)).status, 401);
+  assert.equal((await fetch(`${baseUrl}/api/canvases?channelId=7`, { headers: authHeader(2) })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/api/canvases`, { headers: authHeader() })).status, 400);
 });
 
-test('members create, list, read, and update saved Markdown documents', async () => {
-  const invalid = await fetch(`${baseUrl}/api/canvases`, {
-    method: 'POST',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: 7, title: 'Too long', content: 'x'.repeat(100001) }),
-  });
-  assert.equal(invalid.status, 400);
-
-  const created = await fetch(`${baseUrl}/api/canvases`, {
-    method: 'POST',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: 7, title: '  Project notes  ', content: '# Plan\n- Draft' }),
-  });
-  const createdData = await created.json();
-  assert.equal(created.status, 201);
-  assert.equal(createdData.canvas.title, 'Project notes');
-
-  const list = await fetch(`${baseUrl}/api/canvases?channelId=7`, { headers: authHeader() });
-  const listData = await list.json();
-  assert.equal(list.status, 200);
-  assert.equal(listData.canvases[0].id, createdData.canvas.id);
-  assert.equal(Object.hasOwn(listData.canvases[0], 'content'), false);
-
-  const read = await fetch(`${baseUrl}/api/canvases/${createdData.canvas.id}`, { headers: authHeader() });
-  assert.equal((await read.json()).canvas.content, '# Plan\n- Draft');
-
-  const updated = await fetch(`${baseUrl}/api/canvases/${createdData.canvas.id}`, {
-    method: 'PUT',
-    headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Release plan', content: '**ready**' }),
-  });
-  const updatedData = await updated.json();
-  assert.equal(updated.status, 200);
-  assert.equal(updatedData.canvas.title, 'Release plan');
-  assert.equal(updatedData.canvas.content, '**ready**');
+test('a member gets the canvases shared into the channel, with their owner, and nothing else', async () => {
+  const res = await fetch(`${baseUrl}/api/canvases?channelId=7`, { headers: authHeader() });
+  assert.equal(res.status, 200);
+  const { canvases } = await res.json();
+  assert.equal(canvases.length, 1);
+  assert.equal(canvases[0].id, 31);
+  assert.equal(canvases[0].title, 'Release plan');
+  assert.equal(canvases[0].shared, true);
+  assert.equal(canvases[0].role, 'editor');
+  assert.equal(canvases[0].owner.name, 'Alice Lee');
 });
 
-test('non-members cannot read, update, or delete another channel canvas', async () => {
-  const canvas = [...canvases.values()][0];
-  const read = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, { headers: authHeader(2) });
-  assert.equal(read.status, 403);
-
-  const updated = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, {
-    method: 'PUT',
-    headers: { ...authHeader(2), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Stolen', content: 'no access' }),
-  });
-  assert.equal(updated.status, 403);
-
-  const deleted = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, {
-    method: 'DELETE',
-    headers: authHeader(2),
-  });
-  assert.equal(deleted.status, 403);
-  assert.equal(canvases.has(canvas.id), true);
-});
-
-test('an archived channel keeps its Wiki canvases readable but not writable', async () => {
-  const create = await fetch(`${baseUrl}/api/canvases`, {
-    method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: 7, title: 'Before archive', content: 'v1' }),
-  });
-  assert.equal(create.status, 201);
-  const canvas = (await create.json()).canvas;
-  archivedChannels.add(7);
-  try {
-    const json = { ...authHeader(), 'Content-Type': 'application/json' };
-    const read = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, { headers: authHeader() });
-    assert.equal(read.status, 200, 'reading stays allowed');
-    const list = await fetch(`${baseUrl}/api/canvases?channelId=7`, { headers: authHeader() });
-    assert.equal(list.status, 200, 'listing stays allowed');
-    const created = await fetch(`${baseUrl}/api/canvases`, { method: 'POST', headers: json, body: JSON.stringify({ channelId: 7, title: 'New', content: 'x' }) });
-    assert.equal(created.status, 409, 'creating is refused');
-    const updated = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, { method: 'PUT', headers: json, body: JSON.stringify({ title: 'Edited', content: 'changed' }) });
-    assert.equal(updated.status, 409, 'editing is refused');
-    const deleted = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, { method: 'DELETE', headers: authHeader() });
-    assert.equal(deleted.status, 409, 'deleting is refused');
-    assert.equal(canvases.get(canvas.id).content, 'v1', 'content untouched');
-  } finally {
-    archivedChannels.delete(7);
-  }
-  const restored = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, {
-    method: 'PUT', headers: { ...authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'After restore', content: 'v2' }),
-  });
-  assert.equal(restored.status, 200, 'editing works again once restored');
-  canvases.delete(canvas.id);
-});
-
-test('members can delete canvases', async () => {
-  const canvas = [...canvases.values()][0];
-  const response = await fetch(`${baseUrl}/api/canvases/${canvas.id}`, {
-    method: 'DELETE',
-    headers: authHeader(),
-  });
-  assert.equal(response.status, 200);
-  assert.equal(canvases.has(canvas.id), false);
+test('the retired Wiki cannot be created, read, edited or deleted any more', async () => {
+  const headers = { ...authHeader(), 'Content-Type': 'application/json' };
+  assert.equal((await fetch(`${baseUrl}/api/canvases`, { method: 'POST', headers, body: JSON.stringify({ channelId: 7, title: 'Page', content: 'x' }) })).status, 404);
+  assert.equal((await fetch(`${baseUrl}/api/canvases/10`, { headers })).status, 404);
+  assert.equal((await fetch(`${baseUrl}/api/canvases/10`, { method: 'PUT', headers, body: JSON.stringify({ title: 'Page', content: 'y' }) })).status, 404);
+  assert.equal((await fetch(`${baseUrl}/api/canvases/10`, { method: 'DELETE', headers })).status, 404);
 });

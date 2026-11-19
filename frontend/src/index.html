@@ -178,7 +178,6 @@
           </button>
           <div class="menu rail-menu more-menu" id="more-menu" role="menu" aria-label="More">
             <button class="menu-item menu-item-icon" type="button" data-more-section="lists" role="menuitem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg><span>Lists</span></button>
-            <button class="menu-item menu-item-icon" type="button" data-more-section="canvases" role="menuitem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg><span>Wiki</span></button>
           </div>
         </div>
 
@@ -444,46 +443,6 @@
             <button class="btn" type="button" id="btn-cancel-new-list">Cancel</button>
           </form>
           <div class="lists-container" id="lists-container" aria-live="polite"></div>
-        </div>
-
-        <!-- Channel-shared Markdown canvases -->
-        <div class="view" id="view-canvases">
-          <div class="channel-header canvas-header">
-            <div class="channel-info">
-              <h1>Wiki</h1>
-              <p>Shared Markdown documents for your channels.</p>
-            </div>
-            <div class="channel-actions">
-              <select id="canvas-channel-select" aria-label="Wiki channel"></select>
-              <button class="btn primary" id="btn-new-canvas">New page</button>
-            </div>
-          </div>
-          <div class="canvas-workspace">
-            <aside class="canvas-docs-pane" aria-label="Channel canvases">
-              <div class="canvas-doc-list" id="canvas-doc-list"></div>
-            </aside>
-            <div class="canvas-empty-state" id="canvas-empty-state">
-              <h2>Select or create a canvas</h2>
-              <p>Canvas documents are shared with members of the selected channel.</p>
-            </div>
-            <form class="canvas-editor" id="canvas-editor-form" hidden>
-              <div class="canvas-editor-toolbar">
-                <input id="canvas-title-input" type="text" maxlength="120" required placeholder="Canvas title" aria-label="Canvas title">
-                <button class="btn primary" type="submit">Save</button>
-                <button class="btn" type="button" id="btn-delete-canvas">Delete</button>
-              </div>
-              <div class="canvas-editor-body">
-                <div class="canvas-markdown-source">
-                  <label for="canvas-content-input">Markdown</label>
-                  <textarea id="canvas-content-input" maxlength="100000" placeholder="# Start writing&#10;&#10;Use Markdown for headings, lists, emphasis, and inline code."></textarea>
-                </div>
-                <div class="canvas-markdown-preview">
-                  <h2>Preview</h2>
-                  <div id="canvas-preview" aria-live="polite"></div>
-                </div>
-              </div>
-            </form>
-          </div>
         </div>
 
         <!-- People: directory, org chart and employee pages -->

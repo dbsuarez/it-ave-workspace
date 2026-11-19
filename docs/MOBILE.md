@@ -12,7 +12,7 @@ A web app for phones, opened in the phone's browser at **`http://<server address
 | **People** | Search the directory; a person's page with call, email and Message buttons, and who they report to. |
 | **Me** | Your profile, change your password (new accounts are asked to when they first sign in), sign out. |
 
-Not in the phone app yet: sending photos or files, calls (huddles), canvases, lists, the wiki, the org chart picture, and HR screens (employee records, schedules, exports). Use the desktop app for those.
+Not in the phone app yet: sending photos or files, calls (huddles), canvases, lists, the org chart picture, and HR screens (employee records, schedules, exports). Use the desktop app for those.
 
 ## Putting it on a phone
 

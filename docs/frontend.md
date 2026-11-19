@@ -45,7 +45,7 @@ Electron desktop application that connects to the IT Avenue Workspace backend.
   drag region; interactive controls opt out with `-webkit-app-region: no-drag`.
 - **Icon rail** (76 px): Home, DMs, Activity, Later, Files, Notes, Huddle, role-gated Moderation,
   and a **More** (⋮) button last, as icon-plus-label buttons. **More** opens a small menu (upward)
-  with Lists, Canvas and Wiki, and lights up while one of those is open.
+  with Lists and Canvas, and lights up while one of those is open. (The Wiki was retired on 2026-11-19.)
 - **List pane** (232 px): channels on Home, direct messages on DMs; collapsed for full-width
   sections. It uses a dark purple (#2A0D36), slightly darker than the rail gradient.
 - **Topbar alignment**: the hamburger sits over the rail column (76 px), the workspace name starts
@@ -186,7 +186,7 @@ match). Click anyone, or the name or picture on a mention card, to open their **
   lines* mode. A loop (A reports to B who reports to A) is refused; a missing manager never hides anyone.
 - Guests cannot browse the directory. Photos and avatar color come from Profile.
 
-The Canvas button now sits on the rail; Lists, People and Wiki are under More.
+The Canvas button now sits on the rail; Lists and People are under More. (The Wiki was retired on 2026-11-19.)
 
 ## Notifications and sounds
 

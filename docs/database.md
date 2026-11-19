@@ -25,7 +25,7 @@ The `init.sql` file creates:
 - **channel_list_items** - The old fixed-column items. Frozen after the one-time move into rows
   (row ids equal the old item ids); kept as a safety copy and no longer written
 - **schema_markers** - Names of one-off data migrations that have already run
-- **channel_canvases** - Channel-shared Markdown documents and creator metadata
+- **channel_canvases** - The retired Wiki (channel Markdown pages). Nothing reads or writes it any more and it was empty when the Wiki was retired (2026-11-19); the table is left in place and can be dropped in a later cleanup
 - **moderation_settings** - Workspace default and maximum timeout durations
 - **channel_timeouts** - Expiring channel-scoped user timeouts
 - **message_reports** - User reports and moderator resolution state

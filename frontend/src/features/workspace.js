@@ -829,7 +829,7 @@ async function channelResourceHtml(tab, channelId) {
         const meta = canvas.shared
           ? `<span class="canvas-meta"><span>Shared canvas</span>${ownerHtml}<span class="canvas-meta-separator">·</span><span>Updated ${escapeHtml(shortTime(canvas.updatedAt))}</span></span>`
           : `Updated ${escapeHtml(shortTime(canvas.updatedAt))}`;
-        return row(`${canvas.shared ? 'data-resource-shared-canvas' : 'data-resource-canvas'}="${canvas.id}"`, escapeHtml(canvas.title || 'Untitled canvas'), meta);
+        return row(`data-resource-shared-canvas="${canvas.id}"`, escapeHtml(canvas.title || 'Untitled canvas'), meta);
       }).join('')
       : emptyRecordMarkup('No canvases in this channel', 'Create one from the Canvas section.');
   }
@@ -894,14 +894,6 @@ async function handleChannelResourceClick(event) {
     // a canvas from the Canvas section that was shared into this channel opens there
     await setSection('canvas2');
     await openCanvas2Standalone(sharedCanvas.dataset.resourceSharedCanvas);
-    return;
-  }
-  const canvas = event.target.closest('[data-resource-canvas]');
-  if (canvas) {
-    await setSection('canvases');
-    els.canvasChannelSelect.value = String(channelId);
-    await handleCanvasChannelChange();
-    await openCanvas(canvas.dataset.resourceCanvas, false);
     return;
   }
   if (event.target.closest('[data-resource-list]')) {

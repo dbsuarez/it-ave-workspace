@@ -124,11 +124,7 @@ change or delete them.** Assignees and `user` cells must belong to the list's ch
 ### Canvases
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/canvases?channelId=:id` | List saved canvases in a channel |
-| GET | `/api/canvases/:canvasId` | Read a saved Markdown document |
-| POST | `/api/canvases` | Create a channel-shared document |
-| PUT | `/api/canvases/:canvasId` | Save document title and Markdown content |
-| DELETE | `/api/canvases/:canvasId` | Delete a document |
+| GET | `/api/canvases?channelId=:id` | The canvases shared into a channel (its Canvases tab). The old Wiki (channel Markdown pages) was retired on 2026-11-19: its read, create, edit and delete routes are gone |
 
 Canvas content is limited to 100,000 characters. Every operation requires current
 channel membership.
