@@ -5506,13 +5506,10 @@ function populateCanvasChannelSelect() {
   if (createButton) createButton.disabled = state.channels.length === 0;
 }
 
+// The Create menu's Canvas: a new standalone canvas on the Canvas screen (the old channel canvases are the Wiki now).
 async function openCreateCanvas() {
-  await setSection('canvases');
-  if (els.canvasChannelSelect?.disabled) {
-    showToast('Join a channel before creating a canvas.', 'error');
-    return;
-  }
-  createNewCanvas();
+  await setSection('canvas2');
+  await createCanvas2Standalone();
 }
 
 async function handleCanvasChannelChange() {
