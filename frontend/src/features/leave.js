@@ -176,6 +176,7 @@ function leaveApprovalsHtml() {
       <div class="lv-card-head"><strong>${escapeText(personName(r))}</strong><span class="lv-status lv-pending">${escapeText(r.typeName)}</span></div>
       <div>${escapeText(leaveRange(r))} · ${leaveDays(r.days)}${r.halfDay ? ' (half day)' : ''}</div>
       ${r.reason ? `<p class="lv-reason">${escapeText(r.reason)}</p>` : ''}
+      ${leaveApprovalFactsHtml(r, { range: leaveRange, days: leaveDays })}
       <div class="admin-actions"><button type="button" class="btn primary" data-leave-decide="approved">Approve</button><button type="button" class="btn" data-leave-decide="rejected">Decline…</button></div>
     </div>`).join('')}</div>`;
 }

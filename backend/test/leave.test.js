@@ -266,3 +266,28 @@ test('HR sees every leave record, filtered, and can export them; nobody else can
   assert.match(lines[1], /Sick Leave,.*approved,"Flu, rest",hana,\d{4}-\d{2}-\d{2},Get well,/);
   assert.equal((await call(ids.ann, 'GET', '/records/export')).status, 403);
 });
+
+test('an approval card shows the requester\'s balances before this request, and the last leave they took', async (t) => {
+  if (skip(t)) return;
+  const vacation = await typeId('Vacation Leave');
+  const sick = await typeId('Sick Leave');
+  // cy has no manager (HR decides) and took two days of sick leave a few weeks ago, and has a later approved leave that is not taken yet
+  const past = addDays(monday(0), -21);
+  await admin.query("INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, days, status) VALUES ($1, $2, $3, $4, 2, 'approved')", [ids.cy, sick, iso(past), iso(addDays(past, 1))]);
+  const later = monday(30);
+  await admin.query("INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, days, status) VALUES ($1, $2, $3, $3, 1, 'approved')", [ids.cy, await typeId('Unpaid Leave'), iso(later)]);
+  const mon = monday(4);
+  const asked = await call(ids.cy, 'POST', '/requests', { typeId: vacation, startDate: iso(mon), endDate: iso(addDays(mon, 2)), reason: 'Trip' });
+  assert.equal(asked.status, 201, JSON.stringify(asked.json));
+  const card = (await call(ids.hr, 'GET', '/approvals')).json.requests.find((r) => r.id === asked.json.request.id);
+  assert.ok(card, 'HR sees it');
+  const vac = card.balances.find((b) => b.name === 'Vacation Leave');
+  assert.ok(vac.entitled >= 15);
+  assert.equal(vac.remaining, vac.entitled, 'the 3 days of this request are not taken off yet (nothing else used or pending)');
+  assert.equal(vac.pending, 0);
+  assert.ok(card.balances.every((b) => b.entitled > 0), 'only types that have an allowance');
+  assert.ok(!card.balances.some((b) => b.name === 'Unpaid Leave'), 'unpaid leave has no allowance to show');
+  assert.deepEqual(card.lastLeave, { typeName: 'Sick Leave', startDate: iso(past), endDate: iso(addDays(past, 1)), days: 2 }, 'the last leave already taken, not the one still to come');
+  const none = (await call(ids.hr, 'GET', '/approvals')).json.requests.find((r) => r.userId === ids.ann && r.status === 'pending');
+  if (none) assert.ok(none.lastLeave === null || typeof none.lastLeave === 'object');
+});

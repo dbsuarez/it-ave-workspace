@@ -338,7 +338,24 @@ router.get('/approvals', async (req, res) => {
        ORDER BY r.start_date, r.id`,
       [actor.id, isHrLike(actor)]
     );
-    res.json({ requests: result.rows.map(mapRequest) });
+    // So the approver can decide with the facts: the requester's balances as they stand before this request (types with an allowance),
+    // and the last leave they have already started or taken.
+    const requests = [];
+    for (const row of result.rows) {
+      const request = mapRequest(row);
+      const balances = (await balancesFor(row.user_id, Number(row.start_date.slice(0, 4))))
+        .filter((b) => b.capped && b.entitled > 0)
+        .map((b) => {
+          const pending = b.typeId === row.leave_type_id ? b.pending - request.days : b.pending;
+          return { typeId: b.typeId, name: b.name, entitled: b.entitled, used: b.used, pending, remaining: b.entitled - b.used - pending };
+        });
+      const last = (await query(
+        `${REQUEST_SELECT} WHERE r.user_id = $1 AND r.status = 'approved' AND r.start_date <= CURRENT_DATE ORDER BY r.start_date DESC, r.id DESC LIMIT 1`, [row.user_id])).rows[0];
+      request.balances = balances;
+      request.lastLeave = last ? { typeName: last.type_name, startDate: last.start_date, endDate: last.end_date, days: num(last.days) } : null;
+      requests.push(request);
+    }
+    res.json({ requests });
   } catch (err) {
     sendError(res, err, 'List approvals error');
   }
