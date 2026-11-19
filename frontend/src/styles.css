@@ -8406,3 +8406,8 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .create-ic-poll { background: #0e7490; }
 .create-ic-announcement { background: #be185d; }
 .create-ic-leave { background: #7c3aed; }
+
+/* Permissions card: the "Set all" box under each column title */
+.role-table .perm-bulk { display: block; margin: 4px auto 0; padding: 2px 4px; border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); color: var(--text-muted); font: inherit; font-size: 11px; cursor: pointer; }
+.role-table .perm-bulk:hover { color: var(--text); border-color: var(--purple); }
+.role-table .perm-na { color: var(--text-muted); opacity: 0.6; }
