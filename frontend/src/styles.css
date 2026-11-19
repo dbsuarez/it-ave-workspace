@@ -5671,6 +5671,11 @@ h4.cv-h { font-size: 15px; }
   font-weight: 700;
 }
 
+/* a bullet list inside a cell keeps its bullets inside the cell */
+.cv-table td ul,
+.cv-table th ul { margin: 4px 0 0; padding-left: 20px; list-style: disc outside; }
+.cv-table td li { margin: 2px 0; }
+
 .cv-code {
   position: relative;
   margin: 0;
