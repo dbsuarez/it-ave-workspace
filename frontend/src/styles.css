@@ -486,7 +486,12 @@ body.iav-dev .demo-banner {
   text-align: center;
 }
 
-.rail-spacer { flex: 1; }
+.rail-spacer { flex: 0 0 auto; }
+
+/* The sections scroll when the window is short, with no scrollbar; the More button, Create and the account below stay in view. */
+.rail-scroll { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; overscroll-behavior: contain; }
+.rail-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.rail-scroll .rail-item { flex: 0 0 auto; }
 
 .rail-bottom {
   display: flex;
@@ -8276,3 +8281,13 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .kb-help-menu button:hover { background: var(--muted-bg); }
 .kb-screen-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; margin: 6px 0 12px; }
 .kb-screen-option { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+
+/* The rail as an Owner arranged it: sections that live in More are not on the rail; the Owner's dialog */
+.rail-item[data-in-more] { display: none; }
+.rail-customize-modal { width: min(520px, 94vw); max-height: 90vh; overflow-y: auto; }
+.rail-edit-title { margin: 14px 0 6px; font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.rail-edit-list { list-style: none; margin: 0; padding: 0; }
+.rail-edit-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.rail-edit-label { font-weight: 600; }
+.rail-edit-note, .rail-edit-empty { color: var(--text-muted); font-size: 12px; }
+.rail-edit-tools { display: flex; gap: 6px; }

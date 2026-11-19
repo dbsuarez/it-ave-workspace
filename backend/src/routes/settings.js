@@ -3,6 +3,7 @@ const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { can, requirePermission } = require('../permissions');
 const { withDefaultSection, builtInChannelIds, setBuiltInOrder } = require('../defaultChannels');
+const { cleanRailLayout } = require('../railLayout');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -193,7 +194,7 @@ router.get('/sidebar', async (req, res) => {
   try {
     const [userResult, workspaceResult, personalResult, canManageWorkspaceSections, creatorSections] = await Promise.all([
       query('SELECT sidebar_layout FROM users WHERE id = $1', [req.user.userId]),
-      query('SELECT workspace_sidebar_layout FROM moderation_settings WHERE id = 1'),
+      query('SELECT workspace_sidebar_layout, rail_layout FROM moderation_settings WHERE id = 1'),
       query('SELECT id FROM channels WHERE created_by = $1 AND is_personal = TRUE', [req.user.userId]),
       can(query, req.user.userId, 'manage_workspace'),
       // Section placement follows ordinary channels to other viewers, without
@@ -251,7 +252,7 @@ router.get('/sidebar', async (req, res) => {
         inheritedSections.push({ id: `inherited-${owner}-${section.id}`, name: section.name, channelIds: ids });
       }
     }
-    res.json({ layout: { ...personal, inheritedSections, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections } });
+    res.json({ layout: { ...personal, inheritedSections, workspaceSections: workspaceLayout.sections || [], canManageWorkspaceSections, rail: cleanRailLayout(workspaceResult.rows[0]?.rail_layout) } });
   } catch (err) {
     console.error('Get sidebar layout error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -290,6 +291,35 @@ router.put('/sidebar/official', async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Reorder built-in channels error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// The left rail an Owner arranges for everyone: PUT { order, more } saves it, DELETE goes back to the default. Everyone is told at once.
+router.put('/sidebar/rail', async (req, res) => {
+  try {
+    await requirePermission(query, req.user.userId, 'manage_workspace');
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ error: 'Send the rail as { order: [...], more: [...] }' });
+    const rail = cleanRailLayout(req.body);
+    await query('UPDATE moderation_settings SET rail_layout = $1, updated_by = $2, updated_at = NOW() WHERE id = 1', [JSON.stringify(rail), req.user.userId]);
+    req.io?.emit('workspace_sections_updated');
+    res.json({ rail });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Save rail layout error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/sidebar/rail', async (req, res) => {
+  try {
+    await requirePermission(query, req.user.userId, 'manage_workspace');
+    await query("UPDATE moderation_settings SET rail_layout = '{}'::jsonb, updated_by = $1, updated_at = NOW() WHERE id = 1", [req.user.userId]);
+    req.io?.emit('workspace_sections_updated');
+    res.json({ rail: cleanRailLayout(null) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Reset rail layout error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

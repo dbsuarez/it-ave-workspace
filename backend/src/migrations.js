@@ -1026,6 +1026,8 @@ $$`,
   `CREATE INDEX IF NOT EXISTS idx_kb_articles_category ON kb_articles(category_id, position)`,
   // HR may manage the Knowledge Base
   `UPDATE roles SET permissions = array_append(permissions, 'manage_knowledge_base') WHERE legacy_hr = true AND NOT ('manage_knowledge_base' = ANY(permissions))`,
+  // The left rail an Owner arranges for everyone: { order: [...], more: [...] } (see railLayout.js); empty means the default
+  `ALTER TABLE moderation_settings ADD COLUMN IF NOT EXISTS rail_layout JSONB NOT NULL DEFAULT '{}'::jsonb`,
   // The text of an article is a Canvas (written with the Canvas editor: pictures, history, comments, export); the article keeps its
   // place, draft/publish and help links. Articles written before this get a canvas made from their text.
   `ALTER TABLE kb_articles ADD COLUMN IF NOT EXISTS canvas_id INTEGER REFERENCES canvases(id) ON DELETE SET NULL`,

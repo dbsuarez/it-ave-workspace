@@ -126,6 +126,9 @@ async function loadSidebarLayout() {
     if (!res.ok) throw new Error(data.error || 'Could not load your sidebar sections');
     state.sidebarLayout = data.layout || { sections: [], workspaceSections: [], workspaceCollapsed: [], canManageWorkspaceSections: false };
     const layout = state.sidebarLayout;
+    if (typeof applyRailLayout === 'function') applyRailLayout(layout.rail); // the rail as the Owner arranged it for everyone
+    const customize = document.getElementById('user-customize-rail');
+    if (customize) customize.hidden = !layout.canManageWorkspaceSections;
     const placed = new Set([...(layout.workspaceSections || []), ...(layout.sections || [])]
       .flatMap((section) => (section.channelIds || []).map(Number)));
     const ownUnplaced = (state.channels || []).filter((channel) => !channel.isPersonal && Number(channel.createdBy) === Number(state.user?.id)

@@ -99,6 +99,13 @@ Type in **Search notes**: it looks in titles, text, checklist items and label na
 ### Limits
 You can keep 1000 notes, 50 labels, 200 items in a checklist and 10 pictures (PNG, JPEG, GIF or WebP, up to 2 MB each) on a note. Notes are private to you and cannot be shared.
 
+## The left rail
+
+The rail on the left lists the sections of the app. If your window is short, scroll the rail with the mouse wheel (there is no scrollbar): the **More** button, the **+** (Create) button and your picture always stay in view at the bottom.
+
+### Can the rail be rearranged?
+Yes, by an Owner (anyone who manages the workspace), and it applies to **everyone**. Open your picture menu and choose **Customize the rail**: move sections up and down, or send a section into the **More** menu (and bring it back). Home always stays first. **Save for everyone** applies it at once for everybody who is signed in; **Reset to default** puts it back as it was. Employees cannot change it. A section such as Moderation still only shows for the people who may use it.
+
 ## Knowledge Base
 
 The Knowledge Base is where HR keeps the answers to common questions and the employee handbook. Open **Knowledge Base** in the left rail.

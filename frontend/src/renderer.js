@@ -384,12 +384,13 @@ function setupEventListeners() {
   });
 
   // More menu (Lists, Canvas, Wiki)
-  on('btn-rail-more', 'click', (e) => { e.stopPropagation(); toggleMenu('more-menu', 'btn-rail-more'); });
-  document.querySelectorAll('#more-menu [data-more-section]').forEach((item) => {
-    item.addEventListener('click', () => {
-      closeAllMenus();
-      setSection(item.dataset.moreSection);
-    });
+  on('btn-rail-more', 'click', (e) => { e.stopPropagation(); if (typeof refreshMoreMenu === 'function') refreshMoreMenu(); toggleMenu('more-menu', 'btn-rail-more'); });
+  // the entries are made from the rail layout the Owner arranged, so the click is handled on the menu
+  document.getElementById('more-menu')?.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-more-section]');
+    if (!item) return;
+    closeAllMenus();
+    setSection(item.dataset.moreSection);
   });
 
   // Create menu
@@ -586,6 +587,7 @@ function setupEventListeners() {
   setupNotes();
   setupSheets();
   setupKnowledgeBase();
+  setupRailLayout();
   setupPollDialog();
   setupAnnouncements();
   on('channel-read-receipts', 'click', (event) => {
@@ -3120,18 +3122,18 @@ const SECTIONS = {
 };
 
 // Sections reached from the rail's More menu rather than their own rail buttons.
-const MORE_SECTIONS = ['lists'];
+// The sections in the More menu are whatever the Owner arranged (rail-layout.js; Lists by default).
 
 function updateRail(section) {
   document.querySelectorAll('.rail-item[data-rail]').forEach((btn) => {
     const on = btn.dataset.rail === section;
     btn.classList.toggle('active', on);
-    if (on) btn.setAttribute('aria-current', 'page');
+    if (on) { btn.setAttribute('aria-current', 'page'); btn.scrollIntoView?.({ block: 'nearest' }); } // the open section stays in view in a short rail
     else btn.removeAttribute('aria-current');
   });
   // The More button lights up while one of its sections is open, and the menu marks which.
   const moreButton = document.getElementById('btn-rail-more');
-  const inMore = MORE_SECTIONS.includes(section);
+  const inMore = typeof railMoreKeys === 'function' ? railMoreKeys().includes(section) : section === 'lists';
   if (moreButton) {
     moreButton.classList.toggle('active', inMore);
     if (inMore) moreButton.setAttribute('aria-current', 'page');
@@ -4790,6 +4792,8 @@ function handleAccountAction(action) {
     openAdminDetails();
   } else if (action === 'personal-page' && state.user?.isSuperadmin && typeof openPersonPage === 'function') {
     openPersonPage(state.user.id);
+  } else if (action === 'customize-rail') {
+    if (typeof openRailCustomizer === 'function') openRailCustomizer();
   } else if (action === 'preferences') {
     openPreferencesModal();
   } else if (action === 'account') {

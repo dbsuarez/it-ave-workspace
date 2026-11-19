@@ -118,6 +118,8 @@
     <div class="app-body">
       <!-- Icon rail -->
       <nav class="rail" aria-label="Sections">
+        <!-- The sections scroll (no scrollbar) when the window is short; More, Create and the account stay pinned below -->
+        <div class="rail-scroll">
         <button class="rail-item active" data-rail="home" aria-current="page">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span>Home</span>
@@ -169,14 +171,20 @@
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           <span>Huddle</span>
         </button>
+        <button class="rail-item" data-rail="lists" data-in-more="1">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>
+          <span>Lists</span>
+        </button>
         <button class="rail-item" data-rail="moderation" id="nav-moderation" hidden>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg>
           <span>Moderation</span>
         </button>
 
-        <!-- More: Lists and Wiki sit behind one button to keep the rail short -->
+        </div>
+
+        <!-- More: Lists sits behind one button to keep the rail short -->
         <div class="rail-more">
-          <button class="rail-item" id="btn-rail-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More: Lists, Canvases" title="More">
+          <button class="rail-item" id="btn-rail-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More: Lists" title="More">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
             <span>More</span>
           </button>
@@ -224,6 +232,7 @@
             <button class="menu-item" data-account="profile" role="menuitem">Profile</button>
             <button class="menu-item" data-account="manage-profile" id="user-manage-profile" role="menuitem" hidden>Manage profile</button>
             <button class="menu-item" data-account="personal-page" id="user-personal-page" role="menuitem" hidden>My personal page</button>
+            <button class="menu-item" data-account="customize-rail" id="user-customize-rail" role="menuitem" hidden>Customize the rail</button>
             <button class="menu-item" data-account="preferences" role="menuitem">Preferences</button>
             <button class="menu-item" data-account="account" role="menuitem">Account settings</button>
             <div class="menu-sep"></div>
@@ -1017,6 +1026,7 @@
       </div>
     </div>
     <div class="modal people-editor-modal drawing-share-modal" id="drawing-share-modal" role="dialog" aria-label="Share drawing"></div>
+    <div class="modal people-editor-modal drawing-share-modal rail-customize-modal" id="rail-customize-modal" role="dialog" aria-label="Customize the rail"></div>
     <div class="modal people-editor-modal drawing-share-modal kb-import-modal" id="kb-import-modal" role="dialog" aria-label="Import articles"></div>
     <div class="modal people-editor-modal drawing-share-modal kb-import-modal" id="kb-details-modal" role="dialog" aria-label="Article details"></div>
     <div class="modal people-editor-modal drawing-share-modal" id="sheet-share-modal" role="dialog" aria-label="Share sheet"></div>
@@ -1186,6 +1196,7 @@
   <script src="features/sheet-tables-view.js"></script>
   <script src="features/kb-import.js"></script>
   <script src="features/kb-view.js"></script>
+  <script src="features/rail-layout.js"></script>
   <script src="features/knowledge-base.js"></script>
   <script src="features/kb-screen-help.js"></script>
   <script src="features/sheets-view.js"></script>
