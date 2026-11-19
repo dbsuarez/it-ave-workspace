@@ -1318,10 +1318,10 @@ function renderSearchMessage(message) {
 function renderSearchResults(data) {
   els.searchResults.replaceChildren();
   const groups = [
-    ['Messages', 'message', data.messages || [], (item) => `#${item.channelName} · ${item.username}`, (item) => item.content],
-    ['Direct messages', 'direct-message', data.directMessages || [], (item) => item.username, (item) => item.content],
-    ['People', 'person', data.people || [], (item) => item.username, () => 'Open direct message'],
-    ['Files', 'file', data.files || [], (item) => item.name, (item) => item.channelName ? `#${item.channelName} · ${item.uploaderUsername}` : item.username ? `DM with ${item.username}` : `Uploaded by ${item.uploaderUsername}`],
+    ['Messages', 'message', data.messages || [], (item) => `#${item.channelName} · ${displayName({ id: item.userId, username: item.username })}`, (item) => item.content],
+    ['Direct messages', 'direct-message', data.directMessages || [], (item) => displayName({ id: item.userId, username: item.username }), (item) => item.content],
+    ['People', 'person', data.people || [], (item) => displayName(item), () => 'Open direct message'],
+    ['Files', 'file', data.files || [], (item) => item.name, (item) => item.channelName ? `#${item.channelName} · ${displayName(item.uploaderUsername)}` : item.username ? `DM with ${displayName(item.username)}` : `Uploaded by ${displayName(item.uploaderUsername)}`],
   ];
 
   let count = 0;
@@ -1870,9 +1870,9 @@ function renderPinnedMessages(channelId) {
 
   list.innerHTML = pinnedMessages.map((message) => `
     <article class="pinned-message">
-      <button class="pinned-message-jump" type="button" data-pinned-message-id="${escapeHtml(String(message.id))}" aria-label="Jump to message by ${escapeHtml(message.username || 'Unknown')}">
+      <button class="pinned-message-jump" type="button" data-pinned-message-id="${escapeHtml(String(message.id))}" aria-label="Jump to message by ${escapeHtml(displayName({ id: message.userId, username: message.username }, 'Unknown'))}">
         <span class="pinned-message-meta">
-          <strong>${escapeHtml(message.username || 'Unknown')}</strong>
+          <strong>${escapeHtml(displayName({ id: message.userId, username: message.username }, 'Unknown'))}</strong>
           ${message.kind === 'poll' ? '<span class="pinned-kind">Poll</span>' : (message.kind === 'announcement' ? '<span class="pinned-kind">Announcement</span>' : '')}
           <time>${escapeHtml(shortTime(message.createdAt))}</time>
         </span>
@@ -2048,7 +2048,7 @@ function renderDmList() {
     const slabel = presenceLabel(dm.status);
     item.innerHTML = `
       <span class="nav-avatar" style="background:${escapeHtml(dm.avatarColor || '#A855F7')};" data-avatar-user="${escapeHtml(String(dm.id))}">${escapeHtml((dm.username || '?').charAt(0).toUpperCase())}<span class="nav-avatar-dot" style="background:${color};" title="${escapeHtml(slabel)}"></span></span>
-      <span>${escapeHtml(dm.username)}</span>${userStatusMarkup(dm)}
+      <span>${escapeHtml(displayName(dm))}</span>${userStatusMarkup(dm)}
       <span style="margin-left:auto; font-size:11px; opacity:0.6;">${escapeHtml(slabel)}</span>
     `;
     item.onclick = (e) => { e.stopPropagation(); openDM(dm.id); };
@@ -2072,7 +2072,7 @@ async function openDM(userId) {
 
   const user = state.dms.find(u => u.id === userId);
   if (user) {
-    els.dmTitle.textContent = user.username;
+    els.dmTitle.textContent = displayName(user);
     els.dmTopic.textContent = dmTopicText(user);
   }
 
@@ -2392,7 +2392,7 @@ function renderMessageEl(msg, allowReply = false) {
         ${allowReply && isPinned ? '<span class="message-pinned-badge">Pinned</span>' : ''}
       </div>
       ${msg.replyTo ? `<button class="message-reply-preview" type="button" data-target-id="${escapeHtml(String(msg.replyTo))}" title="Go to original message">
-        <span class="message-reply-author">${escapeHtml(replyPreview.username || 'Original message')}</span>
+        <span class="message-reply-author">${escapeHtml(displayName({ id: replyPreview.userId, username: replyPreview.username }, 'Original message'))}</span>
         <span class="message-reply-content">${escapeHtml(replyPreview.content || 'Attachment')}</span>
       </button>` : ''}
       <div class="message-bubble-row">
@@ -2818,7 +2818,7 @@ function createClientMessageId() {
 
 function beginReply(message) {
   state.replyingTo = message;
-  els.replyPreviewAuthor.textContent = message.username || 'Unknown';
+  els.replyPreviewAuthor.textContent = displayName({ id: message.userId, username: message.username }, 'Unknown');
   els.replyPreviewContent.textContent = message.content || 'Attachment';
   els.replyComposerPreview.hidden = false;
   els.messageInput.focus();
@@ -3533,8 +3533,8 @@ function humanizeAuditAction(action) {
 }
 
 function renderAuditEntry(entry) {
-  const actor = entry.actorUsername || 'A former user';
-  const target = entry.targetUsername ? ` ${entry.targetUsername}` : '';
+  const actor = displayName(entry.actorUsername, 'A former user');
+  const target = entry.targetUsername ? ` ${displayName(entry.targetUsername)}` : '';
   const channel = entry.channelName ? ` in #${entry.channelName}` : '';
   const occurredAt = new Date(entry.createdAt).toLocaleString();
   const technicalDetails = {
@@ -3708,10 +3708,10 @@ async function loadModerationChannel(channelId) {
       <div id="moderation-channel-access" data-channel-config-section="access"></div>
       <div id="moderation-channel-permissions" data-channel-config-section="permissions"></div>
       <div class="moderation-card" data-channel-config-section="moderation"><h2>Active timeouts</h2><div class="moderation-list">${(data.timeouts || []).map((timeout) => `
-        <div class="moderation-row"><span>${escapeHtml(timeout.username)} · until ${escapeHtml(new Date(timeout.expiresAt).toLocaleString())}${timeout.reason ? ` · ${escapeHtml(timeout.reason)}` : ''}</span><button class="btn" data-action="remove-timeout" data-member-id="${timeout.userId}">Remove timeout</button></div>
+        <div class="moderation-row"><span>${escapeHtml(displayName({ id: timeout.userId, username: timeout.username }))} · until ${escapeHtml(new Date(timeout.expiresAt).toLocaleString())}${timeout.reason ? ` · ${escapeHtml(timeout.reason)}` : ''}</span><button class="btn" data-action="remove-timeout" data-member-id="${timeout.userId}">Remove timeout</button></div>
       `).join('') || '<p>No active timeouts.</p>'}</div></div>
       <div class="moderation-card" data-channel-config-section="moderation"><h2>Open reports</h2><div class="moderation-list">${(data.reports || []).map((report) => `
-        <div class="moderation-row moderation-report"><span>Message #${report.messageId} · reported by ${escapeHtml(report.reporterUsername || 'former user')} · ${escapeHtml(report.targetUsername)}: ${escapeHtml(report.reason)}</span><div class="moderation-row-actions"><button class="btn" data-action="resolve-report" data-report-id="${report.id}">Resolve</button><button class="btn" data-action="dismiss-report" data-report-id="${report.id}">Dismiss</button></div></div>
+        <div class="moderation-row moderation-report"><span>Message #${report.messageId} · reported by ${escapeHtml(displayName(report.reporterUsername, 'former user'))} · ${escapeHtml(displayName(report.targetUsername))}: ${escapeHtml(report.reason)}</span><div class="moderation-row-actions"><button class="btn" data-action="resolve-report" data-report-id="${report.id}">Resolve</button><button class="btn" data-action="dismiss-report" data-report-id="${report.id}">Dismiss</button></div></div>
       `).join('') || '<p>No open reports.</p>'}</div></div>
       <div class="moderation-card" data-channel-config-section="audit"><h2>Recent audit log</h2><div class="moderation-list">${(data.auditLog || []).map((entry) => `
         ${renderAuditEntry({ ...entry, channelName: data.channel.name })}
@@ -4105,7 +4105,7 @@ function renderHuddleView() {
   const channel = state.channels.find((item) => Number(item.id) === Number(selectedChannelId));
   if (title) {
     title.textContent = directCall
-      ? (joined ? `Huddle with ${directCall.username}` : `Calling ${directCall.username}\u2026`)
+      ? (joined ? `Huddle with ${displayName(directCall)}` : `Calling ${displayName(directCall)}\u2026`)
       : (joined && channel ? `Huddle in #${channel.name}` : 'Channel huddle');
   }
   select.disabled = joined || state.huddle.joining || !state.channels.length;
@@ -4152,8 +4152,8 @@ function renderHuddleParticipants() {
     if (participant.id !== undefined && participant.id !== null) avatar.dataset.avatarUser = String(participant.id);
     const name = document.createElement('span');
     name.textContent = participant.peerId === state.socket?.id
-      ? `${participant.username} (you)`
-      : participant.username || 'Workspace member';
+      ? `${displayName(participant, 'You')} (you)`
+      : displayName(participant, 'Workspace member');
     item.append(avatar, name);
     container.appendChild(item);
   });
@@ -4199,7 +4199,7 @@ async function joinHuddle(direct) {
       id: state.user.id,
       username: state.user.username,
     });
-    setHuddleStatus(isDirect ? `Calling ${state.huddle.direct.username}\u2026` : 'Joining channel huddle…');
+    setHuddleStatus(isDirect ? `Calling ${displayName(state.huddle.direct)}\u2026` : 'Joining channel huddle…');
     state.socket.emit('huddle:join', isDirect ? { withUserId: state.huddle.direct.userId } : channelId);
   } catch (err) {
     if (state.huddle.joinAttempt !== joinAttempt) return;
@@ -4360,7 +4360,7 @@ function updateHuddleConnectedStatus() {
   const direct = state.huddle.direct;
   setHuddleStatus(
     direct
-      ? `Connected to ${direct.username}${alone ? '. Waiting for them to answer.' : ''}`
+      ? `Connected to ${displayName(direct)}${alone ? '. Waiting for them to answer.' : ''}`
       : `Connected to #${channel?.name || 'channel'}${alone ? '. Waiting for others to join.' : ''}`,
     'connected'
   );
@@ -4594,7 +4594,7 @@ async function showUserProfile(userId) {
       delete els.userProfileAvatar.dataset.photoPainted;
       paintAvatarElement(els.userProfileAvatar);
     }
-    if (els.userProfileName) els.userProfileName.textContent = u.username || 'User';
+    if (els.userProfileName) els.userProfileName.textContent = displayName(u, 'User');
     if (els.userProfileDot) els.userProfileDot.className = `user-profile-dot ${u.status || 'offline'}`;
     if (els.userProfileStatusText) els.userProfileStatusText.textContent = statusLabelFor(u.status);
     if (els.userProfileEmailRow) els.userProfileEmailRow.hidden = false;
@@ -5285,7 +5285,7 @@ function renderLists() {
       </div>`).join('');
     const assignees = [
       '<option value="">Unassigned</option>',
-      ...state.listMembers.map((member) => `<option value="${member.id}">${escapeHtml(member.username)}</option>`),
+      ...state.listMembers.map((member) => `<option value="${member.id}">${escapeHtml(displayName(member))}</option>`),
     ].join('');
     return `
       <article class="card shared-list-card" data-list-id="${list.id}">
@@ -6349,7 +6349,7 @@ async function transferCanvas2Owner(username) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not transfer ownership');
     closeSettingsModal();
-    showToast(`${data.ownerUsername} is now the owner.`, 'success');
+    showToast(`${displayName(data.ownerUsername)} is now the owner.`, 'success');
     await loadCanvas2StandaloneList();
   } catch (err) {
     console.error('Transfer canvas ownership error:', err);
@@ -6371,7 +6371,7 @@ function renderCanvas2ShareCollaborators(collaborators) {
   for (const collab of collaborators) {
     const row = document.createElement('li');
     row.className = 'canvas2-share-row';
-    row.innerHTML = `<span class="canvas2-share-row-name">${escapeHtml(collab.username)}</span><span class="canvas2-share-row-role">${collab.role}</span><button class="canvas2-share-row-remove" type="button" data-canvas2-remove-collab="${collab.id}">Remove</button>`;
+    row.innerHTML = `<span class="canvas2-share-row-name">${escapeHtml(displayName(collab))}</span><span class="canvas2-share-row-role">${collab.role}</span><button class="canvas2-share-row-remove" type="button" data-canvas2-remove-collab="${collab.id}">Remove</button>`;
     list.appendChild(row);
   }
 }

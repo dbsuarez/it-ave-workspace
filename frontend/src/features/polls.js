@@ -38,7 +38,7 @@ function pollCardHtml(poll, { canClose = false, people = null } = {}) {
     const selected = mine.has(id);
     const showAvatars = poll.closed && Array.isArray(option.voterIds) && option.voterIds.length;
     const voters = showAvatars ? pollAvatarsHtml(option, people)
-      : (Array.isArray(option.voters) && option.voters.length ? `<small class="poll-voters">${option.voters.map(pollEscape).join(', ')}</small>` : '');
+      : (Array.isArray(option.voters) && option.voters.length ? `<small class="poll-voters">${option.voters.map((voter) => pollEscape(typeof displayName === 'function' ? displayName(voter) : voter)).join(', ')}</small>` : '');
     return `<div class="poll-row"><button type="button" class="poll-option${selected ? ' selected' : ''}" data-poll-vote="${id}" aria-pressed="${selected}"${poll.closed ? ' disabled' : ''}><span class="poll-bar" style="width:${percent}%"></span><span class="poll-label">${pollEscape(option.label)}</span><span class="poll-count">${count} (${percent}%)</span></button>${voters}</div>`;
   }).join('');
   const meta = [

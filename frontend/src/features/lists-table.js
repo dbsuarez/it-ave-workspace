@@ -58,14 +58,14 @@ function tlChipsHtml(table, column, row, editable = true) {
   const chips = value.map((entry) => {
     const label = column.type === 'select'
       ? (tlChoice(column, entry)?.label || '?')
-      : (table.members.find((m) => Number(m.id) === Number(entry))?.username || `user ${entry}`);
+      : (displayName(table.members.find((m) => Number(m.id) === Number(entry))) || `user ${entry}`);
     const color = column.type === 'select' ? (tlChoice(column, entry)?.color || 'gray') : 'indigo';
     const remove = editable ? `<button type="button" class="tl-chip-x" data-tl-unpick="${row.id}:${column.id}:${escapeHtml(String(entry))}" aria-label="Remove ${escapeHtml(label)}">×</button>` : '';
     return `<span class="tl-chip c-${escapeHtml(color)}">${escapeHtml(label)}${remove}</span>`;
   }).join('');
   const options = column.type === 'select'
     ? (column.options?.choices || []).filter((c) => !value.includes(c.id)).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}</option>`)
-    : table.members.filter((m) => !value.includes(m.id)).map((m) => `<option value="${m.id}">${escapeHtml(m.username)}</option>`);
+    : table.members.filter((m) => !value.includes(m.id)).map((m) => `<option value="${m.id}">${escapeHtml(displayName(m))}</option>`);
   const showPicker = editable && options.length > 0 && (multiple || value.length === 0);
   const picker = showPicker
     ? `<select class="tl-pick" data-tl-pick="${row.id}:${column.id}" aria-label="Add ${escapeHtml(column.name)}"><option value="">${value.length ? '+' : '—'}</option>${options.join('')}</select>`
@@ -102,7 +102,7 @@ function tlPlain(table, column, row) {
   const value = row.cells[column.id];
   if (value === undefined || value === null) return '';
   if (column.type === 'select') return (value || []).map((id) => tlChoice(column, id)?.label || '').join(', ');
-  if (column.type === 'user') return (value || []).map((id) => table.members.find((m) => Number(m.id) === Number(id))?.username || '').join(', ');
+  if (column.type === 'user') return (value || []).map((id) => displayName(table.members.find((m) => Number(m.id) === Number(id))) || '').join(', ');
   if (column.type === 'link') return value.url || '';
   return String(value);
 }

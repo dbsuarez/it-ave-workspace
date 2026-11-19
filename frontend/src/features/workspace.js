@@ -82,7 +82,7 @@ function scheduledListHtml() {
   return items.map((item) => `
     <div class="later-item${item.failedAt ? ' failed' : ''}">
       <span class="later-item-body">
-        <span class="later-item-title"><strong>${escapeHtml(item.channelName ? `#${item.channelName}` : (item.receiverUsername || 'Direct message'))}</strong> · ${item.failedAt ? 'Could not send' : 'Sends'} ${escapeHtml(new Date(item.sendAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</span>
+        <span class="later-item-title"><strong>${escapeHtml(item.channelName ? `#${item.channelName}` : (displayName(item.receiverUsername) || 'Direct message'))}</strong> · ${item.failedAt ? 'Could not send' : 'Sends'} ${escapeHtml(new Date(item.sendAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</span>
         <span class="later-item-text">${escapeHtml(item.content)}</span>
         ${item.error ? `<span class="later-item-error">${escapeHtml(item.error)}</span>` : ''}
       </span>
@@ -804,7 +804,7 @@ async function channelResourceHtml(tab, channelId) {
     await loadPinnedMessages(channelId);
     const pins = state.pinnedMessages[channelId] || [];
     return pins.length
-      ? pins.map((pin) => row(`data-resource-message="${pin.id}"`, escapeHtml(pin.username || 'Unknown'), escapeHtml(pin.content || 'Attachment'))).join('')
+      ? pins.map((pin) => row(`data-resource-message="${pin.id}"`, escapeHtml(displayName({ id: pin.userId, username: pin.username }, 'Unknown')), escapeHtml(pin.content || 'Attachment'))).join('')
       : emptyRecordMarkup('No pinned messages', 'Pin a message to keep it handy for everyone in the channel.');
   }
   if (tab === 'files') {
@@ -812,7 +812,7 @@ async function channelResourceHtml(tab, channelId) {
     const files = (data.files || []).filter((file) => Number(file.channelId) === Number(channelId));
     state.channelTab.files = files;
     return files.length
-      ? files.map((file) => row(`data-resource-file="${file.id}"`, escapeHtml(file.name), `${escapeHtml(humanSize(file.size))} · shared by ${escapeHtml(file.uploaderUsername || 'former user')} · ${escapeHtml(shortTime(file.uploadedAt))}`, '<button class="btn" type="button">Download</button>')).join('')
+      ? files.map((file) => row(`data-resource-file="${file.id}"`, escapeHtml(file.name), `${escapeHtml(humanSize(file.size))} · shared by ${escapeHtml(displayName(file.uploaderUsername, 'former user'))} · ${escapeHtml(shortTime(file.uploadedAt))}`, '<button class="btn" type="button">Download</button>')).join('')
       : emptyRecordMarkup('No files in this channel', 'Files attached to messages here will be listed.');
   }
   if (tab === 'canvases') {
@@ -821,7 +821,7 @@ async function channelResourceHtml(tab, channelId) {
     return canvases.length
       ? canvases.map((canvas) => {
         const owner = canvas.shared && canvas.owner;
-        const ownerName = owner && (owner.name || owner.username || 'former user');
+        const ownerName = owner && displayName(owner, 'former user');
         const ownerHtml = owner ? `<span class="canvas-owner" title="${escapeHtml(ownerName)}">
           <span class="read-receipt-avatar canvas-owner-avatar" data-user-id="${owner.id}" role="button" tabindex="0" title="${escapeHtml(ownerName)}" aria-label="View ${escapeHtml(ownerName)}'s profile" style="background:${escapeHtml(owner.avatarColor || '#64748b')}">${escapeHtml(ownerName.charAt(0).toUpperCase())}</span>
           <span class="canvas-owner-label">Owned by ${escapeHtml(ownerName)}</span>
@@ -859,7 +859,7 @@ async function channelResourceHtml(tab, channelId) {
       <button class="btn primary" type="submit">Add link</button>
     </form>
     ${links.length
-    ? links.map((link) => row('', `<a class="message-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.title)}</a>`, `${escapeHtml(link.url)} · added by ${escapeHtml(link.createdByUsername)}`, canRemove(link) ? `<button class="btn" type="button" data-remove-link="${link.id}">Remove</button>` : '')).join('')
+    ? links.map((link) => row('', `<a class="message-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.title)}</a>`, `${escapeHtml(link.url)} · added by ${escapeHtml(displayName(link.createdByUsername))}`, canRemove(link) ? `<button class="btn" type="button" data-remove-link="${link.id}">Remove</button>` : '')).join('')
     : emptyRecordMarkup('No links yet', 'Add web addresses the whole channel should have at hand.')}`;
 }
 

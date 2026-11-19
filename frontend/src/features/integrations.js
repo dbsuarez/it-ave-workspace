@@ -35,7 +35,7 @@ function groupMentionCandidates() {
     id: `department-${department.id}`,
     username: roleHandle(department.name),
     avatarColor: '#0F766E',
-    role: `department · ${department.memberCount}${department.headUsername ? ` · headed by ${department.headUsername}` : ''}`,
+    role: `department · ${department.memberCount}${department.headUsername ? ` · headed by ${displayName(department.headUsername)}` : ''}`,
     isGroup: true,
   }));
   const roles = (state.roleMentions || []).map((role) => ({
@@ -77,7 +77,7 @@ async function loadChannelWebhooks(channelId, newPath = null) {
     const data = await adminApi(`/api/webhooks?channelId=${channelId}`);
     const rows = (data.webhooks || []).map((hook) => `
       <div class="moderation-row">
-        <span><strong>${escapeHtml(hook.name)}</strong><br><small>Created by ${escapeHtml(hook.createdBy)} · ${hook.lastUsedAt ? `last used ${escapeHtml(new Date(hook.lastUsedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}` : 'never used'}</small></span>
+        <span><strong>${escapeHtml(hook.name)}</strong><br><small>Created by ${escapeHtml(displayName(hook.createdBy))} · ${hook.lastUsedAt ? `last used ${escapeHtml(new Date(hook.lastUsedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}` : 'never used'}</small></span>
         <div class="moderation-row-actions"><button class="btn" type="button" data-webhook-delete="${hook.id}">Delete</button></div>
       </div>`).join('');
     const url = newPath ? `${API_BASE}${newPath}` : '';

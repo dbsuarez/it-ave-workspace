@@ -326,7 +326,7 @@ function renderLaterView() {
       <div class="later-item" data-open-saved="${item.id}">
         <span class="avatar-mini" style="background:${escapeHtml(item.avatarColor || '#A855F7')};" ${item.userId ? `data-user-id="${escapeHtml(String(item.userId))}" role="button" tabindex="0" title="View profile" aria-label="View profile"` : ''}>${escapeHtml((item.username || '?').charAt(0).toUpperCase())}</span>
         <span class="later-item-body">
-          <span class="later-item-title"><strong>${escapeHtml(item.username)}</strong> in <strong>#${escapeHtml(item.channelName)}</strong></span>
+          <span class="later-item-title"><strong>${escapeHtml(displayName({ id: item.userId, username: item.username }))}</strong> in <strong>#${escapeHtml(item.channelName)}</strong></span>
           <span class="later-item-text">${escapeHtml(item.content || 'Attachment')}</span>
         </span>
         <button class="btn" type="button" data-remove-saved="${item.id}">Remove</button>
@@ -335,7 +335,7 @@ function renderLaterView() {
         <span class="later-file-icon" data-thumb-file="${escapeHtml(String(item.fileId))}" data-thumb-mime="${escapeHtml(item.mimeType || '')}">${fileIconSvg(fileIcon(item.mimeType))}</span>
         <span class="later-item-body">
           <span class="later-item-title"><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(humanSize(item.size))}</span>
-          <span class="later-item-text">File shared by ${escapeHtml(item.username)} in #${escapeHtml(item.channelName)}</span>
+          <span class="later-item-text">File shared by ${escapeHtml(displayName({ id: item.userId, username: item.username }))} in #${escapeHtml(item.channelName)}</span>
         </span>
         <button class="btn" type="button" data-download-saved="${item.id}">Download</button>
         <button class="btn" type="button" data-remove-saved="${item.id}">Remove</button>

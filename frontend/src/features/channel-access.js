@@ -30,14 +30,14 @@ async function loadChannelAccessCard(channelId) {
 }
 function accessPersonName(id) {
   const u = channelAccessUi.people.find(p => Number(p.id) === Number(id));
-  return u ? (u.username || u.name || `Employee #${id}`) : `Employee #${id}`;
+  return u ? (displayName(u) || u.name || `Employee #${id}`) : `Employee #${id}`;
 }
 function renderChannelAccessCard() {
   const host = document.getElementById('moderation-channel-access');
   if (!host || !channelAccessUi.policy) return;
   const p = channelAccessUi.policy;
   const checked = new Set((p.departmentIds || []).map(Number));
-  const options = channelAccessUi.people.map(u => `<option value="${Number(u.id)}">${channelAccessEscape(u.username || u.name || u.id)}</option>`).join('');
+  const options = channelAccessUi.people.map(u => `<option value="${Number(u.id)}">${channelAccessEscape(displayName(u) || u.name || u.id)}</option>`).join('');
   host.innerHTML = `<div class="moderation-card"><h2>Channel access</h2>
     <p class="moderation-help">Access controls who can enter and read this channel; Permissions controls what they can do. New access can reveal all retained history. Bans override all access grants.</p>
     <h3>Departments</h3><div class="moderation-list">${channelAccessUi.departments.map(d => `<label class="preference-toggle"><input type="checkbox" data-access-dept="${Number(d.id)}" ${checked.has(Number(d.id)) ? 'checked' : ''}><span>${channelAccessEscape(d.name)}</span></label>`).join('') || '<p>No departments available.</p>'}</div>
@@ -121,7 +121,7 @@ async function loadChannelLifecycleControls(channelId) {
   try {
     const info = await channelAccessRequest(`/api/moderation/channels/${channelId}/managers`);
     if (channelAccessUi.channelId !== Number(channelId)) return;
-    const opts = channelAccessUi.people.map(u => `<option value="${Number(u.id)}">${channelAccessEscape(u.username || u.name || u.id)}</option>`).join('');
+    const opts = channelAccessUi.people.map(u => `<option value="${Number(u.id)}">${channelAccessEscape(displayName(u) || u.name || u.id)}</option>`).join('');
     const roster = (info.managers || []).map(u => `<li>${channelAccessEscape([u.first_name,u.last_name].filter(Boolean).join(' ') || u.username)}</li>`).join('');
     host.insertAdjacentHTML('beforeend', `<section class="moderation-card" id="channel-lifecycle-controls">
       <h2>Channel management</h2><p class="moderation-help">Managers must already be members of this channel. Assigning a manager does not grant new channel access.</p>

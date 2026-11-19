@@ -439,10 +439,12 @@ router.delete('/records/:userId/:date', async (req, res) => {
 const mapCorrection = (row) => ({
   id: row.id, userId: row.user_id, username: row.username, firstName: row.first_name || '', middleName: row.middle_name || '', lastName: row.last_name || '',
   date: row.day, punches: row.punches, reason: row.reason, status: row.status,
-  decidedBy: row.decided_by_username || null, decidedAt: row.decided_at || null, decisionNote: row.decision_note || '', createdAt: row.created_at,
+  decidedBy: row.decided_by_username || null,
+  decidedByName: [row.decided_by_first, row.decided_by_middle, row.decided_by_last].map((part) => String(part || '').trim()).filter(Boolean).join(' ') || null,
+  decidedAt: row.decided_at || null, decisionNote: row.decision_note || '', createdAt: row.created_at,
 });
 const CORRECTION_SELECT = `SELECT c.id, c.user_id, to_char(c.work_date, 'YYYY-MM-DD') AS day, c.punches, c.reason, c.status, c.decided_at, c.decision_note, c.created_at,
-    u.username, u.first_name, u.middle_name, u.last_name, u.manager_id, d.username AS decided_by_username
+    u.username, u.first_name, u.middle_name, u.last_name, u.manager_id, d.username AS decided_by_username, d.first_name AS decided_by_first, d.middle_name AS decided_by_middle, d.last_name AS decided_by_last
   FROM attendance_corrections c JOIN users u ON u.id = c.user_id LEFT JOIN users d ON d.id = c.decided_by`;
 
 function notify(req, userIds, payload) {

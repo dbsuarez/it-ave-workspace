@@ -31,7 +31,7 @@ function ccBodyHtml(text) {
 
 function ccCommentHtml(comment, canComment) {
   const mine = comment.author && state.user && Number(comment.author.id) === Number(state.user.id);
-  const who = comment.author ? comment.author.username : 'Deleted user';
+  const who = comment.author ? displayName(comment.author) : 'Deleted user';
   return `<div class="cc-comment">
     <div class="cc-meta"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(ccTime(comment.createdAt))}</span>
       ${mine && canComment ? `<button type="button" class="cc-link" data-cc-delete="${comment.id}">Delete</button>` : ''}
@@ -65,7 +65,7 @@ function ccRender() {
       ${root.anchor ? `<blockquote class="cc-anchor">${escapeHtml(root.anchor)}</blockquote>` : ''}
       ${ccCommentHtml(root, canComment)}
       ${replies.map((r) => ccCommentHtml(r, canComment)).join('')}
-      ${root.resolved ? `<div class="cc-resolved">Resolved${root.resolvedBy ? ` by ${escapeHtml(root.resolvedBy.username)}` : ''}</div>` : ''}
+      ${root.resolved ? `<div class="cc-resolved">Resolved${root.resolvedBy ? ` by ${escapeHtml(displayName(root.resolvedBy))}` : ''}</div>` : ''}
       ${canComment ? `<form class="cc-reply" data-cc-reply="${root.id}">
           <input type="text" maxlength="2000" placeholder="Reply…" aria-label="Reply">
           <button class="btn" type="submit">Reply</button>

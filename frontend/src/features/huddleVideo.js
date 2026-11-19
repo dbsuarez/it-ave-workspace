@@ -74,7 +74,7 @@ function refreshRemoteHuddleVideo(peerId) {
     removeHuddleVideoTile(`peer-${peerId}`);
     return;
   }
-  const name = peer.participant.username || 'Workspace member';
+  const name = displayName(peer.participant, 'Workspace member');
   const tile = huddleVideoTile(`peer-${peerId}`, mode === 'screen' ? `${name}'s screen` : name);
   tile.classList.toggle('screen', mode === 'screen');
   const video = tile.querySelector('video');

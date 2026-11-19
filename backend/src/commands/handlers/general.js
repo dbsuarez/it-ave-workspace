@@ -36,9 +36,9 @@ async function search(ctx, args) {
   const where = (item) => `#${item.channelName}${item.topicTitle ? ` › ${item.topicTitle}` : ''}`;
   const rows = [
     ...found.topics.map((t) => ['Topic', t.title, `#${t.channelName}`]),
-    ...found.messages.map((m) => ['Message', `${m.username}: ${preview(m.content)}`, where(m)]),
-    ...found.directMessages.map((m) => ['Direct message', `${m.username}: ${preview(m.content)}`, 'Direct']),
-    ...found.people.map((p) => ['Person', p.username, '']),
+    ...found.messages.map((m) => ['Message', `${m.fullName || m.username}: ${preview(m.content)}`, where(m)]),
+    ...found.directMessages.map((m) => ['Direct message', `${m.fullName || m.username}: ${preview(m.content)}`, 'Direct']),
+    ...found.people.map((p) => ['Person', p.fullName || p.username, p.fullName ? p.username : '']),
     ...found.files.map((f) => ['File', f.name, f.channelName ? where(f) : 'Direct']),
   ];
   const actions = [{ type: 'open-route', route: 'search', query: term }];

@@ -12,7 +12,7 @@ function groupState() {
 function groupTitle(group) {
   if (group.name) return group.name;
   const others = group.members.filter((member) => Number(member.id) !== Number(state.user.id));
-  return others.map((member) => member.username).join(', ') || 'Just you';
+  return others.map((member) => displayName(member)).join(', ') || 'Just you';
 }
 
 async function loadGroups() {
@@ -38,7 +38,7 @@ function renderGroupList() {
   list.innerHTML = groups.map((group) => {
     const active = Number(state.currentGroupId) === Number(group.id) && state.section === 'dms';
     return `
-      <div class="nav-item${active ? ' active' : ''}" data-group-id="${group.id}" title="${escapeHtml(group.members.map((m) => m.username).join(', '))}">
+      <div class="nav-item${active ? ' active' : ''}" data-group-id="${group.id}" title="${escapeHtml(group.members.map((m) => displayName(m)).join(', '))}">
         <span class="group-count">${group.members.length}</span>
         <span class="group-name">${escapeHtml(groupTitle(group))}</span>
         ${group.unreadCount > 0 && !active ? `<span class="unread-badge">${group.unreadCount}</span>` : ''}
@@ -63,7 +63,7 @@ function leaveGroupView() {
 
 function renderGroupHeader(group) {
   els.dmTitle.textContent = groupTitle(group);
-  els.dmTopic.textContent = `${group.members.length} people: ${group.members.map((m) => m.username).join(', ')}`;
+  els.dmTopic.textContent = `${group.members.length} people: ${group.members.map((m) => displayName(m)).join(', ')}`;
 }
 
 async function openGroup(groupId) {
@@ -155,7 +155,7 @@ function handleNewGroupMessage(message) {
     renderGroupList();
   }
   if (!mine && !(onScreen && document.hasFocus())) {
-    notifyUser('dm', `${message.senderUsername} in ${group ? groupTitle(group) : 'a group'}: ${message.content}`);
+    notifyUser('dm', `${displayName({ id: message.senderId, username: message.senderUsername })} in ${group ? groupTitle(group) : 'a group'}: ${message.content}`);
   }
 }
 
@@ -201,7 +201,7 @@ function openGroupModal(mode) {
     ? candidates.map((user) => `
       <label class="preference-toggle">
         <input type="${mode === 'add' ? 'radio' : 'checkbox'}" name="group-user" value="${user.id}">
-        <span>${escapeHtml(user.username)}</span>
+        <span>${escapeHtml(displayName(user))}</span>
       </label>`).join('')
     : '<p class="form-note">Everyone is already in this group.</p>';
   openSettingsModal(modal);

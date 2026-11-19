@@ -107,7 +107,7 @@ function handleAttendanceUpdated(event) {
   if (event.kind === 'requested' && !mine) {
     showToast(`${personName(c)} asked to correct ${attendanceDay(c.date)}.`, 'info');
   } else if (mine && (event.kind === 'approved' || event.kind === 'rejected')) {
-    showToast(`Your correction for ${attendanceDay(c.date)} was ${event.kind === 'approved' ? 'approved' : 'declined'}${c.decidedBy ? ` by ${c.decidedBy}` : ''}.`, event.kind === 'approved' ? 'success' : 'info');
+    showToast(`Your correction for ${attendanceDay(c.date)} was ${event.kind === 'approved' ? 'approved' : 'declined'}${c.decidedBy ? ` by ${displayName({ username: c.decidedBy, name: c.decidedByName })}` : ''}.`, event.kind === 'approved' ? 'success' : 'info');
   }
   if (attendanceState.loaded) loadAttendance(); else refreshAttendanceSummary();
 }
@@ -198,7 +198,7 @@ function attendanceMineRequestsHtml() {
   if (!attendanceState.mine.length) return '';
   return `<h3 class="lv-h">My correction requests</h3><div class="emp-table-wrap"><table class="emp-table"><thead><tr><th>Day</th><th>Asked for</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${attendanceState.mine.map((c) => `
     <tr><td>${escapeText(attendanceDay(c.date))}</td><td>${escapeText(c.punches.map((p) => `${p.in}–${p.out || '…'}`).join(' · '))}</td><td class="att-note" title="${escapeText(c.reason)}">${escapeText(c.reason)}</td>
-      <td><span class="lv-status lv-${c.status}">${CORRECTION_STATUS[c.status]}</span>${c.decidedBy ? `<em class="lv-by">by ${escapeText(c.decidedBy)}</em>` : ''}${c.decisionNote ? `<em class="lv-by">“${escapeText(c.decisionNote)}”</em>` : ''}</td>
+      <td><span class="lv-status lv-${c.status}">${CORRECTION_STATUS[c.status]}</span>${c.decidedBy ? `<em class="lv-by">by ${escapeText(displayName({ username: c.decidedBy, name: c.decidedByName }))}</em>` : ''}${c.decisionNote ? `<em class="lv-by">“${escapeText(c.decisionNote)}”</em>` : ''}</td>
       <td>${c.status === 'pending' ? `<button type="button" class="btn" data-att-cancel="${c.id}">Cancel</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 

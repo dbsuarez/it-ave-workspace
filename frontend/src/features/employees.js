@@ -303,7 +303,7 @@ function renderEmployeeTasks(id, tasks) {
     return `<div class="emp-task-block" data-task-kind="${kind}">
       <div class="emp-task-head"><strong>${label}</strong><span class="pp-muted">${own.length ? `${done} of ${own.length} done` : 'No list yet'}</span>
         ${own.length ? '' : `<button type="button" class="btn" data-task-apply="${kind}">Start the standard list</button>`}</div>
-      ${own.map((t) => `<label class="emp-task${t.done ? ' done' : ''}"><input type="checkbox" data-task-toggle="${t.id}"${t.done ? ' checked' : ''}><span>${escapeText(t.title)}</span>${t.done && t.doneBy ? `<em>by ${escapeText(t.doneBy)}</em>` : ''}<button type="button" class="emp-task-x" data-task-delete="${t.id}" aria-label="Remove this task">×</button></label>`).join('')}
+      ${own.map((t) => `<label class="emp-task${t.done ? ' done' : ''}"><input type="checkbox" data-task-toggle="${t.id}"${t.done ? ' checked' : ''}><span>${escapeText(t.title)}</span>${t.done && t.doneBy ? `<em>by ${escapeText(displayName(t.doneBy))}</em>` : ''}<button type="button" class="emp-task-x" data-task-delete="${t.id}" aria-label="Remove this task">×</button></label>`).join('')}
       <div class="emp-task-add"><input type="text" maxlength="160" placeholder="Add a task" data-task-input="${kind}" aria-label="Add a ${label.toLowerCase()} task"><button type="button" class="btn" data-task-add="${kind}">Add</button></div>
     </div>`;
   }).join('');

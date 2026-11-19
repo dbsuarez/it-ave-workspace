@@ -4,6 +4,9 @@
 // drawings.js, which read the data-drawing-open attribute written here. `updatedText` (for example "5 min ago") is worked out
 // by the caller so these stay free of clocks and locales.
 
+// A person's label: their full name when the app has loaded display-name.js, else the username (these views are also tested on their own).
+const drawingWho = (ref) => (typeof displayName === 'function' ? displayName(ref) : String((ref && ref.username) || ''));
+
 function drawingEscape(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -40,7 +43,7 @@ function drawingListHtml(drawings, { empty = 'No drawings yet.' } = {}) {
   if (!drawings.length) return `<div class="drawing-empty">${drawingEscape(empty)}</div>`;
   return drawings.map((drawing) => {
     const id = Number(drawing.id);
-    const meta = [drawingEscape(drawing.ownerUsername || ''), drawingEscape(drawing.updatedText || '')].filter(Boolean).join(' · ');
+    const meta = [drawingEscape(drawingWho({ username: drawing.ownerUsername })), drawingEscape(drawing.updatedText || '')].filter(Boolean).join(' · ');
     return `<div class="drawing-row" data-drawing-id="${id}">
       <button type="button" class="drawing-row-main" data-drawing-open="${id}">${DRAWING_ICON}<span class="drawing-row-title">${drawingEscape(drawing.title)}</span>${drawingBadgeHtml(drawing)}<span class="drawing-row-meta">${meta}</span></button>
     </div>`;
@@ -56,7 +59,7 @@ const DRAWING_BANNERS = {
 
 function drawingPresenceHtml(person) {
   const color = /^#[0-9a-fA-F]{6}$/.test(person.color || '') ? person.color : '#6b7280';
-  const name = String(person.username || '?');
+  const name = String(drawingWho({ id: person.userId, username: person.username }) || '?');
   return `<span class="drawing-presence" title="${drawingEscape(name)}" style="background:${color}">${drawingEscape(name.charAt(0).toUpperCase())}</span>`;
 }
 
@@ -86,7 +89,7 @@ function drawingBarHtml({ drawing, status = 'saved', statusText = '', present = 
 function drawingShareHtml({ drawing, members = [], people = [], channels = [] }) {
   const roleSelect = (attrs, current) => `<select ${attrs}><option value="editor"${current === 'editor' ? ' selected' : ''}>Can edit</option><option value="viewer"${current === 'viewer' ? ' selected' : ''}>Can view</option></select>`;
   const rows = members.length
-    ? members.map((member) => `<div class="drawing-share-row"><span>${drawingEscape(member.username)}</span>${roleSelect(`data-drawing-member-role="${Number(member.userId)}" aria-label="Role of ${drawingEscape(member.username)}"`, member.role)}<button type="button" class="btn" data-drawing-member-remove="${Number(member.userId)}">Remove</button></div>`).join('')
+    ? members.map((member) => `<div class="drawing-share-row"><span>${drawingEscape(drawingWho({ id: member.userId, username: member.username }))}</span>${roleSelect(`data-drawing-member-role="${Number(member.userId)}" aria-label="Role of ${drawingEscape(drawingWho({ id: member.userId, username: member.username }))}"`, member.role)}<button type="button" class="btn" data-drawing-member-remove="${Number(member.userId)}">Remove</button></div>`).join('')
     : '<p class="drawing-share-empty">Not shared with anyone yet.</p>';
   return `<div class="modal-header"><h3>Share "${drawingEscape(drawing.title)}"</h3><button class="modal-close" type="button" data-drawing-share-close aria-label="Close">&times;</button></div>
   <div class="modal-body" data-drawing-id="${Number(drawing.id)}">

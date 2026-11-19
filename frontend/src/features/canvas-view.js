@@ -162,7 +162,7 @@ async function cvwOpenHistory(which) {
       ? '<li class="canvas-history-empty">No saved versions yet.</li>'
       : data.revisions.map((r) => `<li><button type="button" class="canvas-history-item" data-cv-revision="${r.revision}">
           <strong>${escapeHtml(new Date(r.editedAt).toLocaleString())}</strong>
-          <span>${escapeHtml(r.editedBy ? r.editedBy.username : 'Unknown')} · ${escapeHtml(r.title)}</span>
+          <span>${escapeHtml(r.editedBy ? displayName(r.editedBy) : 'Unknown')} · ${escapeHtml(r.title)}</span>
         </button></li>`).join('');
   } catch (err) {
     console.error('Canvas history error:', err);
@@ -179,7 +179,7 @@ async function cvwPreviewRevision(revision) {
     const r = data.revision;
     cvwHistory.selected = r.revision;
     document.querySelectorAll('.canvas-history-item').forEach((b) => b.classList.toggle('active', Number(b.dataset.cvRevision) === r.revision));
-    document.getElementById('canvas-history-meta').textContent = `${r.title} — ${new Date(r.editedAt).toLocaleString()}${r.editedBy ? ` by ${r.editedBy.username}` : ''}`;
+    document.getElementById('canvas-history-meta').textContent = `${r.title} — ${new Date(r.editedAt).toLocaleString()}${r.editedBy ? ` by ${displayName(r.editedBy)}` : ''}`;
     document.getElementById('canvas-history-text').textContent = r.content || '(empty)';
     document.getElementById('btn-canvas-history-restore').hidden = !view.canEdit;
   } catch (err) {

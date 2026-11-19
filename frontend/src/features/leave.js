@@ -99,7 +99,7 @@ function handleLeaveUpdated(event) {
   if (event.kind === 'requested' && !mine) {
     showToast(`${personName(r)} asked for ${leaveDays(r.days)} of ${r.typeName}: ${leaveRange(r)}.`, 'info');
   } else if (mine && (event.kind === 'approved' || event.kind === 'rejected')) {
-    showToast(`Your ${r.typeName} (${leaveRange(r)}) was ${event.kind}${r.decidedBy ? ` by ${r.decidedBy}` : ''}.`, event.kind === 'approved' ? 'success' : 'info');
+    showToast(`Your ${r.typeName} (${leaveRange(r)}) was ${event.kind}${r.decidedBy ? ` by ${displayName({ username: r.decidedBy, name: r.decidedByName })}` : ''}.`, event.kind === 'approved' ? 'success' : 'info');
   }
   if (leaveState.loaded) loadLeave(); else refreshLeaveSummary();
 }
@@ -130,7 +130,7 @@ function leaveMineHtml() {
     </div>`).join('');
   const rows = me.requests.map((r) => `
     <tr><td>${escapeText(leaveRange(r))}</td><td>${escapeText(r.typeName)}</td><td>${leaveDays(r.days)}${r.halfDay ? ' (half)' : ''}</td>
-      <td><span class="lv-status lv-${r.status}">${LEAVE_STATUS[r.status]}</span>${r.decidedBy && r.status !== 'cancelled' ? `<em class="lv-by">by ${escapeText(r.decidedBy)}</em>` : ''}${r.decisionNote ? `<em class="lv-by">“${escapeText(r.decisionNote)}”</em>` : ''}</td>
+      <td><span class="lv-status lv-${r.status}">${LEAVE_STATUS[r.status]}</span>${r.decidedBy && r.status !== 'cancelled' ? `<em class="lv-by">by ${escapeText(displayName({ username: r.decidedBy, name: r.decidedByName }))}</em>` : ''}${r.decisionNote ? `<em class="lv-by">“${escapeText(r.decisionNote)}”</em>` : ''}</td>
       <td>${r.status === 'pending' || (r.status === 'approved' && r.endDate >= new Date().toISOString().slice(0, 10)) ? `<button type="button" class="btn" data-leave-cancel="${r.id}">Cancel</button>` : ''}</td></tr>`).join('');
   return `<div class="lv-balances">${balances || '<p class="pp-muted">No leave types yet. HR sets them up.</p>'}</div>
     <p class="pp-hint">Balances are for ${me.year}. Weekends and company holidays are not counted.${me.hasManager ? '' : ' You have no manager set, so HR approves your requests.'}</p>
@@ -151,7 +151,7 @@ function leaveRecordsHtml() {
   const rows = r ? r.requests.map((x) => `
     <tr><td><strong>${escapeText(personName(x))}</strong>${x.employeeNo ? `<em class="lv-by">#${escapeText(x.employeeNo)}${x.department ? ` · ${escapeText(x.department)}` : ''}</em>` : (x.department ? `<em class="lv-by">${escapeText(x.department)}</em>` : '')}</td>
       <td>${escapeText(x.typeName)}</td><td>${escapeText(leaveRange(x))}</td><td>${leaveDays(x.days)}${x.halfDay ? ' (half)' : ''}</td>
-      <td><span class="lv-status lv-${x.status}">${LEAVE_STATUS[x.status]}</span>${x.decidedBy ? `<em class="lv-by">by ${escapeText(x.decidedBy)}${x.decidedAt ? `, ${escapeText(new Date(x.decidedAt).toLocaleDateString())}` : ''}</em>` : ''}${x.decisionNote ? `<em class="lv-by">“${escapeText(x.decisionNote)}”</em>` : ''}</td>
+      <td><span class="lv-status lv-${x.status}">${LEAVE_STATUS[x.status]}</span>${x.decidedBy ? `<em class="lv-by">by ${escapeText(displayName({ username: x.decidedBy, name: x.decidedByName }))}${x.decidedAt ? `, ${escapeText(new Date(x.decidedAt).toLocaleDateString())}` : ''}</em>` : ''}${x.decisionNote ? `<em class="lv-by">“${escapeText(x.decisionNote)}”</em>` : ''}</td>
       <td class="att-note" title="${escapeText(x.reason)}">${escapeText(x.reason)}</td></tr>`).join('') : '';
   return `
     <div class="emp-toolbar">

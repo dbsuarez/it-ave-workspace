@@ -24,6 +24,9 @@ function feedColumnsFor(feeds) {
   return (SHEET_FEED_COLUMNS[feeds] || []).map((column) => ({ ...column }));
 }
 
+// A person's label: their full name when the app has loaded display-name.js, else the username (these views are also tested on their own).
+const tableWho = (ref) => (typeof displayName === 'function' ? displayName(ref) : String((ref && ref.username) || ''));
+
 const tableEscape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function tableAgo(iso, now) {
@@ -39,7 +42,7 @@ function sheetTablesHtml({ tables, canEdit, now = new Date() }) {
   const rows = tables.map((table) => {
     const columns = table.columns.map((column) => `${tableEscape(column.name)} (${tableEscape(column.type)})`).join(', ');
     const published = table.published
-      ? `Published ${tableEscape(tableAgo(table.published.at, now))}${table.published.by ? ` by ${tableEscape(table.published.by)}` : ''} · ${Number(table.published.rowCount)} row${Number(table.published.rowCount) === 1 ? '' : 's'}${table.published.stale ? ' <strong class="sheet-table-stale">The sheet has changed since: publish again to update it</strong>' : ''}`
+      ? `Published ${tableEscape(tableAgo(table.published.at, now))}${table.published.by ? ` by ${tableEscape(tableWho({ username: table.published.by }))}` : ''} · ${Number(table.published.rowCount)} row${Number(table.published.rowCount) === 1 ? '' : 's'}${table.published.stale ? ' <strong class="sheet-table-stale">The sheet has changed since: publish again to update it</strong>' : ''}`
       : 'Not published';
     const actions = canEdit
       ? `<button type="button" class="btn small" data-sheet-table-edit="${tableEscape(table.name)}">Edit</button><button type="button" class="btn small" data-sheet-table-check="${tableEscape(table.name)}">Check</button><button type="button" class="btn small primary" data-sheet-table-publish="${tableEscape(table.name)}">Publish</button><button type="button" class="btn small danger" data-sheet-table-remove="${tableEscape(table.name)}">Remove</button>`
@@ -83,8 +86,8 @@ function sheetFeedPreviewHtml({ feeds, name, preview }) {
       + (preview.remove.length ? `<div class="sheet-feed-group sheet-feed-remove"><strong class="sheet-feed-danger">Remove (${preview.remove.length})</strong> <span class="sheet-table-tab">not in the sheet</span>${list(preview.remove.map((h) => `${e(h.day)} ${e(h.name)}`))}</div>` : '');
   } else {
     empty = !preview.set.length && !preview.reset.length;
-    body = (preview.set.length ? `<div class="sheet-feed-group"><strong>Set (${preview.set.length})</strong>${list(preview.set.map((c) => `<strong>${e(c.username)}</strong>: ${e(c.typeName)} ${Number(c.year)}: ${Number(c.previous)} to ${Number(c.adjustment)}`))}</div>` : '')
-      + (preview.reset.length ? `<div class="sheet-feed-group sheet-feed-remove"><strong class="sheet-feed-danger">Back to the default (${preview.reset.length})</strong> <span class="sheet-table-tab">not in the sheet</span>${list(preview.reset.map((c) => `<strong>${e(c.username)}</strong>: ${e(c.typeName)} ${Number(c.year)}: ${Number(c.previous)} to none`))}</div>` : '');
+    body = (preview.set.length ? `<div class="sheet-feed-group"><strong>Set (${preview.set.length})</strong>${list(preview.set.map((c) => `<strong>${e(tableWho({ username: c.username }))}</strong>: ${e(c.typeName)} ${Number(c.year)}: ${Number(c.previous)} to ${Number(c.adjustment)}`))}</div>` : '')
+      + (preview.reset.length ? `<div class="sheet-feed-group sheet-feed-remove"><strong class="sheet-feed-danger">Back to the default (${preview.reset.length})</strong> <span class="sheet-table-tab">not in the sheet</span>${list(preview.reset.map((c) => `<strong>${e(tableWho({ username: c.username }))}</strong>: ${e(c.typeName)} ${Number(c.year)}: ${Number(c.previous)} to none`))}</div>` : '');
   }
   const heading = empty ? `No change to Leave for ${years}` : `Publishing will change Leave for ${years}`;
   const same = preview.unchanged ? `<p class="sheet-table-state">${Number(preview.unchanged)} stay the same.</p>` : '';

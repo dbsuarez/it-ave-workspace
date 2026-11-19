@@ -2,6 +2,7 @@
 // what the person is allowed to see (channel visibility, bans and the Owner private-channel switch are applied in
 // channelVisibilitySql.js).
 const { channelVisibleToUser } = require('./channelVisibilitySql');
+const { FULL_NAME_SQL } = require('./personName');
 
 const MIN_SEARCH_LENGTH = 2;
 const MAX_SEARCH_LENGTH = 100;
@@ -24,7 +25,7 @@ async function searchWorkspace(query, userId, searchTerm) {
   const [messages, directMessages, people, files, topics] = await Promise.all([
     query(
       `SELECT m.id, m.channel_id, c.name AS channel_name, m.content, m.created_at,
-              u.username, m.topic_id, ft.title AS topic_title
+              u.username, ${FULL_NAME_SQL('u')} AS full_name, m.topic_id, ft.title AS topic_title
        FROM messages m
        JOIN channels c ON c.id = m.channel_id
        JOIN users u ON u.id = m.user_id
@@ -38,7 +39,7 @@ async function searchWorkspace(query, userId, searchTerm) {
     query(
       `SELECT dm.id, dm.content, dm.created_at,
               CASE WHEN dm.sender_id = $1 THEN dm.receiver_id ELSE dm.sender_id END AS other_user_id,
-              other_user.username AS other_username
+              other_user.username AS other_username, ${FULL_NAME_SQL('other_user')} AS other_full_name
        FROM direct_messages dm
        JOIN users other_user
          ON other_user.id = CASE WHEN dm.sender_id = $1 THEN dm.receiver_id ELSE dm.sender_id END
@@ -49,19 +50,20 @@ async function searchWorkspace(query, userId, searchTerm) {
       [userId, pattern]
     ),
     query(
-      `SELECT id, username
+      `SELECT id, username, ${FULL_NAME_SQL('users')} AS full_name
        FROM users
-       WHERE id != $1 AND deactivated_at IS NULL AND username ILIKE $2 ESCAPE '\\'
+       WHERE id != $1 AND deactivated_at IS NULL
+         AND (username ILIKE $2 ESCAPE '\\' OR CONCAT_WS(' ', first_name, middle_name, last_name) ILIKE $2 ESCAPE '\\')
        ORDER BY username
        LIMIT 5`,
       [userId, pattern]
     ),
     query(
-      `SELECT f.id, f.original_name, f.uploaded_at, u.username AS uploader_username,
+      `SELECT f.id, f.original_name, f.uploaded_at, u.username AS uploader_username, ${FULL_NAME_SQL('u')} AS uploader_full_name,
               c.id AS channel_id, c.name AS channel_name, m.topic_id, ft.title AS topic_title,
               dm.sender_id, dm.receiver_id,
               CASE WHEN dm.sender_id = $1 THEN dm.receiver_id ELSE dm.sender_id END AS other_user_id,
-              other_user.username AS other_username
+              other_user.username AS other_username, ${FULL_NAME_SQL('other_user')} AS other_full_name
        FROM files f
        JOIN users u ON u.id = f.uploaded_by
        LEFT JOIN messages m ON m.id = f.message_id
@@ -99,6 +101,7 @@ async function searchWorkspace(query, userId, searchTerm) {
       channelId: message.channel_id,
       channelName: message.channel_name,
       username: message.username,
+      fullName: message.full_name || null,
       content: message.content,
       createdAt: message.created_at,
       topicId: message.topic_id || null,
@@ -108,22 +111,26 @@ async function searchWorkspace(query, userId, searchTerm) {
       id: message.id,
       userId: message.other_user_id,
       username: message.other_username,
+      fullName: message.other_full_name || null,
       content: message.content,
       createdAt: message.created_at,
     })),
     people: people.rows.map((person) => ({
       id: person.id,
       username: person.username,
+      fullName: person.full_name || null,
     })),
     files: files.rows.map((file) => ({
       id: file.id,
       name: file.original_name,
       uploadedAt: file.uploaded_at,
       uploaderUsername: file.uploader_username,
+      uploaderFullName: file.uploader_full_name || null,
       channelId: file.channel_id,
       channelName: file.channel_name,
       userId: file.other_user_id,
       username: file.other_username,
+      fullName: file.other_full_name || null,
       topicId: file.topic_id || null,
       topicTitle: file.topic_title || null,
     })),

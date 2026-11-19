@@ -27,7 +27,7 @@ function showHuddleInvite(invite) {
   banner.setAttribute('aria-label', 'Incoming huddle');
   const text = document.createElement('div');
   const name = document.createElement('strong');
-  name.textContent = `${invite.from.username} is calling you`;
+  name.textContent = `${displayName(invite.from)} is calling you`;
   const hint = document.createElement('span');
   hint.textContent = 'Join their huddle';
   text.append(name, hint);
@@ -57,7 +57,7 @@ function handleHuddleInvite(invite) {
   clearTimeout(incomingHuddleTimer);
   incomingHuddleTimer = setTimeout(hideHuddleInvite, HUDDLE_RING_SECONDS * 1000);
   // a toast, and a desktop notification when the app is in the background (not while Do Not Disturb is on)
-  notifyUser('dm', `${invite.from.username} is calling you on a huddle`, undefined, { sound: false });
+  notifyUser('dm', `${displayName(invite.from)} is calling you on a huddle`, undefined, { sound: false });
   startRinging(); // the ring (not a message chime) plays until answered, declined, cancelled or timed out
 }
 

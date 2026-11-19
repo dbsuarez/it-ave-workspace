@@ -291,3 +291,21 @@ test('an approval card shows the requester\'s balances before this request, and 
   const none = (await call(ids.hr, 'GET', '/approvals')).json.requests.find((r) => r.userId === ids.ann && r.status === 'pending');
   if (none) assert.ok(none.lastLeave === null || typeof none.lastLeave === 'object');
 });
+
+test('who decided a request is shown by full name, with the username kept for those who have no name', async (t) => {
+  if (skip(t)) return;
+  const vacation = await typeId('Vacation Leave');
+  await admin.query("UPDATE users SET first_name = 'Lena', middle_name = 'M.', last_name = 'Lead' WHERE id = $1", [ids.lead]);
+  const mon = monday(40);
+  const asked = await call(ids.bob, 'POST', '/requests', { typeId: vacation, startDate: iso(mon), endDate: iso(mon) });
+  const decided = await call(ids.lead, 'PUT', `/requests/${asked.json.request.id}/decision`, { status: 'approved' });
+  assert.equal(decided.json.request.decidedBy, 'lead');
+  assert.equal(decided.json.request.decidedByName, 'Lena M. Lead');
+  const mine = (await call(ids.bob, 'GET', `/me?year=${mon.getUTCFullYear()}`)).json.requests.find((r) => r.id === asked.json.request.id);
+  assert.equal(mine.decidedByName, 'Lena M. Lead');
+  const second = await call(ids.bob, 'POST', '/requests', { typeId: vacation, startDate: iso(addDays(mon, 7)), endDate: iso(addDays(mon, 7)) });
+  const byHr = await call(ids.hr, 'PUT', `/requests/${second.json.request.id}/decision`, { status: 'approved' });
+  assert.equal(byHr.json.request.decidedByName, null, 'no name filled in: the client falls back to the username');
+  const csv = await fetch(`${baseUrl}/api/leave/records/export?from=${iso(mon)}`, { headers: { Authorization: `Bearer ${jwt.sign({ userId: ids.hr, username: 'u', tokenVersion: 0 }, config.JWT_SECRET)}` } });
+  assert.match(await csv.text(), /Lena M\. Lead/, 'the export names the person too');
+});

@@ -206,7 +206,7 @@ function handleUserStatusUpdated(event) {
 
 function dmTopicText(user) {
   const status = `${user.statusEmoji || ''} ${user.statusText || ''}`.trim();
-  return status || `Direct message with ${user.username}`;
+  return status || `Direct message with ${displayName(user)}`;
 }
 
 // ---- Live unread counts and message notifications ----
@@ -232,7 +232,7 @@ function handleChannelActivity(event) {
   // A mention or reply for the same message already notified; do not repeat it.
   setTimeout(() => {
     if (recentlyNotifiedMessages().has(Number(event.messageId))) return;
-    notifyUser('channel', `${event.username} in #${event.channelName}: ${event.preview || 'sent an attachment'}`, event);
+    notifyUser('channel', `${displayName({ id: event.userId, username: event.username })} in #${event.channelName}: ${event.preview || 'sent an attachment'}`, event);
   }, 200);
 }
 
@@ -241,7 +241,7 @@ function handleDirectMessageNotification(dm) {
   const onScreen = Number(state.currentDMId) === Number(dm.senderId)
     && state.view === 'dm' && state.section === 'dms' && document.hasFocus();
   if (onScreen) return;
-  notifyUser('dm', `${dm.senderUsername}: ${dm.content || 'sent an attachment'}`);
+  notifyUser('dm', `${displayName({ id: dm.senderId, username: dm.senderUsername })}: ${dm.content || 'sent an attachment'}`);
 }
 
 function setupNotificationFeatures() {

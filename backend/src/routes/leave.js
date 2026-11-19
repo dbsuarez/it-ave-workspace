@@ -188,7 +188,7 @@ const REQUEST_SELECT = `
   SELECT r.id, r.user_id, r.leave_type_id, to_char(r.start_date, 'YYYY-MM-DD') AS start_date, to_char(r.end_date, 'YYYY-MM-DD') AS end_date,
          r.days, r.half_day, r.reason, r.status, r.decided_at, r.decision_note, r.created_at,
          t.name AS type_name, u.username, u.first_name, u.last_name, u.middle_name, u.manager_id, u.employee_no, u.department,
-         d.username AS decided_by_username
+         d.username AS decided_by_username, d.first_name AS decided_by_first, d.middle_name AS decided_by_middle, d.last_name AS decided_by_last
   FROM leave_requests r
   JOIN leave_types t ON t.id = r.leave_type_id
   JOIN users u ON u.id = r.user_id
@@ -213,6 +213,7 @@ function mapRequest(row) {
     reason: row.reason || '',
     status: row.status,
     decidedBy: row.decided_by_username || null,
+    decidedByName: [row.decided_by_first, row.decided_by_middle, row.decided_by_last].map((part) => String(part || '').trim()).filter(Boolean).join(' ') || null,
     decidedAt: row.decided_at || null,
     decisionNote: row.decision_note || '',
     createdAt: row.created_at,
@@ -456,7 +457,7 @@ router.get('/records/export', async (req, res) => {
     const header = ['Employee no.', 'Name', 'Department', 'Leave type', 'From', 'To', 'Days', 'Half day', 'Status', 'Reason', 'Decided by', 'Decided on', 'Decision note', 'Requested on'];
     const lines = [header.join(',')].concat(requests.map((r) => [
       r.employeeNo, [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ') || r.username, r.department, r.typeName, r.startDate, r.endDate, r.days,
-      r.halfDay ? 'yes' : '', r.status, r.reason, r.decidedBy || '', dayOf(r.decidedAt), r.decisionNote, dayOf(r.createdAt),
+      r.halfDay ? 'yes' : '', r.status, r.reason, r.decidedByName || r.decidedBy || '', dayOf(r.decidedAt), r.decisionNote, dayOf(r.createdAt),
     ].map(csvCell).join(',')));
     res.json({ csv: `${lines.join('\r\n')}\r\n`, count: requests.length, truncated });
   } catch (err) {
