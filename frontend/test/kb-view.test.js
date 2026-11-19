@@ -76,6 +76,25 @@ test('an article shows its title, category, last updated date and who, the text,
   assert.equal(/ by /.test(hr), false, 'no name: no "by"');
 });
 
+test('an article has a find box and, when it has headings, a collapsible contents list that jumps to them', () => {
+  const article = { id: 10, title: 'Handbook', categoryId: 1, categoryTitle: 'Leave', published: true, updatedAt: '2026-11-19T10:00:00Z', updatedByName: 'Hana Reyes' };
+  const outline = [{ id: 's1', level: 1, title: 'Intro <b>' }, { id: 's3', level: 2, title: 'Steps' }];
+  const html = kbArticleHtml({ article, bodyHtml: '<p>x</p>', siblings: {}, canManage: false, outline });
+  assert.match(html, /data-kb-find-input/);
+  assert.match(html, /data-kb-find-next/);
+  assert.match(html, /data-kb-find-prev/);
+  assert.match(html, /data-kb-find-count/);
+  assert.match(html, /data-kb-toc/);
+  assert.match(html, /data-kb-toc-toggle/);
+  assert.match(html, /data-kb-toc-item="s1"/);
+  assert.match(html, /data-kb-toc-item="s3"/);
+  assert.match(html, /Intro &lt;b&gt;/, 'headings are escaped');
+  assert.match(html, /kb-toc-level-2/);
+  assert.equal(/data-kb-toc/.test(kbArticleHtml({ article, bodyHtml: '', siblings: {}, canManage: false, outline: [{ id: 's1', level: 1, title: 'Only one' }] })), false, 'one heading is not worth a contents list');
+  assert.equal(/data-kb-toc/.test(kbArticleHtml({ article, bodyHtml: '', siblings: {}, canManage: false })), false, 'and without headings there is none');
+  assert.match(kbArticleHtml({ article, bodyHtml: '', siblings: {}, canManage: false }), /data-kb-find-input/, 'the find box is always there');
+});
+
 test('search results show the title, the category, a snippet and the date; no results says so', () => {
   const html = kbSearchResultsHtml({ query: 'leave <x>', results: [{ id: 10, title: 'How do I file a leave?', categoryTitle: 'Leave', snippet: '…press <b>Request</b>…', updatedAt: '2026-11-19T10:00:00Z', published: true }] });
   assert.match(html, /data-kb-open-article="10"/);

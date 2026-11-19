@@ -4,7 +4,7 @@
 
 const kbState = {
   canManage: false, categories: [], category: null, articles: [], article: null, sections: [],
-  details: null, returnTo: null, screenOptions: [], importText: '', importLevel: 1, importPublish: false, searchTimer: null, searchId: 0,
+  details: null, findTimer: null, returnTo: null, screenOptions: [], importText: '', importLevel: 1, importPublish: false, searchTimer: null, searchId: 0,
 };
 
 async function kbJson(path, options) {
@@ -51,10 +51,70 @@ async function openKbArticle(id) {
   try {
     const data = await kbJson(`/api/kb/articles/${id}`);
     kbState.article = data.article; kbState.sections = data.sections;
-    kbRender(kbArticleHtml({ article: data.article, bodyHtml: kbBodyHtml(data.sections), siblings: data.siblings, canManage: kbState.canManage, canExport: kbCanSavePdf() }));
+    kbRender(kbArticleHtml({ article: data.article, bodyHtml: kbBodyHtml(data.sections), siblings: data.siblings, canManage: kbState.canManage, canExport: kbCanSavePdf(), outline: kbOutline(data.sections) }));
+    kbStartArticleTools();
     if (typeof cvwLoadImages === 'function') cvwLoadImages(kbHost()); // pictures are fetched with the sign-in
     kbHost()?.scrollTo?.(0, 0);
   } catch (err) { showToast(err.message || 'Could not open that article.', 'error'); }
+}
+
+// ---- tools on an open article: find in the article, and the floating "On this page" list ----
+
+const kbArticleBody = () => kbHost()?.querySelector('[data-kb-article-body]');
+
+function kbStartArticleTools() {
+  const toc = kbHost()?.querySelector('[data-kb-toc]');
+  if (toc) {
+    let collapsed = window.innerWidth < 1300; // a narrow window starts with the list folded away
+    try { const saved = localStorage.getItem('kbTocCollapsed'); if (saved !== null) collapsed = saved === '1'; } catch (err) { /* private window: keep the default */ }
+    kbSetTocCollapsed(collapsed);
+  }
+  kbSpyHeadings();
+}
+
+function kbSetTocCollapsed(collapsed) {
+  const toc = kbHost()?.querySelector('[data-kb-toc]');
+  if (!toc) return;
+  toc.classList.toggle('collapsed', collapsed);
+  toc.querySelector('[data-kb-toc-toggle]')?.setAttribute('aria-expanded', String(!collapsed));
+}
+
+// The heading nearest the top of the screen is marked in the list as you read.
+function kbSpyHeadings() {
+  const toc = kbHost()?.querySelector('[data-kb-toc]');
+  const view = document.getElementById('view-knowledge-base');
+  const body = kbArticleBody();
+  if (!toc || !view || !body) return;
+  const top = view.getBoundingClientRect().top + 90;
+  let activeId = null;
+  body.querySelectorAll('.cv-block.cv-heading').forEach((block) => { if (block.getBoundingClientRect().top <= top) activeId = block.dataset.sectionId; });
+  toc.querySelectorAll('[data-kb-toc-item]').forEach((item) => item.classList.toggle('active', item.dataset.kbTocItem === activeId));
+}
+
+function kbUpdateFindCount(total, position) {
+  const count = kbHost()?.querySelector('[data-kb-find-count]');
+  if (!count) return;
+  const input = kbHost().querySelector('[data-kb-find-input]');
+  count.textContent = !input || !input.value.trim() ? '' : (total ? `${position} of ${total}` : 'No matches');
+}
+
+function kbRunFind(query) {
+  const body = kbArticleBody();
+  if (!body) return;
+  const total = kbFindApply(body, query);
+  kbUpdateFindCount(total, total ? 1 : 0);
+}
+
+function kbFindMove(direction) {
+  const position = kbFindStep(direction);
+  kbUpdateFindCount(kbFindState.marks.length, position);
+}
+
+function kbClearFind() {
+  const input = kbHost()?.querySelector('[data-kb-find-input]');
+  if (input) input.value = '';
+  if (kbArticleBody()) kbFindClear(kbArticleBody());
+  kbUpdateFindCount(0, 0);
 }
 
 // ---- search: as you type, after a short pause ----
@@ -285,6 +345,17 @@ function setupKnowledgeBase() {
     const category = t.closest('[data-kb-open-category]');
     if (category) { openKbCategory(Number(category.dataset.kbOpenCategory)); return; }
     if (t.closest('[data-kb-home]')) { showKnowledgeBaseHome(); return; }
+    if (t.closest('[data-kb-find-next]')) { kbFindMove(1); return; }
+    if (t.closest('[data-kb-find-prev]')) { kbFindMove(-1); return; }
+    const tocToggle = t.closest('[data-kb-toc-toggle]');
+    if (tocToggle) {
+      const collapsed = !tocToggle.closest('[data-kb-toc]').classList.contains('collapsed');
+      kbSetTocCollapsed(collapsed);
+      try { localStorage.setItem('kbTocCollapsed', collapsed ? '1' : '0'); } catch (err) { /* private window */ }
+      return;
+    }
+    const tocItem = t.closest('[data-kb-toc-item]');
+    if (tocItem) { kbArticleBody()?.querySelector(`[data-section-id="${CSS.escape(tocItem.dataset.kbTocItem)}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
     if (t.closest('[data-kb-new-category]')) { kbNewCategory(); return; }
     if (t.closest('[data-kb-rename-category]')) { kbRenameCategory(); return; }
     if (t.closest('[data-kb-delete-category]')) { kbDeleteCategory(); return; }
@@ -302,12 +373,31 @@ function setupKnowledgeBase() {
     if (t.closest('[data-kb-export-category]')) { kbExportCategory(); return; }
   });
   host.addEventListener('input', (event) => {
-    if (event.target.matches('[data-kb-search]')) {
+    if (event.target.matches('[data-kb-find-input]')) {
+      clearTimeout(kbState.findTimer);
+      const text = event.target.value;
+      kbState.findTimer = setTimeout(() => kbRunFind(text), 150);
+    } else if (event.target.matches('[data-kb-search]')) {
       clearTimeout(kbState.searchTimer);
       const text = event.target.value;
       kbState.searchTimer = setTimeout(() => runKbSearch(text), 250);
     }
   });
+  host.addEventListener('keydown', (event) => {
+    if (!event.target.matches('[data-kb-find-input]')) return;
+    if (event.key === 'Enter') { event.preventDefault(); clearTimeout(kbState.findTimer); if (!kbFindState.marks.length) kbRunFind(event.target.value); else kbFindMove(event.shiftKey ? -1 : 1); }
+    else if (event.key === 'Escape') { event.preventDefault(); kbClearFind(); event.target.blur(); }
+  });
+  // Ctrl+F (or Cmd+F) on an open article goes to the find box
+  document.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || String(event.key).toLowerCase() !== 'f') return;
+    const input = document.getElementById('view-knowledge-base')?.classList.contains('active') ? kbHost()?.querySelector('[data-kb-find-input]') : null;
+    if (!input) return;
+    event.preventDefault();
+    input.focus();
+    input.select();
+  });
+  document.getElementById('view-knowledge-base')?.addEventListener('scroll', () => { requestAnimationFrame(kbSpyHeadings); }, { passive: true });
   document.getElementById('kb-return')?.addEventListener('click', () => kbBackFromEditor());
   const details = kbDetailsModal();
   if (details) {

@@ -36,14 +36,26 @@ function kbCategoryHtml({ category, articles, canManage, canExport = false }) {
   return `<div class="kb-category" data-kb-category="${Number(category.id)}"><div class="kb-crumbs"><button type="button" class="kb-link" data-kb-home>Knowledge Base</button></div><div class="kb-heading"><h2>${kbEscape(category.title)}</h2><div class="kb-actions">${actions}</div></div>${articles.length ? `<ol class="kb-toc">${rows}</ol>` : '<p class="kb-empty">No articles yet.</p>'}</div>`;
 }
 
+// Find in this article: a box, the match count, and previous / next.
+function kbFindBarHtml() {
+  return '<div class="kb-find-bar" role="search"><input type="search" class="kb-find-input" data-kb-find-input placeholder="Find in this article" aria-label="Find in this article" maxlength="100" autocomplete="off"><span class="kb-find-count" data-kb-find-count aria-live="polite"></span><button type="button" class="btn small" data-kb-find-prev aria-label="Previous match" title="Previous match (Shift+Enter)">&uarr;</button><button type="button" class="btn small" data-kb-find-next aria-label="Next match" title="Next match (Enter)">&darr;</button></div>';
+}
+
+// The floating "On this page" list: only for an article with two or more headings. outline: [{ id, level, title }]
+function kbTocHtml(outline) {
+  if (!Array.isArray(outline) || outline.length < 2) return '';
+  const items = outline.map((item) => `<li><button type="button" class="kb-toc-item kb-toc-level-${Math.min(Math.max(Number(item.level) || 1, 1), 4)}" data-kb-toc-item="${kbEscape(item.id)}">${kbEscape(item.title)}</button></li>`).join('');
+  return `<nav class="kb-toc-float" data-kb-toc aria-label="On this page"><button type="button" class="kb-toc-toggle" data-kb-toc-toggle aria-expanded="true"><span>On this page</span><span class="kb-toc-caret" aria-hidden="true">&#9662;</span></button><ol class="kb-toc-list">${items}</ol></nav>`;
+}
+
 // bodyHtml: the article text already turned into safe HTML by the reading view; siblings: { previous, next } each { id, title } or null
-function kbArticleHtml({ article, bodyHtml, siblings = {}, canManage, canExport = false }) {
+function kbArticleHtml({ article, bodyHtml, siblings = {}, canManage, canExport = false, outline = [] }) {
   const nav = (item, label) => (item ? `<button type="button" class="kb-nav" data-kb-open-article="${Number(item.id)}"><small>${label}</small><span>${kbEscape(item.title)}</span></button>` : '<span></span>');
   const actions = [
     canExport ? '<button type="button" class="btn" data-kb-export-article>Save as PDF</button>' : '',
     canManage ? `<button type="button" class="btn primary" data-kb-edit="${Number(article.id)}">Edit text</button><button type="button" class="btn" data-kb-details="${Number(article.id)}">Details</button><button type="button" class="btn danger" data-kb-delete-article="${Number(article.id)}">Delete</button>` : '',
   ].join('');
-  return `<article class="kb-article" data-kb-article-id="${Number(article.id)}"><div class="kb-crumbs"><button type="button" class="kb-link" data-kb-home>Knowledge Base</button> / <button type="button" class="kb-link" data-kb-open-category="${Number(article.categoryId)}">${kbEscape(article.categoryTitle)}</button></div><div class="kb-heading"><h2>${kbEscape(article.title)}${article.published ? '' : ' <span class="kb-badge">Draft</span>'}</h2><div class="kb-actions">${actions}</div></div><p class="kb-updated">${kbUpdated(article)}</p><div class="kb-body cv-body">${bodyHtml}</div><div class="kb-siblings">${nav(siblings.previous, 'Previous')}${nav(siblings.next, 'Next')}</div></article>`;
+  return `<article class="kb-article" data-kb-article-id="${Number(article.id)}"><div class="kb-crumbs"><button type="button" class="kb-link" data-kb-home>Knowledge Base</button> / <button type="button" class="kb-link" data-kb-open-category="${Number(article.categoryId)}">${kbEscape(article.categoryTitle)}</button></div><div class="kb-heading"><h2>${kbEscape(article.title)}${article.published ? '' : ' <span class="kb-badge">Draft</span>'}</h2><div class="kb-actions">${actions}</div></div><p class="kb-updated">${kbUpdated(article)}</p>${kbFindBarHtml()}${kbTocHtml(outline)}<div class="kb-body cv-body" data-kb-article-body>${bodyHtml}</div><div class="kb-siblings">${nav(siblings.previous, 'Previous')}${nav(siblings.next, 'Next')}</div></article>`;
 }
 
 function kbSearchResultsHtml({ query, results }) {

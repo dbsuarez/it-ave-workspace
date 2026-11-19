@@ -113,6 +113,9 @@ The Knowledge Base is where HR keeps the answers to common questions and the emp
 ### How do I find an answer?
 Type in the search box at the top ("leave", "payslip", "dress code"): results appear as you type, with the category, the date it was last updated and a short piece of the text. Or open a category and read down its list of articles, in order like a table of contents. Each article shows **Updated <date> by <name>** so you know how fresh it is, and **Previous** and **Next** buttons to read the chapters in order.
 
+### Can I search inside a long article?
+Yes. Every article has a **Find in this article** box under its title (or press **Ctrl+F** while the article is open). Matches are highlighted and the box says "2 of 14"; press **Enter** (or the arrows) for the next one, **Shift+Enter** for the previous one, and **Esc** to clear. An article with two or more headings also shows a floating **On this page** list at the top right: click a heading to jump to it, and click the list's title to fold it away (the app remembers your choice).
+
 ### Can I save it as a PDF?
 In the desktop app, **Save as PDF** on an article saves that article; on a category it saves all of its published articles as one document, for example the whole handbook.
 

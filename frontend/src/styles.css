@@ -8291,3 +8291,22 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .rail-edit-label { font-weight: 600; }
 .rail-edit-note, .rail-edit-empty { color: var(--text-muted); font-size: 12px; }
 .rail-edit-tools { display: flex; gap: 6px; }
+
+/* Knowledge Base article: find in the article, and the floating "On this page" list */
+.kb-find-bar { display: flex; align-items: center; gap: 6px; margin: 0 0 14px; }
+.kb-find-input { flex: 0 1 260px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.kb-find-count { min-width: 70px; color: var(--text-muted); font-size: 12px; }
+mark.kb-find { background: #fde68a; color: #1d1c1d; border-radius: 3px; padding: 0 1px; }
+mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; }
+.kb-toc-float { position: fixed; z-index: 40; top: 168px; right: 24px; width: 250px; max-height: calc(100vh - 220px); display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); }
+.kb-toc-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.kb-toc-caret { transition: transform 0.15s; color: var(--text-muted); }
+.kb-toc-float.collapsed .kb-toc-caret { transform: rotate(90deg); }
+.kb-toc-float.collapsed .kb-toc-list { display: none; }
+.kb-toc-list { list-style: none; margin: 0; padding: 0 6px 8px; overflow-y: auto; scrollbar-width: thin; }
+.kb-toc-item { display: block; width: 100%; padding: 5px 8px; border: 0; border-left: 2px solid transparent; border-radius: 6px; background: none; color: var(--text-muted); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.kb-toc-item:hover { background: var(--muted-bg); color: var(--text); }
+.kb-toc-item.active { border-left-color: var(--purple); color: var(--text); font-weight: 700; background: var(--muted-bg); }
+.kb-toc-level-2 { padding-left: 18px; }
+.kb-toc-level-3 { padding-left: 28px; }
+.kb-toc-level-4 { padding-left: 38px; }
