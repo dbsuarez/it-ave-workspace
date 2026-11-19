@@ -8385,3 +8385,24 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .lv-fact-row + .lv-fact-row { margin-top: 4px; }
 .lv-fact-label { color: var(--text-muted); font-size: 12px; flex: 0 0 100%; }
 .lv-fact-balance strong { font-weight: 700; }
+
+/* Create menu: a coloured icon, a title and a line of help for each thing you can make */
+.create-menu { width: 340px; max-height: calc(100vh - 84px); overflow-y: auto; padding: 8px; }
+.create-heading { font-weight: 800; font-size: 15px; padding: 6px 8px 8px; }
+.create-item { justify-content: flex-start; gap: 12px; padding: 8px; white-space: normal; }
+.create-ic { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.create-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.create-text strong { font-size: 14px; font-weight: 700; }
+.create-text small { font-size: 12px; color: var(--text-muted); }
+.create-kbd { margin-left: auto; font: inherit; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.create-ic-message { background: #6b2c91; }
+.create-ic-channel { background: #4a4d52; }
+.create-ic-huddle { background: #0f7b5c; }
+.create-ic-canvas { background: #1d62a8; }
+.create-ic-list { background: #b3690f; }
+.create-ic-note { background: #b08a00; }
+.create-ic-drawing { background: #c2410c; }
+.create-ic-sheet { background: #15803d; }
+.create-ic-poll { background: #0e7490; }
+.create-ic-announcement { background: #be185d; }
+.create-ic-leave { background: #7c3aed; }

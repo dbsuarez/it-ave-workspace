@@ -406,7 +406,14 @@ function setupEventListeners() {
   });
 
   // Create menu
-  on('btn-create', 'click', (e) => { e.stopPropagation(); toggleMenu('create-menu', 'btn-create'); });
+  on('btn-create', 'click', (e) => {
+    e.stopPropagation();
+    // an announcement can only be posted by people who may (the composer button is hidden for everyone else)
+    const announce = document.querySelector('#create-menu [data-create="announcement"]');
+    const announceButton = document.getElementById('btn-add-announcement');
+    if (announce) announce.hidden = !announceButton || announceButton.hidden;
+    toggleMenu('create-menu', 'btn-create');
+  });
   document.querySelectorAll('#create-menu .menu-item').forEach((item) => {
     item.addEventListener('click', () => {
       closeAllMenus();
@@ -4696,7 +4703,32 @@ function handleCreate(kind) {
     openCreateCanvas();
   } else if (kind === 'list') {
     openCreateList();
+  } else if (kind === 'note') {
+    createFromRail(async () => { await setSection('notes'); if (typeof openNoteEditor === 'function') openNoteEditor(null); });
+  } else if (kind === 'drawing') {
+    createFromRail(async () => { await setSection('drawings'); if (typeof startNewDrawing === 'function') await startNewDrawing(); });
+  } else if (kind === 'sheet') {
+    createFromRail(async () => {
+      await setSection('sheets');
+      if (typeof sheetsState !== 'undefined' && sheetsState.canCreate) await startNewSheet();
+      else showToast('Only people who can manage sheets can make one. Ask HR to share a sheet with you.', 'info');
+    });
+  } else if (kind === 'poll') {
+    if (typeof openPollDialog === 'function') openPollDialog();
+  } else if (kind === 'announcement') {
+    if (typeof openAnnouncementDialog === 'function') openAnnouncementDialog();
+  } else if (kind === 'leave') {
+    createFromRail(async () => {
+      await setSection('people');
+      if (typeof leaveState !== 'undefined' && !leaveState.me && typeof loadLeave === 'function') await loadLeave();
+      if (typeof openLeaveRequest === 'function') openLeaveRequest();
+    });
   }
+}
+
+// Runs one of the Create menu's "open a screen, then start something" steps and tells the person if it fails.
+async function createFromRail(step) {
+  try { await step(); } catch (err) { showToast(err && err.message ? err.message : 'Could not start that.', 'error'); }
 }
 
 async function openCreateList() {
