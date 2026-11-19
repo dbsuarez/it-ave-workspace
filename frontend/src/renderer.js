@@ -3168,6 +3168,8 @@ function showPane(pane) {
 async function setSection(section) {
   const def = SECTIONS[section] || SECTIONS.home;
   state.section = section;
+  if (typeof kbSyncReturnBar === 'function') kbSyncReturnBar(section); // the way back to a Knowledge Base article being written
+  if (typeof refreshScreenHelp === 'function') refreshScreenHelp(section); // a Help chip when HR linked articles to this screen
   cancelReply();
   updateRail(section);
   showPane(def.pane);

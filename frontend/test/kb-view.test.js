@@ -1,7 +1,7 @@
 // Knowledge Base markup: home, category, article, search results, the editor and the import preview. Pure: data in, HTML out.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { kbHomeHtml, kbCategoryHtml, kbArticleHtml, kbSearchResultsHtml, kbEditorHtml, kbImportHtml, kbDateText } = require('../src/features/kb-view');
+const { kbHomeHtml, kbCategoryHtml, kbArticleHtml, kbSearchResultsHtml, kbDetailsHtml, kbImportHtml, kbDateText } = require('../src/features/kb-view');
 
 const categories = [{ id: 1, title: 'Leave', articleCount: 3, draftCount: 1 }, { id: 2, title: 'Employee <Handbook>', articleCount: 12, draftCount: 0 }];
 
@@ -69,6 +69,8 @@ test('an article shows its title, category, last updated date and who, the text,
   assert.equal(/data-kb-edit/.test(html), false);
   const hr = kbArticleHtml({ article: { id: 10, title: 'X', categoryId: 1, categoryTitle: 'Leave', published: false, updatedAt: '2026-11-19T10:00:00Z', updatedByName: null }, bodyHtml: '', siblings: {}, canManage: true });
   assert.match(hr, /data-kb-edit="10"/);
+  assert.match(hr, /Edit text/);
+  assert.match(hr, /data-kb-details="10"/);
   assert.match(hr, /data-kb-delete-article="10"/);
   assert.match(hr, /Draft/);
   assert.equal(/ by /.test(hr), false, 'no name: no "by"');
@@ -83,18 +85,22 @@ test('search results show the title, the category, a snippet and the date; no re
   assert.match(kbSearchResultsHtml({ query: 'zzz', results: [] }), /No articles found/);
 });
 
-test('the editor has a title, the Markdown, a published box and a preview area; a new article asks which category', () => {
-  const html = kbEditorHtml({ draft: { id: 10, title: 'Policy', body: '# Hi', published: true, categoryId: 1 }, categories: categories.slice(0, 2), isNew: false });
+test('the details dialog has a title, a category, a published box and the screens to show a Help link on', () => {
+  const screenOptions = [{ key: 'leave', label: 'Leave' }, { key: 'sheets', label: 'Sheets' }];
+  const html = kbDetailsHtml({ draft: { id: 10, title: 'Policy <x>', published: true, categoryId: 1, screens: ['leave'] }, categories: categories.slice(0, 2), screenOptions, isNew: false });
   assert.match(html, /data-kb-title/);
-  assert.match(html, /data-kb-body/);
-  assert.match(html, /# Hi/);
+  assert.match(html, /Policy &lt;x&gt;/);
+  assert.match(html, /<option value="1" selected>/);
   assert.match(html, /data-kb-published[^>]*checked/);
-  assert.match(html, /data-kb-preview/);
-  assert.match(html, /data-kb-save/);
-  const fresh = kbEditorHtml({ draft: { title: '', body: '', published: false, categoryId: 2 }, categories, isNew: true });
-  assert.match(fresh, /data-kb-category/);
+  assert.match(html, /data-kb-screen="leave" checked/);
+  assert.equal(/data-kb-screen="sheets" checked/.test(html), false);
+  assert.match(html, /data-kb-details-save/);
+  assert.match(html, />Save</);
+  assert.equal(/data-kb-body/.test(html), false, 'the text is written in the Canvas editor, not here');
+  const fresh = kbDetailsHtml({ draft: { title: '', published: false, categoryId: 2, screens: [] }, categories, screenOptions, isNew: true });
+  assert.match(fresh, /Create and write/);
   assert.match(fresh, /<option value="2" selected>/);
-  assert.equal(/data-kb-published[^>]*checked/.test(fresh), false);
+  assert.match(fresh, /Canvas editor/);
 });
 
 test('the import dialog has a paste box, the split level, and previews the articles it would make', () => {

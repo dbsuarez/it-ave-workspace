@@ -304,6 +304,14 @@ async function isGuestAccount(query, userId) {
 // Sources: ownership, a personal grant (canvas_collaborators), and a grant to a channel the user
 // belongs to. Guests are read-only unless they were granted personally.
 async function getStandaloneCanvasRole(query, userId, canvas) {
+  // The text of a Knowledge Base article follows the article's rules, not the Canvas sharing ones: people who manage the Knowledge Base
+  // edit it, every member reads it once it is published, nobody else has access (a draft is for HR only).
+  const article = (await query('SELECT published FROM kb_articles WHERE canvas_id = $1', [canvas.id])).rows[0];
+  if (article) {
+    if (await can(query, userId, 'manage_knowledge_base')) return 'editor';
+    const account = (await query('SELECT account_type, deactivated_at FROM users WHERE id = $1', [userId])).rows[0];
+    return article.published && account && account.account_type === 'member' && !account.deactivated_at ? 'viewer' : null;
+  }
   if (canvasOwnerId(canvas) === Number(userId)) return 'owner';
   const personal = await query(
     'SELECT role FROM canvas_collaborators WHERE canvas_id = $1 AND user_id = $2',

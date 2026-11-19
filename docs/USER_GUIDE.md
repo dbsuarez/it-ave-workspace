@@ -114,7 +114,8 @@ People with the **Manage knowledge base** permission (Owners, and the HR role by
 
 ### How does HR add content?
 - **New category** on the Knowledge Base screen (for example Leave, Payroll, Employee Handbook). **Rename**, **Delete** (this deletes its articles too) and the up and down arrows (put the articles in reading order) are on the category page.
-- **New article**: a title, the text in Markdown (headings with `#`, lists with `-`, `**bold**`, tables with `|`) and a live **Preview** beside it. An article starts as a **Draft** that only HR can see; tick **Published** when it is ready.
+- **New article**: give it a title, a category and (optionally) the screens where it should appear as a **Help** link, then write the text in the Canvas editor that opens: headings, lists, tables, pictures (the **Image** button), callouts, **Comments** and **History** are all there, and **Export** saves it as PDF or Word. **Back to the Knowledge Base** takes you back to the article. On an article, **Edit text** reopens the editor and **Details** changes the title, category, published state and Help screens. An article starts as a **Draft** that only HR can see; tick **Published** when it is ready. Employees never see the editor, and these articles do not appear in anyone's own Canvas list.
+- **Help links:** in **Details**, tick the screens an article helps with (for example Leave for "How do I file a leave?"). People on that screen then see a **Help** button at the top right that opens the article.
 - **Import**: paste a long text (for example the handbook after another tool turned your screenshots into text) and choose whether each `#` or each `##` heading starts a new article. You see the list of articles before anything is saved. They are added at the end of the category as drafts (or published, if you tick that), so you can check each one and fix it. Text before the first heading becomes an article called Introduction.
 
 ## Sheets

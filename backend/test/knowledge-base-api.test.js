@@ -186,14 +186,3 @@ test('articles can be renamed, moved to another category and deleted; categories
   assert.equal((await call('hr', 'DELETE', `/articles/${ids.sick}`)).status, 404);
   assert.equal((await call('emp', 'GET', '/articles/abc')).status, 400);
 });
-
-test('the editor can preview what an article will look like: the same sections the reading view gets (managers only)', async (t) => {
-  if (skip(t)) return;
-  const text = ['# Title', '', 'A paragraph.', '', '- one', '- two'].join(String.fromCharCode(10));
-  assert.equal((await call('emp', 'POST', '/preview', { body: text })).status, 403);
-  const preview = await call('hr', 'POST', '/preview', { body: text });
-  assert.equal(preview.status, 200, JSON.stringify(preview.json));
-  assert.deepEqual(preview.json.sections.map((section) => section.type), ['heading', 'paragraph', 'list']);
-  assert.deepEqual((await call('hr', 'POST', '/preview', { body: '' })).json.sections, []);
-  assert.equal((await call('hr', 'POST', '/preview', { body: 'x'.repeat(100001) })).status, 400);
-});

@@ -4,7 +4,7 @@
 
 const kbState = {
   canManage: false, categories: [], category: null, articles: [], article: null, sections: [],
-  draft: null, importText: '', importLevel: 1, importPublish: false, searchTimer: null, searchId: 0,
+  details: null, returnTo: null, screenOptions: [], importText: '', importLevel: 1, importPublish: false, searchTimer: null, searchId: 0,
 };
 
 async function kbJson(path, options) {
@@ -31,7 +31,8 @@ async function showKnowledgeBaseHome() {
     const data = await kbJson('/api/kb');
     kbState.canManage = data.canManage;
     kbState.categories = data.categories;
-    kbState.category = null; kbState.article = null; kbState.draft = null;
+    kbState.screenOptions = data.screenOptions || [];
+    kbState.category = null; kbState.article = null; kbState.details = null;
     kbRender(kbHomeHtml({ categories: data.categories, canManage: data.canManage }));
   } catch (err) {
     kbRender(`<p class="kb-empty">${kbEscape(err.status === 403 ? 'The Knowledge Base is for workspace members.' : (err.message || 'Could not open the Knowledge Base.'))}</p>`);
@@ -51,6 +52,7 @@ async function openKbArticle(id) {
     const data = await kbJson(`/api/kb/articles/${id}`);
     kbState.article = data.article; kbState.sections = data.sections;
     kbRender(kbArticleHtml({ article: data.article, bodyHtml: kbBodyHtml(data.sections), siblings: data.siblings, canManage: kbState.canManage, canExport: kbCanSavePdf() }));
+    if (typeof cvwLoadImages === 'function') cvwLoadImages(kbHost()); // pictures are fetched with the sign-in
     kbHost()?.scrollTo?.(0, 0);
   } catch (err) { showToast(err.message || 'Could not open that article.', 'error'); }
 }
@@ -111,73 +113,92 @@ async function kbMove(articleId, direction) {
   catch (err) { showToast(err.message || 'Could not move it.', 'error'); }
 }
 
-function kbOpenEditor(draft, isNew) {
-  kbState.draft = { ...draft, isNew };
-  kbRender(kbEditorHtml({ draft, categories: kbState.categories, isNew }));
-  kbUpdatePreview(0);
-  kbHost()?.querySelector('[data-kb-title]')?.focus();
+// ---- the article's details (title, category, published, help screens) in a dialog; its text is written in the Canvas editor ----
+
+const kbDetailsModal = () => document.getElementById('kb-details-modal');
+
+async function kbEnsureCategories() {
+  if (!kbState.categories.length || !kbState.screenOptions.length) {
+    const data = await kbJson('/api/kb');
+    kbState.categories = data.categories; kbState.screenOptions = data.screenOptions || [];
+  }
 }
 
-// The preview next to the text: the same reading view employees will see, built in the browser from the Markdown as typed.
-let kbPreviewTimer = null;
-let kbPreviewId = 0;
-function kbUpdatePreview(delay = 300) {
-  clearTimeout(kbPreviewTimer);
-  kbPreviewTimer = setTimeout(async () => {
-    const preview = kbHost()?.querySelector('[data-kb-preview]');
-    const body = kbHost()?.querySelector('[data-kb-body]');
-    if (!preview || !body) return;
-    const id = ++kbPreviewId;
-    try {
-      const data = await kbJson('/api/kb/preview', { method: 'POST', body: JSON.stringify({ body: body.value }) });
-      if (id === kbPreviewId && kbHost()?.contains(preview)) preview.innerHTML = kbBodyHtml(data.sections);
-    } catch (err) { preview.innerHTML = `<p class="kb-hint">${kbEscape(err.message || 'The preview could not be built.')}</p>`; }
-  }, delay);
+function kbRenderDetails() {
+  kbDetailsModal().innerHTML = kbDetailsHtml({ draft: kbState.details, categories: kbState.categories, screenOptions: kbState.screenOptions, isNew: kbState.details.isNew });
 }
 
-async function kbNewArticle() {
-  if (!kbState.category) return;
-  if (!kbState.categories.length) { const data = await kbJson('/api/kb'); kbState.categories = data.categories; }
-  kbOpenEditor({ title: '', body: '', published: false, categoryId: kbState.category.id }, true);
-}
-
-async function kbEditArticle(id) {
+async function kbOpenDetails(articleId) {
   try {
-    const data = await kbJson(`/api/kb/articles/${id}`);
-    if (!kbState.categories.length) kbState.categories = (await kbJson('/api/kb')).categories;
-    kbOpenEditor({ id: data.article.id, title: data.article.title, body: data.article.body, published: data.article.published, categoryId: data.article.categoryId }, false);
-  } catch (err) { showToast(err.message || 'Could not open it for editing.', 'error'); }
-}
-
-async function kbSaveArticle() {
-  const host = kbHost();
-  const draft = kbState.draft;
-  if (!host || !draft) return;
-  const title = host.querySelector('[data-kb-title]').value.trim();
-  if (!title) { showToast('Give the article a title.', 'error'); host.querySelector('[data-kb-title]').focus(); return; }
-  const body = host.querySelector('[data-kb-body]').value;
-  const published = host.querySelector('[data-kb-published]').checked;
-  try {
-    if (draft.isNew) {
-      const categoryId = Number(host.querySelector('[data-kb-category]').value);
-      const data = await kbJson('/api/kb/articles', { method: 'POST', body: JSON.stringify({ categoryId, title, body, published }) });
-      kbState.draft = null;
-      await openKbArticle(data.article.id);
+    await kbEnsureCategories();
+    if (articleId) {
+      const data = kbState.article && kbState.article.id === articleId ? { article: kbState.article } : await kbJson(`/api/kb/articles/${articleId}`);
+      const article = data.article;
+      kbState.details = { id: article.id, title: article.title, published: article.published, categoryId: article.categoryId, screens: article.screens || [], isNew: false };
     } else {
-      await kbJson(`/api/kb/articles/${draft.id}`, { method: 'PATCH', body: JSON.stringify({ title, body, published }) });
-      kbState.draft = null;
-      await openKbArticle(draft.id);
+      kbState.details = { title: '', published: false, categoryId: kbState.category ? kbState.category.id : kbState.categories[0].id, screens: [], isNew: true };
     }
-    showToast('Saved.', 'success');
+    kbRenderDetails();
+    openSettingsModal(kbDetailsModal());
+    kbDetailsModal().querySelector('[data-kb-title]')?.focus();
+  } catch (err) { showToast(err.message || 'Could not open the details.', 'error'); }
+}
+
+async function kbSaveDetails() {
+  const modal = kbDetailsModal();
+  const details = kbState.details;
+  if (!details) return;
+  const title = modal.querySelector('[data-kb-title]').value.trim();
+  if (!title) { showToast('Give the article a title.', 'error'); modal.querySelector('[data-kb-title]').focus(); return; }
+  const body = {
+    title,
+    categoryId: Number(modal.querySelector('[data-kb-category]').value),
+    published: modal.querySelector('[data-kb-published]').checked,
+    screens: [...modal.querySelectorAll('[data-kb-screen]:checked')].map((box) => box.dataset.kbScreen),
+  };
+  try {
+    if (details.isNew) {
+      const data = await kbJson('/api/kb/articles', { method: 'POST', body: JSON.stringify({ ...body, body: '' }) });
+      closeSettingsModal();
+      kbState.details = null;
+      await kbEditText(data.article.id, data.article.canvasId);
+    } else {
+      await kbJson(`/api/kb/articles/${details.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      closeSettingsModal();
+      kbState.details = null;
+      await openKbArticle(details.id);
+      showToast('Saved.', 'success');
+    }
   } catch (err) { showToast(err.message || 'Could not save it.', 'error'); }
 }
 
-async function kbCancelEditor() {
-  const draft = kbState.draft;
-  kbState.draft = null;
-  if (draft && !draft.isNew && draft.id) await openKbArticle(draft.id);
-  else if (kbState.category) await openKbCategory(kbState.category.id);
-  else await showKnowledgeBaseHome();
+// Writing the text of an article: the Canvas editor opens on the article's canvas, with a way back.
+async function kbEditText(articleId, canvasId) {
+  try {
+    let id = canvasId;
+    if (!id) id = (kbState.article && kbState.article.id === articleId ? kbState.article : (await kbJson(`/api/kb/articles/${articleId}`)).article).canvasId;
+    if (!id) throw new Error('This article has no text to edit.');
+    kbState.returnTo = { articleId };
+    await setSection('canvas2');
+    await openCanvas2Standalone(id);
+    kbSyncReturnBar('canvas2');
+  } catch (err) { kbState.returnTo = null; showToast(err.message || 'Could not open the Canvas editor.', 'error'); }
+}
+
+// The "back to the Knowledge Base" button, shown over the Canvas screen while an article's text is being written.
+function kbSyncReturnBar(section) {
+  const bar = document.getElementById('kb-return');
+  if (!bar) return;
+  if (section !== 'canvas2' && section !== 'knowledgebase') kbState.returnTo = null;
+  bar.hidden = !(section === 'canvas2' && kbState.returnTo);
+}
+
+async function kbBackFromEditor() {
+  const back = kbState.returnTo;
+  kbState.returnTo = null;
+  document.getElementById('kb-return').hidden = true;
+  await setSection('knowledgebase');
+  if (back) await openKbArticle(back.articleId);
 }
 
 async function kbDeleteArticle(id) {
@@ -226,6 +247,9 @@ async function kbSaveImport() {
 async function kbExportPdf(title, html) {
   try {
     showToast('Preparing the PDF…', 'info');
+    // pictures are fetched with the sign-in and put into the page, because the printing window has no network
+    const pictureIds = [...new Set([...html.matchAll(/data-cv-file="(\d+)"/g)].map((m) => m[1]))];
+    if (pictureIds.length && typeof canvasExport !== 'undefined') html = canvasExport.inlinePictures(html, await canvasExport.fetchPictures(pictureIds));
     const result = await window.electronAPI.exportCanvas({ format: 'pdf', title, html });
     if (result && result.path) showToast(`Saved to ${result.path}`, 'success');
   } catch (err) { showToast((err && err.message) || 'Could not save the PDF.', 'error'); }
@@ -264,16 +288,16 @@ function setupKnowledgeBase() {
     if (t.closest('[data-kb-new-category]')) { kbNewCategory(); return; }
     if (t.closest('[data-kb-rename-category]')) { kbRenameCategory(); return; }
     if (t.closest('[data-kb-delete-category]')) { kbDeleteCategory(); return; }
-    if (t.closest('[data-kb-new-article]')) { kbNewArticle(); return; }
+    if (t.closest('[data-kb-new-article]')) { kbOpenDetails(null); return; }
     if (t.closest('[data-kb-import]')) { kbOpenImport(); return; }
     const move = t.closest('[data-kb-move]');
     if (move) { kbMove(Number(move.dataset.kbArticle), move.dataset.kbMove); return; }
     const edit = t.closest('[data-kb-edit]');
-    if (edit) { kbEditArticle(Number(edit.dataset.kbEdit)); return; }
+    if (edit) { kbEditText(Number(edit.dataset.kbEdit)); return; }
+    const details = t.closest('[data-kb-details]');
+    if (details) { kbOpenDetails(Number(details.dataset.kbDetails)); return; }
     const del = t.closest('[data-kb-delete-article]');
     if (del) { kbDeleteArticle(Number(del.dataset.kbDeleteArticle)); return; }
-    if (t.closest('[data-kb-save]')) { kbSaveArticle(); return; }
-    if (t.closest('[data-kb-cancel]')) { kbCancelEditor(); return; }
     if (t.closest('[data-kb-export-article]')) { kbExportArticle(); return; }
     if (t.closest('[data-kb-export-category]')) { kbExportCategory(); return; }
   });
@@ -282,8 +306,16 @@ function setupKnowledgeBase() {
       clearTimeout(kbState.searchTimer);
       const text = event.target.value;
       kbState.searchTimer = setTimeout(() => runKbSearch(text), 250);
-    } else if (event.target.matches('[data-kb-body]')) kbUpdatePreview();
+    }
   });
+  document.getElementById('kb-return')?.addEventListener('click', () => kbBackFromEditor());
+  const details = kbDetailsModal();
+  if (details) {
+    details.addEventListener('click', (event) => {
+      if (event.target.closest('[data-kb-details-close]')) { closeSettingsModal(); return; }
+      if (event.target.closest('[data-kb-details-save]')) kbSaveDetails();
+    });
+  }
   const modal = kbImportModal();
   if (modal) {
     modal.addEventListener('click', (event) => {

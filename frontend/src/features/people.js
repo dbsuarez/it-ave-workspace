@@ -604,7 +604,7 @@ if (typeof document !== 'undefined') {
     const t = event.target;
     if (!t.closest) return;
     const tab = t.closest('[data-people-tab]');
-    if (tab) { peopleState.tab = tab.dataset.peopleTab; renderPeople(); return; }
+    if (tab) { peopleState.tab = tab.dataset.peopleTab; renderPeople(); if (typeof refreshScreenHelp === 'function') refreshScreenHelp('people'); return; }
     const viewButton = t.closest('[data-people-view]');
     if (viewButton) { savePeoplePref({ view: viewButton.dataset.peopleView === 'list' ? 'list' : 'card' }); return; }
     const statusButton = t.closest('[data-people-status]');

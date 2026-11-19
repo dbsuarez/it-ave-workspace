@@ -189,6 +189,7 @@ const API = () => (sql, params = []) => {
     const row = shares.get(params[0]);
     return { rows: row ? [{ id: 1, canvas_id: row.canvasId, role: row.role }] : [] };
   }
+  if (sql.includes('FROM kb_articles')) return { rows: [] }; // no canvas here is a Knowledge Base article
   throw new Error(`Unexpected canvas query: ${sql}`);
 };
 

@@ -41,7 +41,7 @@ function kbArticleHtml({ article, bodyHtml, siblings = {}, canManage, canExport 
   const nav = (item, label) => (item ? `<button type="button" class="kb-nav" data-kb-open-article="${Number(item.id)}"><small>${label}</small><span>${kbEscape(item.title)}</span></button>` : '<span></span>');
   const actions = [
     canExport ? '<button type="button" class="btn" data-kb-export-article>Save as PDF</button>' : '',
-    canManage ? `<button type="button" class="btn" data-kb-edit="${Number(article.id)}">Edit</button><button type="button" class="btn danger" data-kb-delete-article="${Number(article.id)}">Delete</button>` : '',
+    canManage ? `<button type="button" class="btn primary" data-kb-edit="${Number(article.id)}">Edit text</button><button type="button" class="btn" data-kb-details="${Number(article.id)}">Details</button><button type="button" class="btn danger" data-kb-delete-article="${Number(article.id)}">Delete</button>` : '',
   ].join('');
   return `<article class="kb-article" data-kb-article-id="${Number(article.id)}"><div class="kb-crumbs"><button type="button" class="kb-link" data-kb-home>Knowledge Base</button> / <button type="button" class="kb-link" data-kb-open-category="${Number(article.categoryId)}">${kbEscape(article.categoryTitle)}</button></div><div class="kb-heading"><h2>${kbEscape(article.title)}${article.published ? '' : ' <span class="kb-badge">Draft</span>'}</h2><div class="kb-actions">${actions}</div></div><p class="kb-updated">${kbUpdated(article)}</p><div class="kb-body cv-body">${bodyHtml}</div><div class="kb-siblings">${nav(siblings.previous, 'Previous')}${nav(siblings.next, 'Next')}</div></article>`;
 }
@@ -51,10 +51,13 @@ function kbSearchResultsHtml({ query, results }) {
   return `<p class="kb-result-count">${kbPlural(results.length, 'result')} for "${kbEscape(query)}"</p><ul class="kb-results">${results.map((item) => `<li><button type="button" class="kb-result" data-kb-open-article="${Number(item.id)}"><strong>${kbEscape(item.title)}</strong>${item.published === false ? '<span class="kb-badge">Draft</span>' : ''}<small>${kbEscape(item.categoryTitle)}${kbDateText(item.updatedAt) ? ` &middot; ${kbEscape(kbDateText(item.updatedAt))}` : ''}</small><span class="kb-snippet">${kbEscape(item.snippet)}</span></button></li>`).join('')}</ul>`;
 }
 
-// draft: { id?, title, body, published, categoryId }
-function kbEditorHtml({ draft, categories, isNew }) {
-  const picker = isNew ? `<label class="poll-field-label" for="kb-category">Category</label><select id="kb-category" class="poll-field" data-kb-category>${categories.map((c) => `<option value="${Number(c.id)}"${Number(c.id) === Number(draft.categoryId) ? ' selected' : ''}>${kbEscape(c.title)}</option>`).join('')}</select>` : '';
-  return `<div class="kb-editor"><div class="kb-crumbs"><button type="button" class="kb-link" data-kb-cancel>&larr; Back</button></div><h2>${isNew ? 'New article' : 'Edit article'}</h2>${picker}<label class="poll-field-label" for="kb-title">Title</label><input id="kb-title" class="poll-field" data-kb-title type="text" maxlength="160" placeholder="For example: How do I file a leave?" value="${kbEscape(draft.title)}"><div class="kb-editor-panes"><div><label class="poll-field-label" for="kb-body">Text (Markdown)</label><textarea id="kb-body" class="kb-body-input" data-kb-body maxlength="100000" placeholder="# A heading&#10;&#10;Write the answer. Use - for lists, **bold**, and | tables |.">${kbEscape(draft.body)}</textarea></div><div><div class="poll-field-label">Preview</div><div class="kb-body cv-body kb-preview" data-kb-preview></div></div></div><label class="kb-publish"><input type="checkbox" data-kb-published${draft.published ? ' checked' : ''}> Published (employees can see it)</label><div class="kb-actions"><button type="button" class="btn" data-kb-cancel>Cancel</button><button type="button" class="btn primary" data-kb-save>Save</button></div></div>`;
+// The article's details (not its text, which is written in the Canvas editor): title, category, published, and the screens it helps with.
+// draft: { id?, title, published, categoryId, screens: [keys] }; screenOptions: [{ key, label }]
+function kbDetailsHtml({ draft, categories, screenOptions = [], isNew }) {
+  const chosen = new Set(draft.screens || []);
+  const categoryOptions = categories.map((c) => `<option value="${Number(c.id)}"${Number(c.id) === Number(draft.categoryId) ? ' selected' : ''}>${kbEscape(c.title)}</option>`).join('');
+  const screens = screenOptions.map((s) => `<label class="kb-screen-option"><input type="checkbox" data-kb-screen="${kbEscape(s.key)}"${chosen.has(s.key) ? ' checked' : ''}> ${kbEscape(s.label)}</label>`).join('');
+  return `<div class="modal-header"><h3>${isNew ? 'New article' : 'Article details'}</h3><button class="modal-close" type="button" data-kb-details-close aria-label="Close">&times;</button></div><div class="modal-body"><label class="poll-field-label" for="kb-title">Title</label><input id="kb-title" class="poll-field" data-kb-title type="text" maxlength="160" placeholder="For example: How do I file a leave?" value="${kbEscape(draft.title)}"><label class="poll-field-label" for="kb-category">Category</label><select id="kb-category" class="poll-field" data-kb-category>${categoryOptions}</select><label class="kb-publish"><input type="checkbox" data-kb-published${draft.published ? ' checked' : ''}> Published (employees can see it)</label><div class="poll-field-label">Show a Help link for this article on these screens</div><div class="kb-screen-options">${screens}</div>${isNew ? '<p class="drawing-share-note">After you create it you write the text in the Canvas editor, with pictures, headings and history.</p>' : ''}</div><div class="modal-footer"><button type="button" class="btn" data-kb-details-close>Cancel</button><button type="button" class="btn primary" data-kb-details-save>${isNew ? 'Create and write' : 'Save'}</button></div>`;
 }
 
 // preview: from splitMarkdownIntoArticles: { articles, preamble, skipped }
@@ -66,5 +69,5 @@ function kbImportHtml({ text, level, publish, preview, categoryTitle }) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { kbHomeHtml, kbCategoryHtml, kbArticleHtml, kbSearchResultsHtml, kbEditorHtml, kbImportHtml, kbDateText };
+  module.exports = { kbHomeHtml, kbCategoryHtml, kbArticleHtml, kbSearchResultsHtml, kbDetailsHtml, kbImportHtml, kbDateText };
 }

@@ -61,3 +61,15 @@ test('an import is 1 to 200 articles, each with a title and a body', () => {
   assert.throws(() => kb.cleanImport([{ title: '', body: 'x' }]), /title/i);
   assert.throws(() => kb.cleanImport('x'), /1 to 200/);
 });
+
+test('the screens an article can help with are a fixed list, and a chosen list is checked and de-duplicated', () => {
+  assert.ok(kb.KB_SCREENS.some((s) => s.key === 'leave' && s.label === 'Leave'));
+  assert.ok(kb.KB_SCREENS.some((s) => s.key === 'attendance'));
+  assert.deepEqual(kb.cleanScreens(['leave', 'attendance', 'leave']), ['leave', 'attendance']);
+  assert.deepEqual(kb.cleanScreens([]), []);
+  assert.deepEqual(kb.cleanScreens(undefined), []);
+  assert.throws(() => kb.cleanScreens(['nowhere']), /screen/i);
+  assert.throws(() => kb.cleanScreens('leave'), /screen/i);
+  assert.equal(kb.cleanScreenKey('leave'), 'leave');
+  assert.throws(() => kb.cleanScreenKey('x'), /screen/i);
+});

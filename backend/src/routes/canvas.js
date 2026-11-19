@@ -272,6 +272,24 @@ router.get('/dm/:userId', authenticateToken, async (req, res) => {
 });
 
 // GET /api/canvas/standalone - canvases the current user owns or collaborates on
+// A canvas that is the text of a Knowledge Base article is edited here (pictures, history, comments), but it is deleted, shared and handed
+// over only through the Knowledge Base: refuse those here so an article can never lose its text by accident.
+router.use('/:canvasId', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.canvasId);
+    const full = req.originalUrl.split('?')[0].replace(/\/+$/, '');
+    const guarded = (req.method === 'DELETE' && full.endsWith(`/${req.params.canvasId}`)) || /\/(shares|collaborators|owner|channels|access-request)(\/|$)/.test(full);
+    if (id === null || !guarded) return next();
+    if ((await query('SELECT 1 FROM kb_articles WHERE canvas_id = $1', [id])).rows.length) {
+      return res.status(400).json({ error: 'This canvas is a Knowledge Base article. Delete or share it from the Knowledge Base.' });
+    }
+    return next();
+  } catch (err) {
+    console.error('Knowledge Base canvas guard error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/standalone', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -280,6 +298,7 @@ router.get('/standalone', authenticateToken, async (req, res) => {
               c.created_at, c.updated_at, c.revision, c.owner_id
        FROM canvases c
        WHERE c.kind = 'standalone' AND c.deleted_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM kb_articles k WHERE k.canvas_id = c.id)
          AND (COALESCE(c.owner_id, c.created_by) = $1
               OR EXISTS (SELECT 1 FROM canvas_collaborators WHERE canvas_id = c.id AND user_id = $1)
               OR EXISTS (SELECT 1 FROM canvas_channel_grants g

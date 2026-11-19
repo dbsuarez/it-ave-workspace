@@ -152,5 +152,5 @@ const canvasExport = (() => {
   });
 
   install();
-  return { run, pictureIds, inlinePictures, install };
+  return { run, pictureIds, inlinePictures, fetchPictures, install };
 })();

@@ -1026,4 +1026,19 @@ $$`,
   `CREATE INDEX IF NOT EXISTS idx_kb_articles_category ON kb_articles(category_id, position)`,
   // HR may manage the Knowledge Base
   `UPDATE roles SET permissions = array_append(permissions, 'manage_knowledge_base') WHERE legacy_hr = true AND NOT ('manage_knowledge_base' = ANY(permissions))`,
+  // The text of an article is a Canvas (written with the Canvas editor: pictures, history, comments, export); the article keeps its
+  // place, draft/publish and help links. Articles written before this get a canvas made from their text.
+  `ALTER TABLE kb_articles ADD COLUMN IF NOT EXISTS canvas_id INTEGER REFERENCES canvases(id) ON DELETE SET NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_articles_canvas ON kb_articles(canvas_id) WHERE canvas_id IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS kb_article_screens (
+     article_id INTEGER NOT NULL REFERENCES kb_articles(id) ON DELETE CASCADE,
+     screen_key VARCHAR(24) NOT NULL,
+     PRIMARY KEY (article_id, screen_key)
+   )`,
+  `DO $$ DECLARE a RECORD; cid INTEGER; BEGIN
+     FOR a IN SELECT id, title, body, created_by FROM kb_articles WHERE canvas_id IS NULL LOOP
+       INSERT INTO canvases (kind, title, content, created_by, owner_id) VALUES ('standalone', LEFT(a.title, 160), a.body, a.created_by, a.created_by) RETURNING id INTO cid;
+       UPDATE kb_articles SET canvas_id = cid WHERE id = a.id;
+     END LOOP;
+   END $$`,
 ];

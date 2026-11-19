@@ -68,7 +68,26 @@ function cleanImport(list) {
   return list.map((item) => ({ title: cleanArticleTitle(item && item.title), body: cleanBody(item && item.body) }));
 }
 
+// The screens an article can be shown on as a Help link (keys are the app's section names; People opens on tabs, so Leave and Attendance have their own).
+const KB_SCREENS = [
+  ['home', 'Home and channels'], ['activity', 'Activity'], ['later', 'Later'], ['files', 'Files'], ['notes', 'Notes'], ['canvas2', 'Canvas'],
+  ['drawings', 'Drawings'], ['sheets', 'Sheets'], ['people', 'People'], ['leave', 'Leave'], ['attendance', 'Attendance'], ['huddle', 'Huddle'], ['lists', 'Lists'],
+].map(([key, label]) => ({ key, label }));
+const KB_SCREEN_KEYS = new Set(KB_SCREENS.map((s) => s.key));
+
+function cleanScreenKey(value) {
+  if (typeof value !== 'string' || !KB_SCREEN_KEYS.has(value)) throw fail(400, 'Choose one of the screens in the list');
+  return value;
+}
+
+// The chosen screens of an article, each once, in the given order. Nothing chosen is an empty list.
+function cleanScreens(list) {
+  if (list === undefined || list === null) return [];
+  if (!Array.isArray(list)) throw fail(400, 'Choose screens from the list');
+  return [...new Set(list.map(cleanScreenKey))];
+}
+
 module.exports = {
-  fail, cleanCategoryTitle, cleanArticleTitle, cleanBody, searchPattern, snippetFor, cleanOrderIds, cleanImport,
+  fail, KB_SCREENS, cleanScreens, cleanScreenKey, cleanCategoryTitle, cleanArticleTitle, cleanBody, searchPattern, snippetFor, cleanOrderIds, cleanImport,
   MAX_CATEGORIES: 100, MAX_ARTICLES_PER_CATEGORY: 500, MAX_IMPORT,
 };
