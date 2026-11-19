@@ -389,6 +389,23 @@ Live editing (`sockets/drawings.js`, `createDrawingHub`): the server keeps one r
 ### Announcements
 `POST /api/announcements` `{ channelId, text }` posts an announcement from the "Post announcement" dialog, with the same rules as `/announce`: the channel must be an announcement channel (`command_scope = 'announcements'`, set in Moderation), the person must be a member holding the `announce` permission in it, the text is 1 to 2000 characters (kept exactly, line breaks included), and the channel must be open and not a forum. No second confirmation step: the dialog is the confirmation. An announcement is edited with the ordinary `PATCH /api/messages/:id`, which for an announcement also requires the announcement channel, the `announce` permission and at most 2000 characters (ordinary messages allow 10000); the old text is kept in `message_edits`. Returns `201 { message }`; the channel gets the usual `new_message`.
 
+### Knowledge Base (`/api/kb`)
+FAQ categories and Markdown articles (design: `docs/superpowers/specs/2026-11-19-knowledge-base-design.md`). Any active **member** reads and searches published articles (guests get 403); the **`manage_knowledge_base`** permission (Owners always; the HR role by migration) also sees drafts and edits. The router parses its own 1 MB JSON bodies. Limits: category title 80, article title 160, body 100,000 characters, 100 categories, 500 articles per category, 200 articles per import.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/kb` | `{ canManage, categories: [{ id, title, articleCount, draftCount? }] }` (employees only see categories with a published article; `draftCount` is for managers) |
+| GET | `/api/kb/categories/:id` | `{ category, articles: [{ id, title, published, updatedAt, updatedByName }] }` in order |
+| GET | `/api/kb/articles/:id` | `{ article (with body), sections, siblings: { previous, next } }`; `sections` is the body split by `canvasSections.parseSections` for the Canvas reading view; a draft is 404 for employees |
+| GET | `/api/kb/search?q=` | up to 30 `{ id, title, categoryId, categoryTitle, snippet, updatedAt }`; at least 2 characters; `%` and `_` are literal; title matches first |
+| POST / PATCH / DELETE | `/api/kb/categories`, `/api/kb/categories/:id` | managers: add, rename, delete (its articles go with it) |
+| PUT | `/api/kb/order`, `/api/kb/categories/:id/order` | managers: `{ ids }` the new order of all categories, or of all articles in a category (every id exactly once) |
+| POST / PATCH / DELETE | `/api/kb/articles`, `/api/kb/articles/:id` | managers: `{ categoryId, title, body, published }`; PATCH takes any of title, body, published, categoryId (moving). `updatedAt` and `updatedByName` change when the title, text or published state changes, not when reordering or moving |
+| POST | `/api/kb/categories/:id/import` | managers: `{ articles: [{ title, body }], publish }` adds them at the end, in order (drafts unless `publish`) |
+| POST | `/api/kb/preview` | managers: `{ body }` -> `{ sections }` for the editor's live preview |
+
+`updatedByName` is the person's full name, the username only when they have none. Pure rules and search helpers: `backend/src/knowledgeBase.js`.
+
 ### Sheets (`/api/sheets`)
 Spreadsheets HR makes in the app (design: `docs/superpowers/specs/2026-11-19-sheets-design.md`). A sheet is `{ tabs: [{ id, name, rows: [[string...]...], widths? }] }` (at most 20 tabs, 5000 rows, 200 columns, 5000 characters per cell, 5 MB); a formula is just text starting with `=` and runs only in the browser. The router parses its own 6 MB JSON bodies, mounted before the general parser. Creating needs the **`manage_sheets`** permission (Owners always; the HR role gets it by migration); everything else depends on the person's role on that sheet (owner, editor, viewer). Owners of the workspace get no access to other people's sheets.
 

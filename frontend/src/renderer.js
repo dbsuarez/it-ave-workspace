@@ -585,6 +585,7 @@ function setupEventListeners() {
   setupDrawings();
   setupNotes();
   setupSheets();
+  setupKnowledgeBase();
   setupPollDialog();
   setupAnnouncements();
   on('channel-read-receipts', 'click', (event) => {
@@ -3111,6 +3112,7 @@ const SECTIONS = {
   canvas2:  { pane: null,       view: 'canvas2' },
   drawings: { pane: null,       view: 'drawings' },
   sheets:   { pane: null,       view: 'sheets' },
+  knowledgebase: { pane: null,  view: 'knowledge-base' },
   people:   { pane: null,       view: 'people' },
   huddle:   { pane: null,       view: 'huddle' },
   moderation: { pane: null,     view: 'moderation' },
@@ -3204,6 +3206,10 @@ async function setSection(section) {
     showPane(null);
     showView('drawings');
     await showDrawingsHome();
+  } else if (section === 'knowledgebase') {
+    showPane(null);
+    showView('knowledge-base');
+    await showKnowledgeBaseHome();
   } else if (section === 'sheets') {
     showPane(null);
     showView('sheets');

@@ -1003,4 +1003,27 @@ $$`,
   // A published table can feed Leave (company holidays or leave credits); one table per kind
   `ALTER TABLE sheet_tables ADD COLUMN IF NOT EXISTS feeds VARCHAR(12) CHECK (feeds IN ('holidays', 'credits'))`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_sheet_tables_feeds ON sheet_tables (feeds) WHERE feeds IS NOT NULL`,
+  // Knowledge Base: categories and Markdown articles (docs/superpowers/specs/2026-11-19-knowledge-base-design.md)
+  `CREATE TABLE IF NOT EXISTS kb_categories (
+     id SERIAL PRIMARY KEY,
+     title VARCHAR(80) NOT NULL,
+     position INTEGER NOT NULL DEFAULT 0,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS kb_articles (
+     id SERIAL PRIMARY KEY,
+     category_id INTEGER NOT NULL REFERENCES kb_categories(id) ON DELETE CASCADE,
+     title VARCHAR(160) NOT NULL,
+     body TEXT NOT NULL DEFAULT '',
+     position INTEGER NOT NULL DEFAULT 0,
+     published BOOLEAN NOT NULL DEFAULT false,
+     published_at TIMESTAMPTZ,
+     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_kb_articles_category ON kb_articles(category_id, position)`,
+  // HR may manage the Knowledge Base
+  `UPDATE roles SET permissions = array_append(permissions, 'manage_knowledge_base') WHERE legacy_hr = true AND NOT ('manage_knowledge_base' = ANY(permissions))`,
 ];

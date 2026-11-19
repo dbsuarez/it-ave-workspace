@@ -156,6 +156,10 @@
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
           <span>Sheets</span>
         </button>
+        <button class="rail-item" data-rail="knowledgebase">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7"/><path d="M9 11h5"/></svg>
+          <span>Knowledge Base</span>
+        </button>
         <button class="rail-item" data-rail="people">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span>People</span>
@@ -483,6 +487,10 @@
             <div id="drawing-bar-host"></div>
             <div class="drawing-canvas" id="drawing-canvas"></div>
           </section>
+        </div>
+
+        <div class="view view-kb" id="view-knowledge-base">
+          <div class="kb-screen" id="kb-content" aria-live="polite"></div>
         </div>
 
         <div class="view view-sheets" id="view-sheets">
@@ -1007,6 +1015,7 @@
       </div>
     </div>
     <div class="modal people-editor-modal drawing-share-modal" id="drawing-share-modal" role="dialog" aria-label="Share drawing"></div>
+    <div class="modal people-editor-modal drawing-share-modal kb-import-modal" id="kb-import-modal" role="dialog" aria-label="Import articles"></div>
     <div class="modal people-editor-modal drawing-share-modal" id="sheet-share-modal" role="dialog" aria-label="Share sheet"></div>
     <div class="modal people-editor-modal drawing-share-modal sheet-tables-modal" id="sheet-tables-modal" role="dialog" aria-label="Sheet tables"></div>
     <div class="modal people-editor-modal" id="people-editor-modal" role="dialog" aria-label="Edit my page"></div>
@@ -1172,6 +1181,9 @@
   <script src="features/sheet-leave.js"></script>
   <script src="features/leave-approval.js"></script>
   <script src="features/sheet-tables-view.js"></script>
+  <script src="features/kb-import.js"></script>
+  <script src="features/kb-view.js"></script>
+  <script src="features/knowledge-base.js"></script>
   <script src="features/sheets-view.js"></script>
   <script src="features/sheets.js"></script>
   <script src="features/drawings.js"></script>

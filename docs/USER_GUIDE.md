@@ -99,6 +99,24 @@ Type in **Search notes**: it looks in titles, text, checklist items and label na
 ### Limits
 You can keep 1000 notes, 50 labels, 200 items in a checklist and 10 pictures (PNG, JPEG, GIF or WebP, up to 2 MB each) on a note. Notes are private to you and cannot be shared.
 
+## Knowledge Base
+
+The Knowledge Base is where HR keeps the answers to common questions and the employee handbook. Open **Knowledge Base** in the left rail.
+
+### How do I find an answer?
+Type in the search box at the top ("leave", "payslip", "dress code"): results appear as you type, with the category, the date it was last updated and a short piece of the text. Or open a category and read down its list of articles, in order like a table of contents. Each article shows **Updated <date> by <name>** so you know how fresh it is, and **Previous** and **Next** buttons to read the chapters in order.
+
+### Can I save it as a PDF?
+In the desktop app, **Save as PDF** on an article saves that article; on a category it saves all of its published articles as one document, for example the whole handbook.
+
+### Who can write in it?
+People with the **Manage knowledge base** permission (Owners, and the HR role by default). Everyone else can read and search only.
+
+### How does HR add content?
+- **New category** on the Knowledge Base screen (for example Leave, Payroll, Employee Handbook). **Rename**, **Delete** (this deletes its articles too) and the up and down arrows (put the articles in reading order) are on the category page.
+- **New article**: a title, the text in Markdown (headings with `#`, lists with `-`, `**bold**`, tables with `|`) and a live **Preview** beside it. An article starts as a **Draft** that only HR can see; tick **Published** when it is ready.
+- **Import**: paste a long text (for example the handbook after another tool turned your screenshots into text) and choose whether each `#` or each `##` heading starts a new article. You see the list of articles before anything is saved. They are added at the end of the category as drafts (or published, if you tick that), so you can check each one and fix it. Text before the first heading becomes an article called Introduction.
+
 ## Sheets
 
 Sheets are spreadsheets you make inside the app. They look and work like a normal spreadsheet (type, paste from Excel, formulas, several tabs), they save by themselves, and the rest of the app can read the data you publish from them. Open **Sheets** in the left rail.
