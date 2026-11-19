@@ -6,6 +6,7 @@ const { query } = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { can } = require('../permissions');
 const { refuseOwnerSelfGrant } = require('../ownerChannelAccess');
+const { ensureChannelMembership } = require('../security');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -36,6 +37,20 @@ async function requireChannelManager(userId, channelId) {
   if (!allowed) throw fail(403, 'Only the channel creator or someone who manages channels can change its permissions');
   return channel;
 }
+
+// GET /api/channels/:channelId/my-permissions -> { sendMessages, attachFiles, addReactions }: what the signed-in person may do in this
+// channel, so the screen can disable what they cannot do instead of letting them try (the server still checks every action).
+router.get('/:channelId/my-permissions', async (req, res) => {
+  try {
+    const channelId = parseId(req.params.channelId);
+    if (!channelId) throw fail(400, 'A valid channel is required');
+    await ensureChannelMembership(query, req.user.userId, channelId);
+    const [sendMessages, attachFiles, addReactions] = await Promise.all(
+      ['send_messages', 'attach_files', 'add_reactions'].map((key) => can(query, req.user.userId, key, { channelId }))
+    );
+    res.json({ sendMessages, attachFiles, addReactions });
+  } catch (err) { sendError(res, err, 'My channel permissions error'); }
+});
 
 router.get('/:channelId/permissions', async (req, res) => {
   try {

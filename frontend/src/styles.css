@@ -8411,3 +8411,9 @@ body.theme-dark .note-card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.7); }
 .role-table .perm-bulk { display: block; margin: 4px auto 0; padding: 2px 4px; border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); color: var(--text-muted); font: inherit; font-size: 11px; cursor: pointer; }
 .role-table .perm-bulk:hover { color: var(--text); border-color: var(--purple); }
 .role-table .perm-na { color: var(--text-muted); opacity: 0.6; }
+
+/* No permission to react in this channel: the add-reaction buttons are not offered */
+.reactions-locked [data-open-reactions] { display: none !important; }
+.input-row button:disabled, .input-row .icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.message-compose-field textarea:disabled { cursor: not-allowed; }
+.perm-tabs { display: flex; gap: 4px; margin: 6px 0 10px; border-bottom: 1px solid var(--border); }

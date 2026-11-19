@@ -156,3 +156,30 @@ test('a channel someone may not see is left out of their channel list', async (t
   await call(ids.maker, 'PUT', `/${ids.channel}/permissions`, { subjectType: 'role', subjectId: ids.everyone, allow: [], deny: [] });
   assert.equal((await viewableChannels(query, ids.bob, rows)).length, 1);
 });
+
+test('what I may do in a channel (send, attach, react) can be asked up front, so the screen can disable it', async (t) => {
+  if (skip(t)) return;
+  const cy = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('mine-cy', 'mine-cy@x.test', 'x') RETURNING id")).rows[0].id;
+  const dee = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('mine-dee', 'mine-dee@x.test', 'x') RETURNING id")).rows[0].id;
+  const outsider = (await admin.query("INSERT INTO users (username, email, password_hash) VALUES ('mine-out', 'mine-out@x.test', 'x') RETURNING id")).rows[0].id;
+  const channel = (await admin.query("INSERT INTO channels (name, created_by) VALUES ('chperm-mine', $1) RETURNING id", [ids.maker])).rows[0].id;
+  for (const id of [ids.maker, cy, dee]) await admin.query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)', [channel, id]);
+
+  const open = await call(cy, 'GET', `/${channel}/my-permissions`);
+  assert.equal(open.status, 200, JSON.stringify(open.json));
+  assert.deepEqual(open.json, { sendMessages: true, attachFiles: true, addReactions: true }, 'an ordinary channel allows all three');
+
+  const denied = await call(ids.maker, 'PUT', `/${channel}/permissions`, { subjectType: 'user', subjectId: cy, allow: [], deny: ['send_messages', 'attach_files'] });
+  assert.equal(denied.status, 200, JSON.stringify(denied.json));
+  assert.deepEqual((await call(cy, 'GET', `/${channel}/my-permissions`)).json, { sendMessages: false, attachFiles: false, addReactions: true });
+  assert.deepEqual((await call(dee, 'GET', `/${channel}/my-permissions`)).json, { sendMessages: true, attachFiles: true, addReactions: true }, 'someone else is not affected');
+
+  // denying a role the person has works the same way
+  await admin.query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [dee, ids.editors]);
+  await call(ids.maker, 'PUT', `/${channel}/permissions`, { subjectType: 'role', subjectId: ids.editors, allow: [], deny: ['send_messages'] });
+  assert.equal((await call(dee, 'GET', `/${channel}/my-permissions`)).json.sendMessages, false);
+
+  assert.deepEqual((await call(ids.boss, 'GET', `/${channel}/my-permissions`)).json, { sendMessages: true, attachFiles: true, addReactions: true }, 'an Owner always may');
+  assert.equal((await call(outsider, 'GET', `/${channel}/my-permissions`)).status, 403, 'someone outside the channel is told nothing');
+  assert.equal((await call(cy, 'GET', '/abc/my-permissions')).status, 400);
+});

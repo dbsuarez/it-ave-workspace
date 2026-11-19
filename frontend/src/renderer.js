@@ -621,6 +621,8 @@ function setupEventListeners() {
 
   // File attach
   on('btn-attach', 'click', () => els.filePicker?.click());
+  // an admin may change what a person can do while they have the channel open: look again when they come back to the window
+  window.addEventListener('focus', () => { if (state.view === 'channel' && state.currentChannelId) loadMyChannelPermissions(state.currentChannelId); });
   on('file-picker', 'change', handleFilePick);
   on('btn-dm-attach', 'click', () => els.dmFilePicker?.click());
   on('dm-file-picker', 'change', handleDmFilePick);
@@ -641,7 +643,7 @@ function setupEventListeners() {
     if (handleCommandMenuKeydown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && state.preferences.enterToSend) { e.preventDefault(); sendChannelMessage(); }
   });
-  if (els.messageInput) els.messageInput.addEventListener('input', updateCommandMenu);
+  if (els.messageInput) els.messageInput.addEventListener('input', (event) => { guardCommandsOnlyInput(); updateCommandMenu(event); });
   if (els.commandMenu) els.commandMenu.addEventListener('click', handleCommandMenuClick);
   if (els.commandPrivateResponses) els.commandPrivateResponses.addEventListener('click', handleCommandResponseClick);
   if (els.dmMessageInput) els.dmMessageInput.addEventListener('keydown', (e) => {
@@ -1521,6 +1523,7 @@ async function openChannel(channelId) {
   // A forum opens on its topic list (every time it is chosen from the sidebar)
   state.forum = { channelId, topicId: null, topic: null, topics: [], archived: false, hasMore: false, requestId: 0, refreshTimer: null };
   applyForumMode();
+  loadMyChannelPermissions(channelId); // then the composer, paperclip and reactions are locked if they may not use them
 
   // Join the channel room so realtime messages appear without reloading the view
   if (state.socket) {
@@ -1574,16 +1577,63 @@ function forumSendTarget() {
   return screen === 'topic' ? { topicId: state.forum.topicId, blocked: false } : { topicId: null, blocked: true };
 }
 
+// What the signed-in person may do in the open channel (send, attach, react), or null while unknown.
+function currentChannelPerms() {
+  return (state.channelPerms || {})[state.currentChannelId] || null;
+}
+
+async function loadMyChannelPermissions(channelId) {
+  if (!channelId) return;
+  try {
+    const res = await api(`/api/channels/${channelId}/my-permissions`);
+    if (!res.ok) return;
+    state.channelPerms = { ...(state.channelPerms || {}), [channelId]: await res.json() };
+    if (Number(channelId) === Number(state.currentChannelId)) applyChannelPermissionLocks();
+  } catch (err) { console.error('Load my channel permissions error:', err); }
+}
+
+// Disables what the person cannot do here, so they do not type or click for nothing: the composer (and its buttons) when sending is
+// denied, the paperclip when attaching is, and the reaction buttons when reacting is. The server still checks every action.
+function applyChannelPermissionLocks() {
+  const perms = currentChannelPerms();
+  const view = document.getElementById('view-channel');
+  const reactionsReason = typeof reactionsBlockedReason === 'function' ? reactionsBlockedReason(perms) : null;
+  view?.classList.toggle('reactions-locked', Boolean(reactionsReason));
+  const forumReason = forumScreen() === 'topic' ? (state.forum.topic && (state.forum.topic.archivedAt ? 'This topic is archived' : (state.forum.topic.lockedAt ? 'This topic is locked' : null))) : null;
+  setComposerLocked(forumScreen() === 'list' ? undefined : forumReason);
+}
+
 function setComposerLocked(reason) {
-  const locked = Boolean(reason);
+  if (reason === undefined) return; // the forum topic list has no composer to change
+  const perms = currentChannelPerms();
+  const { mode, reason: shown } = composerMode(perms, reason);
+  // 'commands': sending is denied, but slash commands still work (they run on the server), so the box stays open for them
+  state.composerCommandsOnly = mode === 'commands';
+  const fullyLocked = mode === 'locked';
   if (els.messageInput) {
-    els.messageInput.disabled = locked;
-    els.messageInput.placeholder = locked ? reason : 'Say something…';
+    els.messageInput.disabled = fullyLocked;
+    els.messageInput.placeholder = mode === 'open' ? 'Say something…' : (mode === 'commands' ? `${shown}. You can still use / commands.` : shown);
+    if (mode === 'commands' && !commandsOnlyAllows(els.messageInput.value)) els.messageInput.value = '';
   }
-  const sendBtn = document.getElementById('send-btn');
-  if (sendBtn) sendBtn.disabled = locked;
-  const attach = document.getElementById('btn-attach');
-  if (attach) attach.disabled = locked;
+  const attachReason = mode !== 'open' ? shown : attachBlockedReason(perms);
+  const keepTitle = { 'btn-attach': 'Attach file', 'btn-add-drawing': 'Add a drawing', 'btn-add-poll': 'Create a poll', 'btn-add-announcement': 'Post an announcement', 'btn-schedule': 'Send later', 'send-btn': 'Send message' };
+  for (const [id, title] of Object.entries(keepTitle)) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    // the send button stays on in commands-only mode (a command is sent with it); everything that posts a message is off
+    const blocked = id === 'send-btn' ? fullyLocked : (id === 'btn-attach' ? Boolean(attachReason) : mode !== 'open');
+    button.disabled = blocked;
+    button.title = blocked ? (id === 'btn-attach' ? attachReason : shown) : title;
+  }
+}
+
+// Commands-only composer: typing anything that is not a command is cleared at once, with the reason, so nobody types a message for nothing.
+let composerHintAt = 0;
+function guardCommandsOnlyInput() {
+  if (!state.composerCommandsOnly || !els.messageInput || commandsOnlyAllows(els.messageInput.value)) return;
+  els.messageInput.value = '';
+  const now = Date.now();
+  if (now - composerHintAt > 3000) { composerHintAt = now; showToast(`${composerLockReason(currentChannelPerms()) || 'You cannot send messages here'}. You can still use / commands.`, 'info'); }
 }
 
 // Shows the right parts for the open channel: the topic list, an open topic, or the ordinary stream.
@@ -2512,6 +2562,7 @@ function emptyRecordMarkup(title, description, className = '') {
 async function sendChannelMessage() {
   let text = els.messageInput.value.trim();
   if (!text) return;
+  if (state.composerCommandsOnly && !commandsOnlyAllows(text)) { guardCommandsOnlyInput(); return; }
   if (text.startsWith('/') && !text.startsWith('//')) {
     await executeSlashCommand(text);
     return;
@@ -2893,6 +2944,8 @@ async function scrollToDirectMessage(userId, messageId) {
 function handleReactionClick(event) {
   const addButton = event.target.closest('[data-open-reactions]');
   if (addButton) {
+    const blocked = typeof reactionsBlockedReason === 'function' ? reactionsBlockedReason(currentChannelPerms()) : null;
+    if (blocked && state.view === 'channel') { showToast(blocked, 'info'); return; }
     openEmojiPicker(addButton.dataset.openReactions, addButton);
     return;
   }

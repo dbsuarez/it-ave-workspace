@@ -47,6 +47,8 @@ async function sendFilesTo(kind, fileList) {
   if (!plan.files.length) return false;
   if (!state.socketAuthenticated) { showToast('Chat is reconnecting. Please try again in a moment.', 'error'); return false; }
   if (kind === 'channel' && !state.currentChannelId) return false;
+  const attachBlocked = kind === 'channel' && typeof attachBlockedReason === 'function' && typeof currentChannelPerms === 'function' ? attachBlockedReason(currentChannelPerms()) : null;
+  if (attachBlocked) { showToast(attachBlocked, 'info'); return false; }
   if (kind === 'dm' && !state.currentDMId) return false;
   // in a department forum files go into the open topic; nothing can be sent from the topic list
   const target = kind === 'channel' && typeof forumSendTarget === 'function' ? forumSendTarget() : { topicId: null, blocked: false };

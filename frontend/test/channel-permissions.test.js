@@ -1,7 +1,7 @@
 // The Permissions card on a channel: setting one permission for every row at once (the "set all" box in a column header).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { permApplyValue, permBulkSummary, permAppliesTo } = require('../src/features/channel-permissions');
+const { permApplyValue, permBulkSummary, permAppliesTo, composerLockReason, attachBlockedReason, reactionsBlockedReason, composerMode, commandsOnlyAllows } = require('../src/features/channel-permissions');
 
 test('one permission can be set to inherit, allow or deny without touching the others', () => {
   const item = { allow: ['send', 'react'], deny: ['attach'] };
@@ -30,4 +30,38 @@ test('a department can only be given access to see the channel, never the action
   assert.equal(permAppliesTo('department', 'send_messages'), false);
   assert.equal(permAppliesTo('role', 'send_messages'), true);
   assert.equal(permAppliesTo('user', 'attach_files'), true);
+});
+
+test('the composer is locked up front, with a reason, when the person may not send messages in the channel', () => {
+  assert.match(composerLockReason({ sendMessages: false, attachFiles: true, addReactions: true }), /permission to send messages/);
+  assert.equal(composerLockReason({ sendMessages: true, attachFiles: false, addReactions: true }), null, 'only attaching is denied: they can still type');
+  assert.equal(composerLockReason(null), null, 'nothing is known yet: do not lock');
+  assert.equal(composerLockReason(undefined), null);
+});
+
+test('attaching and reacting each have their own reason, and nothing is blocked while unknown', () => {
+  assert.match(attachBlockedReason({ sendMessages: true, attachFiles: false, addReactions: true }), /attach files/);
+  assert.equal(attachBlockedReason({ sendMessages: true, attachFiles: true, addReactions: true }), null);
+  assert.equal(attachBlockedReason(null), null);
+  assert.match(reactionsBlockedReason({ sendMessages: true, attachFiles: true, addReactions: false }), /reactions/);
+  assert.equal(reactionsBlockedReason({ sendMessages: true, attachFiles: true, addReactions: true }), null);
+  assert.equal(reactionsBlockedReason(null), null);
+});
+
+test('where sending is denied the composer still takes slash commands; a locked topic is locked completely', () => {
+  const denied = { sendMessages: false, attachFiles: true, addReactions: true };
+  assert.deepEqual(composerMode(denied, null), { mode: 'commands', reason: "You don't have permission to send messages in this channel" });
+  assert.deepEqual(composerMode(null, null), { mode: 'open', reason: null });
+  assert.deepEqual(composerMode({ sendMessages: true }, null), { mode: 'open', reason: null });
+  assert.deepEqual(composerMode(denied, 'This topic is locked'), { mode: 'locked', reason: 'This topic is locked' });
+  assert.deepEqual(composerMode(null, 'This topic is archived'), { mode: 'locked', reason: 'This topic is archived' });
+});
+
+test('in commands-only mode only a command (starting with a single slash) may be typed', () => {
+  assert.equal(commandsOnlyAllows('/leave'), true);
+  assert.equal(commandsOnlyAllows('/'), true);
+  assert.equal(commandsOnlyAllows(''), true, 'an empty box is fine');
+  assert.equal(commandsOnlyAllows('hello'), false);
+  assert.equal(commandsOnlyAllows('//not a command'), false, 'a literal slash message is a message');
+  assert.equal(commandsOnlyAllows(' /leave'), true, 'leading spaces are ignored');
 });
