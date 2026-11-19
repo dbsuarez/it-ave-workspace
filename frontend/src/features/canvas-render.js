@@ -66,6 +66,31 @@ function cvSplitRow(line) {
   return row.split('|').map((cell) => cell.trim());
 }
 
+// A table cell. The editor writes a line break inside a cell as <br> (and an ampersand as &amp;), so those are read back as what they
+// mean: lines, and plain text. Consecutive lines that start with "- " (or "* ") become a bullet list. Everything still goes through
+// cvInline, which escapes it, so nothing in a cell can become markup.
+const CV_CELL_ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&#39;': "'", '&nbsp;': '\u00a0' };
+
+function cvCellHtml(cell, ctx) {
+  const lines = String(cell).split(/<br\s*\/?>/i).map((line) => line.replace(/&(?:amp|lt|gt|quot|apos|nbsp|#39);/g, (entity) => CV_CELL_ENTITIES[entity]));
+  if (lines.length === 1) return cvInline(lines[0], ctx);
+  const parts = [];
+  let items = null;
+  let afterText = false;
+  for (const line of lines) {
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+    if (bullet) {
+      (items = items || []).push(`<li>${cvInline(bullet[1], ctx)}</li>`);
+      continue;
+    }
+    if (items) { parts.push(`<ul>${items.join('')}</ul>`); items = null; afterText = false; }
+    parts.push(`${afterText ? '<br>' : ''}${cvInline(line, ctx)}`);
+    afterText = true;
+  }
+  if (items) parts.push(`<ul>${items.join('')}</ul>`);
+  return parts.join('');
+}
+
 function cvTableHtml(text, ctx) {
   const lines = text.split('\n');
   if (lines.length < 2) return `<p>${cvInline(text, ctx)}</p>`;
@@ -76,11 +101,11 @@ function cvTableHtml(text, ctx) {
     return left && right ? 'center' : right ? 'right' : left ? 'left' : '';
   });
   const align = (i) => (aligns[i] ? ` style="text-align:${aligns[i]}"` : '');
-  const header = head.map((cell, i) => `<th${align(i)}>${cvInline(cell, ctx)}</th>`).join('');
+  const header = head.map((cell, i) => `<th${align(i)}>${cvCellHtml(cell, ctx)}</th>`).join('');
   const body = lines.slice(2).map((line) => {
     const cells = cvSplitRow(line).slice(0, head.length);
     while (cells.length < head.length) cells.push('');
-    return `<tr>${cells.map((cell, i) => `<td${align(i)}>${cvInline(cell, ctx)}</td>`).join('')}</tr>`;
+    return `<tr>${cells.map((cell, i) => `<td${align(i)}>${cvCellHtml(cell, ctx)}</td>`).join('')}</tr>`;
   }).join('');
   return `<div class="cv-table-wrap"><table class="cv-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
 }

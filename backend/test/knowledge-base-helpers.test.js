@@ -48,6 +48,14 @@ test('a snippet from a table reads as words, not as pipes and dashes', () => {
   assert.match(snippet, /Type Days Vacation 15/);
 });
 
+test('a snippet from a table cell reads as words: <br> is a space and &amp; is an ampersand', () => {
+  const cell = '| Section | Contents |\n|---|---|\n| Offenses | Disciplinary Offenses<br>- Section I: Attendance &amp; Performance<br>- Section II: Persons |';
+  const snippet = kb.snippetFor(cell, 'attendance', 120);
+  assert.equal(/<br|&amp;|&lt;/.test(snippet), false, snippet);
+  assert.match(snippet, /Section I: Attendance & Performance/);
+  assert.match(kb.snippetFor('Tom&nbsp;&amp;&nbsp;Jerry &lt;3', 'tom', 60), /^Tom & Jerry <3$/);
+});
+
 test('a new order must list every id once, no more and no less', () => {
   assert.deepEqual(kb.cleanOrderIds([3, 1, 2], [1, 2, 3]), [3, 1, 2]);
   for (const bad of [[1, 2], [1, 2, 3, 4], [1, 1, 2], 'x', [1, 2, 'a'], null]) assert.throws(() => kb.cleanOrderIds(bad, [1, 2, 3]), /order/i, JSON.stringify(bad));

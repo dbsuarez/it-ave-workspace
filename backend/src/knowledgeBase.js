@@ -40,7 +40,8 @@ function searchPattern(value) {
   return `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
-const plain = (text) => String(text || '').replace(/[#*_`>~|]/g, ' ').replace(/(^|\s)-{2,}(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&#39;': "'", '&nbsp;': ' ' };
+const plain = (text) => String(text || '').replace(/<br\s*\/?>/gi, ' ').replace(/&(?:amp|lt|gt|quot|apos|nbsp|#39);/g, (entity) => ENTITIES[entity]).replace(/[#*_`>~|]/g, ' ').replace(/(^|\s)-{2,}(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
 
 // A short piece of the article around the first match (or its start), without the Markdown marks. width: about how many characters.
 function snippetFor(body, term, width = 160) {

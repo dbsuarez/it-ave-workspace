@@ -50,6 +50,23 @@ test('checklists render interactive boxes that name their section and item', () 
   assert.ok(locked.includes('disabled'), 'viewers cannot toggle');
 });
 
+test('a table cell with <br> breaks shows line breaks, and lines starting with "- " become a bullet list', () => {
+  const html = render('table', '| Section | Contents |\n| --- | --- |\n| Offenses | Disciplinary Offenses<br>- Section I: Attendance &amp; Performance<br>- Section II: Persons<br>- Section III: Safety |');
+  assert.equal(/&lt;br&gt;/.test(html), false, 'the <br> is not printed');
+  assert.match(html, /<td>Disciplinary Offenses<ul><li>Section I: Attendance &amp; Performance<\/li><li>Section II: Persons<\/li><li>Section III: Safety<\/li><\/ul><\/td>/);
+  assert.equal(/&amp;amp;/.test(html), false, 'an ampersand is escaped once, not twice');
+  const plain = render('table', '| A | B |\n| --- | --- |\n| line one<br/>line two<BR>line three | x |');
+  assert.match(plain, /<td>line one<br>line two<br>line three<\/td>/);
+  assert.match(render('table', '| A |\n| --- |\n| * star<br>* items |'), /<ul><li>star<\/li><li>items<\/li><\/ul>/);
+});
+
+test('entities in a cell are read as text once, and nothing in a cell can become markup', () => {
+  const html = render('table', '| A |\n| --- |\n| a &lt;b&gt;bold&lt;/b&gt; &amp; <img src=x onerror=alert(1)><br><script>alert(2)</script> |');
+  assert.equal(/<img|<script|<b>/i.test(html), false, html);
+  assert.match(html, /a &lt;b&gt;bold&lt;\/b&gt; &amp;/);
+  assert.match(render('table', '| A |\n| --- |\n| Tom&nbsp;&amp;&nbsp;Jerry |'), /Tom\u00a0&amp;\u00a0Jerry/);
+});
+
 test('tables render a header, body and column alignment', () => {
   const html = render('table', '| Name | Qty | Note |\n| :-- | --: | :-: |\n| apples | 3 | **good** |\n| pears | 4 |');
   assert.ok(html.includes('<th style="text-align:left">Name</th>'));
