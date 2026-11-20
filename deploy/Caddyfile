@@ -18,5 +18,15 @@
 		max_size 60MB
 	}
 
-	reverse_proxy backend:3001
+	# App updates (the installer, latest.yml and the changelog), published by `npm run release` into ./updates.
+	# The app checks <server address>/updates/latest.yml. Files here are public by design: the installer has no secrets.
+	handle_path /updates/* {
+		root * /srv/updates
+		header Cache-Control "no-cache"
+		file_server
+	}
+
+	handle {
+		reverse_proxy backend:3001
+	}
 }

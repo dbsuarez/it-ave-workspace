@@ -114,6 +114,28 @@ signed-in client, so treat it as shared; use a long random one.
 To check it really relays, the call test in [`docs/CALL_TEST.md`](../docs/CALL_TEST.md) includes a "relay only"
 step.
 
+## App updates (automatic updates and the changelog)
+
+The desktop app updates itself from your own server; nothing is published to GitHub or anywhere else.
+
+1. **Where:** the web server (Caddy, or nginx) serves the folder `updates/` next to `docker-compose.yml` at `<server address>/updates/`
+   (nginx: `/var/www/itavenue-updates/`). The app looks at `<the server address it signs in to>/updates/latest.yml`, so no setting is
+   needed in the app. Plain `http` is only trusted for this computer; use HTTPS everywhere else. After changing the proxy
+   configuration run `docker compose --profile tls up -d proxy` once so it picks up the `updates` folder.
+2. **Releasing a version:**
+   - Raise `version` in `frontend/package.json` (for example 1.1.0 to 1.2.0).
+   - Add a section for it at the top of `CHANGELOG.md` (plain words, grouped as New / Improved / Fixed) and run `npm run changelog`.
+   - Run `npm run release` in `frontend/`. It checks the changelog entry exists, builds the installer, writes the notes into
+     `latest.yml` and copies the installer, its block map and `latest.yml` into the updates folder (`UPDATES_DIR` overrides the folder;
+     point it at a mounted or shared folder, or copy the three files to the server afterwards). `latest.yml` is copied last, so an
+     app never sees a version whose installer is not there yet.
+3. **What people see:** the app checks a few seconds after it starts and every four hours. A new version downloads quietly, then a notice
+   says "Version X is ready" with **Restart now** or **Later**; if they ignore it, it installs when the app is quit. After the update the
+   app shows **What's new** once (the changelog since the version they last saw), and Help has a **What's new** button with every version.
+4. **First time:** installed copies older than 1.1.0 have no updater, so everyone installs 1.1.0 by hand once; after that they update themselves.
+5. **Signing:** see below. Unsigned installers update fine, but Windows warns about an unknown publisher on the first install.
+   If you sign, also set `publisherName` under `build.win` in `frontend/package.json` so the updater checks the signer.
+
 ## Signing the installer
 
 An unsigned installer works, but Windows SmartScreen warns "unknown publisher" and some company policies block

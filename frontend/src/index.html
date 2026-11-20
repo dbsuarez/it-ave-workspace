@@ -1014,10 +1014,16 @@
       </div>
     </div>
 
+    <div class="modal people-editor-modal whatsnew-modal" id="whatsnew-modal" role="dialog" aria-label="What's new">
+      <div class="modal-header"><h3 data-whatsnew-title>What's new</h3><button class="modal-close" type="button" data-whatsnew-close aria-label="Close">&times;</button></div>
+      <div class="modal-body" data-whatsnew-body></div>
+      <div class="modal-footer"><button type="button" class="btn primary" data-whatsnew-close>Got it</button></div>
+    </div>
     <div class="modal help-modal" id="help-modal" role="dialog" aria-label="Help">
       <div class="modal-header help-header">
         <h3 id="help-title">Help</h3>
         <input type="search" id="help-search" placeholder="Search the guide" aria-label="Search the guide" autocomplete="off">
+        <button class="btn small" type="button" data-help-whatsnew title="See what changed in each version">What's new</button>
         <button class="modal-close" type="button" data-help-close aria-label="Close">&times;</button>
       </div>
       <div class="help-layout">
@@ -1179,6 +1185,10 @@
   <script src="features/announcements.js"></script>
   <script src="features/read-receipts.js"></script>
   <script src="features/forum-view.js"></script>
+  <script src="features/changelog-data.js"></script>
+  <script src="features/changelog.js"></script>
+  <script src="features/update-banner.js"></script>
+  <script src="features/updates.js"></script>
   <script src="features/help-guide.js"></script>
   <script src="features/help-view.js"></script>
   <script src="features/help.js"></script>

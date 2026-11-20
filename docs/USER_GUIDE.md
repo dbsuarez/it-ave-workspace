@@ -214,3 +214,8 @@ Open **People > Org chart** and press **SVG** or **PNG** under **Save as** in th
 
 ### Who is the head of a department?
 Open **People > Manage > Departments**: each department shows its head. Ask HR to change it.
+
+## Updates
+
+### How does the app update itself?
+The app checks for a new version when it starts and every few hours. When one is ready you see "Version X is ready" at the bottom of the window: press **Restart now** to install it at once, or **Later**, and it installs the next time you quit the app. After an update a **What's new** window lists what changed. You can read every version's changes any time from **Help > What's new**.

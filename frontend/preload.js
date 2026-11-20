@@ -25,6 +25,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // App info
   getAppVersion: () => process.versions.electron,
+  // This app's own version (for "What's new") and automatic updates
+  getAppRelease: () => ipcRenderer.invoke('app:release'),
+  getUpdateState: () => ipcRenderer.invoke('update:state'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: (callback) => {
+    const listener = (event, state) => callback(state);
+    ipcRenderer.on('update:status', listener);
+    return () => ipcRenderer.removeListener('update:status', listener);
+  },
 
   // API configuration. `serverSource` is 'environment', 'saved' or 'default'.
   apiBase: serverConfig.apiBase,

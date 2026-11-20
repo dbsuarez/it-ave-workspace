@@ -50,3 +50,6 @@ A backup that stopped halfway (missing its database or its uploaded files) canno
 
 ### Does a Workspace Reset delete the Knowledge Base?
 Not by default. The reset panel has **Keep the Knowledge Base** ticked: the articles, pictures, comments and history are packed before the reset and put back after it. Untick it to wipe the Knowledge Base too. A copy of what was kept is also saved in the backups folder, and you can restore from it with **Restore**.
+
+## Publishing an app update
+Raise the version in `frontend/package.json`, add its section to the top of `CHANGELOG.md` (plain words; employees read it) and run `npm run changelog` and then `npm run release` in `frontend/`. The installer and update file land in the `updates/` folder, which the web server publishes at `<server address>/updates/`. Every installed app (1.1.0 and later) finds it within about four hours, downloads it quietly and shows "Version X is ready: Restart now / Later". Full steps and signing: `deploy/README.md`, "App updates".

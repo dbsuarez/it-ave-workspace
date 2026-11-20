@@ -22,3 +22,5 @@ entities.json
 
 # Quarantined suspicious downloads - never commit or open
 security-quarantine/
+# published app installers (npm run release)
+/updates/

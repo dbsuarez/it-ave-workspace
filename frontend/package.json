@@ -1,7 +1,7 @@
 {
   "name": "itavenue-frontend",
   "productName": "IT Avenue Workspace",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "IT Avenue Workspace desktop client",
   "main": "main.js",
   "scripts": {
@@ -9,6 +9,8 @@
     "test": "node --test \"test/*.test.js\"",
     "vendor": "node scripts/vendor.js",
     "help": "node scripts/sync-help.js",
+    "changelog": "node scripts/sync-changelog.js",
+    "release": "node scripts/release.js",
     "drawing": "node scripts/build-drawing.js",
     "sheets": "node scripts/build-sheets.js",
     "editor": "node scripts/build-editor.js",
@@ -48,14 +50,22 @@
   "dependencies": {
     "docx": "^9.15.3",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.3.9",
     "read-excel-file": "^5.8.5"
   },
   "build": {
     "appId": "com.itavenue.workspace",
     "productName": "IT Avenue Workspace",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://example.invalid/updates/"
+      }
+    ],
     "win": {
       "target": "nsis",
-      "icon": "src/assets/icon.ico"
+      "icon": "src/assets/icon.ico",
+      "artifactName": "IT-Avenue-Workspace-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg",

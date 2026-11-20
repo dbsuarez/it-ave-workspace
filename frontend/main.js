@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const { isAllowedStoreKey, validateStoreWrite, isTrustedFrameUrl, validateExportRequest, exportFileName, EXPORT_FORMATS } = require('./ipc-policy');
 const { buildPrintHtml } = require('./export/pdf-html');
+const { feedUrlFor, nextUpdateState } = require('./update-policy');
 
 // Notification sounds and calls must be able to play without a click first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -173,7 +174,60 @@ function createLoginWindow() {
   return loginWindow;
 }
 
+// ---- automatic updates ----
+// The app checks <server address>/updates/ (the folder deploy/README.md describes) a little after it starts and every few hours. A new
+// version downloads quietly; the window is told when it is ready and the person chooses Restart now, or it installs when the app is quit.
+let updateState = { status: 'idle' };
+let updater = null;
+const UPDATE_CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
+
+function pushUpdateState(event) {
+  updateState = nextUpdateState(updateState, event);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:status', updateState);
+}
+
+function checkForUpdates() {
+  if (!updater) return;
+  const feed = feedUrlFor(currentServerConfig().apiBase);
+  if (!feed) return; // an address that is not trusted for updates
+  updater.setFeedURL({ provider: 'generic', url: feed });
+  updater.checkForUpdates().catch((err) => pushUpdateState({ type: 'error', message: err && err.message }));
+}
+
+function setupAutoUpdater() {
+  if (!app.isPackaged && process.env.IAV_UPDATE_TEST !== '1') return; // not while developing
+  try {
+    ({ autoUpdater: updater } = require('electron-updater'));
+  } catch (err) {
+    console.warn('Updates are not available:', err.message);
+    return;
+  }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.allowPrerelease = false;
+  updater.on('checking-for-update', () => pushUpdateState({ type: 'checking' }));
+  updater.on('update-available', (info) => pushUpdateState({ type: 'available', version: info.version }));
+  updater.on('update-not-available', () => pushUpdateState({ type: 'none' }));
+  updater.on('download-progress', (progress) => pushUpdateState({ type: 'progress', percent: progress.percent }));
+  updater.on('update-downloaded', (info) => pushUpdateState({ type: 'downloaded', version: info.version }));
+  updater.on('error', (err) => pushUpdateState({ type: 'error', message: err && err.message }));
+  setTimeout(checkForUpdates, 15 * 1000);
+  setInterval(checkForUpdates, UPDATE_CHECK_EVERY_MS);
+}
+
+handleTrusted('update:state', () => updateState);
+handleTrusted('update:check', () => { checkForUpdates(); return updateState; });
+handleTrusted('update:install', () => {
+  if (updateState.status !== 'ready' || !updater) return false;
+  quitting = true;
+  closeForReal = true;
+  updater.quitAndInstall(false, true);
+  return true;
+});
+handleTrusted('app:release', () => ({ version: app.getVersion() }));
+
 app.whenReady().then(() => {
+  setupAutoUpdater();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const isMainApp = webContents === mainWindow?.webContents;
     // Huddles use the microphone and, when the user turns it on, the camera.

@@ -583,6 +583,7 @@ function setupEventListeners() {
 
   setupForumScreens();
   setupHelp();
+  setupUpdates();
   setupDrawings();
   setupNotes();
   setupSheets();
