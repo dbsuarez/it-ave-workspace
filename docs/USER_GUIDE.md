@@ -218,4 +218,4 @@ Open **People > Manage > Departments**: each department shows its head. Ask HR t
 ## Updates
 
 ### How does the app update itself?
-The app checks for a new version when it starts and every few hours. When one is ready you see "Version X is ready" at the bottom of the window: press **Restart now** to install it at once, or **Later**, and it installs the next time you quit the app. After an update a **What's new** window lists what changed. You can read every version's changes any time from **Help > What's new**.
+The app checks for a new version when it starts and every few hours. When one is ready you see "Version 1.x.x is ready" at the bottom of the window: press **Restart now** to install it at once, or **Later**, and it installs the next time you quit the app. After an update a **What's new** window lists what changed. You can read every version's changes any time from **Help > What's new**.
