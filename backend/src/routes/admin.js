@@ -566,6 +566,37 @@ router.post('/backups', async (req, res) => {
   } catch (err) { sendError(res, err, 'Create backup error'); }
 });
 
+// Housekeeping: give a backup a name, mark it Keep (clean-ups never delete it), delete one, or clear many at once.
+router.patch('/backups/:stamp', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const recovery = require('../backupRecovery');
+    const result = {};
+    if (typeof req.body?.name === 'string') Object.assign(result, await recovery.renameBackup(req.params.stamp, req.body.name));
+    if (typeof req.body?.keep === 'boolean') Object.assign(result, await recovery.setBackupKeep(req.params.stamp, req.body.keep));
+    if (!Object.keys(result).length) throw fail(400, 'Send a name or keep');
+    res.json(result);
+  } catch (err) { sendError(res, err, 'Update backup error'); }
+});
+
+router.delete('/backups/:stamp', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const result = await require('../backupRecovery').deleteBackup(req.params.stamp);
+    await audit(req.user.userId, 'backup_deleted', null, { stamp: result.stamp });
+    res.json(result);
+  } catch (err) { sendError(res, err, 'Delete backup error'); }
+});
+
+router.post('/backups/purge', async (req, res) => {
+  try {
+    await requireSuperadmin(req);
+    const result = await require('../backupRecovery').purgeBackups({ incomplete: req.body?.incomplete === true, keepNewest: req.body?.keepNewest });
+    await audit(req.user.userId, 'backups_purged', null, { deleted: result.deleted });
+    res.json(result);
+  } catch (err) { sendError(res, err, 'Purge backups error'); }
+});
+
 router.post('/backups/:stamp/validate', async (req, res) => {
   try {
     await requireSuperadmin(req);

@@ -258,3 +258,8 @@ By design. Owners see private channels and forums they are not members of only w
 
 ### The sidebar does not look right, or something is missing
 Check you are a member of the department or channel, then reload with **Ctrl+R**. If it is still wrong, tell an administrator what you expected to see and in which section.
+
+### How do I keep the list of workspace backups tidy?
+Under **Moderation > Recovery**, every backup has icon buttons (hover one to see its full name): **rename** (give it a name such as "Before payroll change" so you can tell it apart; the date stays beside it), **keep** (the star: a backup marked Keep is never deleted by a clean-up and cannot be deleted until Keep is turned off), **download** the database or the uploaded files, **check** that it can be read, **restore** from it, and **delete** it. Backups made by the app say why, for example "Before a workspace reset".
+
+A backup that stopped halfway (missing its database or its uploaded files) cannot be restored. These are hidden behind a line such as "2 incomplete backups are hidden": the eye button shows them and the bin button deletes them all. The broom button above the list deletes every complete backup except the newest ones you choose to keep (and those marked Keep).

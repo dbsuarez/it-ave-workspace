@@ -2,7 +2,7 @@
 // prompt() are not used anywhere in the client (scripts/check.js fails the build if they appear).
 //
 //   await confirmAction({ title, message, confirmLabel, cancelLabel, danger })  -> true / false
-//   await askText(message, { placeholder, maxLength, required })                -> text, or null when cancelled
+//   await askText(message, { placeholder, maxLength, required, value })           -> text, or null when cancelled
 //   await showMessage(message, { title, okLabel })                              -> resolves when dismissed
 //
 // Loaded before renderer.js and by the login page; defines functions only and depends on nothing else.
@@ -55,7 +55,7 @@ function confirmAction({ title = '', message = '', confirmLabel = 'Delete', canc
 
 // Electron does not implement window.prompt(), so text input uses an in-app dialog.
 // Resolves with the entered text, or null when the dialog is cancelled.
-function askText(message, { placeholder = '', maxLength = 500, required = false } = {}) {
+function askText(message, { placeholder = '', maxLength = 500, required = false, value = '' } = {}) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay open';
@@ -67,7 +67,7 @@ function askText(message, { placeholder = '', maxLength = 500, required = false 
       <div class="modal-body">
         <div class="form-group">
           <label for="ask-text-input">${dialogEscape(message)}</label>
-          <input id="ask-text-input" type="text" autocomplete="off" maxlength="${Number(maxLength)}" placeholder="${dialogEscape(placeholder)}"${required ? ' required' : ''}>
+          <input id="ask-text-input" type="text" autocomplete="off" maxlength="${Number(maxLength)}" placeholder="${dialogEscape(placeholder)}" value="${dialogEscape(value)}"${required ? ' required' : ''}>
         </div>
       </div>
       <div class="modal-footer">

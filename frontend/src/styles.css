@@ -8332,3 +8332,17 @@ mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; 
 .kb-bk-articles { margin: 4px 0 0 22px; }
 .kb-bk-articles li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; }
 .kb-bk-articles select { max-width: 240px; font-size: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px; }
+
+/* Backup list: icon buttons, names, the incomplete strip */
+.bk-actions { flex-wrap: wrap; gap: 6px; }
+.bk-icon { width: 32px; height: 32px; }
+.bk-icon:hover:not(:disabled) { color: var(--text); background: var(--muted-bg); }
+.bk-icon.danger:hover:not(:disabled) { color: var(--danger, #dc2626); }
+.bk-icon:disabled { opacity: 0.4; cursor: not-allowed; }
+.bk-icon[aria-pressed="true"] { color: #f59e0b; border-color: #f59e0b; }
+.bk-icon[aria-pressed="true"] svg { fill: #f59e0b; }
+.bk-title { font-size: 14px; }
+.bk-stamp { color: var(--text-muted); margin-left: 6px; }
+.bk-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.bk-incomplete-strip { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 10px; color: var(--text-muted); font-size: 13px; }
+.bk-incomplete-strip span { flex: 1; }

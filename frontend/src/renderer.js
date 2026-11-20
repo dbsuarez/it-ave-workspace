@@ -3397,6 +3397,8 @@ async function loadModerationView() {
   if (state.moderation.isSuperadmin) await loadWorkspaceAdmin();
 }
 
+const moderationBackups = { showIncomplete: false };
+
 function backupSize(bytes) {
   const value = Number(bytes || 0);
   if (value < 1024) return `${value} B`;
@@ -3434,15 +3436,7 @@ async function loadRecoveryPanel() {
       <div class="moderation-row-actions"><span class="sidebar-section-badge">${escapeHtml(status.state || 'idle')}</span><button class="btn primary superadmin-only" type="button" data-action="create-backup" title="Superadmin only">Create backup now</button></div>
       ${status.error ? `<p class="recovery-error">Last operation failed: ${escapeHtml(status.error)}</p>` : ''}
     </div>
-    <div class="moderation-card recovery-list-card"><h2>Recovery points</h2><div class="moderation-list">${(data.backups || []).map((backup) => `
-      <div class="moderation-row recovery-row">
-        <span><strong>${escapeHtml(backup.stamp)}</strong><small>${backup.complete ? `Database ${backupSize(backup.database.size)} · Uploads ${backupSize(backup.uploads.size)} · ${backup.compatibility === 'compatible' ? 'Compatible' : backup.compatibility === 'newer-version' ? 'Newer version — restore unavailable' : 'Not yet validated'}` : 'Incomplete backup — restore unavailable'}</small></span>
-        <div class="moderation-row-actions">
-          ${backup.database.exists ? `<button class="btn superadmin-only" type="button" data-action="download-backup" data-backup-kind="database" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Database</button>` : ''}
-          ${backup.uploads.exists ? `<button class="btn superadmin-only" type="button" data-action="download-backup" data-backup-kind="uploads" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Uploads</button>` : ''}
-          ${backup.complete && backup.compatibility !== 'newer-version' ? `<button class="btn superadmin-only" type="button" data-action="validate-backup" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Validate</button><button class="btn danger-outline superadmin-only" type="button" data-action="restore-backup" data-backup-stamp="${escapeHtml(backup.stamp)}" title="Superadmin only">Restore…</button>` : ''}
-        </div>
-      </div>`).join('') || '<p>No backups yet. Create one before making major workspace changes.</p>'}</div></div>`;
+    <div class="moderation-card recovery-list-card"><h2>Recovery points</h2>${backupListHtml({ backups: data.backups || [], showIncomplete: moderationBackups.showIncomplete })}</div>`;
   } catch (err) {
     host.innerHTML = `<div class="moderation-card"><h2>Backup and restore</h2><p>${escapeHtml(err.message || 'Could not load backups.')}</p></div>`;
   }
@@ -3865,13 +3859,58 @@ async function handleModerationClick(event) {
       await loadRecoveryPanel();
       return;
     }
+    if (action === 'rename-backup') {
+      const name = await askText('Name this backup so you can tell it apart (leave empty to remove the name).', { value: button.dataset.backupName || '', maxLength: 80, placeholder: 'For example: Before payroll change' });
+      if (name === null) return;
+      await checkedApi(`/api/admin/backups/${encodeURIComponent(button.dataset.backupStamp)}`, 'PATCH', { name });
+      await loadRecoveryPanel();
+      return;
+    }
+    if (action === 'keep-backup') {
+      await checkedApi(`/api/admin/backups/${encodeURIComponent(button.dataset.backupStamp)}`, 'PATCH', { keep: button.getAttribute('aria-pressed') !== 'true' });
+      await loadRecoveryPanel();
+      return;
+    }
+    if (action === 'delete-backup') {
+      const sure = await confirmAction({ title: 'Delete this backup?', message: `${button.dataset.backupStamp} will be deleted from the server. This cannot be undone.`, confirmLabel: 'Delete backup' });
+      if (!sure) return;
+      await checkedApi(`/api/admin/backups/${encodeURIComponent(button.dataset.backupStamp)}`, 'DELETE');
+      showToast('Backup deleted.', 'success');
+      await loadRecoveryPanel();
+      return;
+    }
+    if (action === 'toggle-incomplete-backups') {
+      moderationBackups.showIncomplete = !moderationBackups.showIncomplete;
+      await loadRecoveryPanel();
+      return;
+    }
+    if (action === 'purge-incomplete-backups') {
+      const sure = await confirmAction({ title: 'Delete the incomplete backups?', message: 'Backups that are missing their database or uploaded files cannot be restored. They will be deleted. Complete backups are not touched.', confirmLabel: 'Delete incomplete' });
+      if (!sure) return;
+      const result = await checkedApi('/api/admin/backups/purge', 'POST', { incomplete: true });
+      showToast(`Deleted ${result.deleted.length} incomplete backup${result.deleted.length === 1 ? '' : 's'}.`, 'success');
+      await loadRecoveryPanel();
+      return;
+    }
+    if (action === 'purge-old-backups') {
+      const answer = await askText('Keep how many of the newest backups? All older ones are deleted, except those marked Keep.', { value: '10', maxLength: 4, required: true });
+      if (answer === null) return;
+      const keepNewest = Number(answer.trim());
+      if (!Number.isInteger(keepNewest) || keepNewest < 1) { showToast('Enter a number, 1 or more.', 'error'); return; }
+      const sure = await confirmAction({ title: 'Delete older backups?', message: `Only the newest ${keepNewest} complete backups (and any marked Keep) will remain. This cannot be undone.`, confirmLabel: 'Delete older backups' });
+      if (!sure) return;
+      const result = await checkedApi('/api/admin/backups/purge', 'POST', { keepNewest });
+      showToast(`Deleted ${result.deleted.length} backup${result.deleted.length === 1 ? '' : 's'}.`, 'success');
+      await loadRecoveryPanel();
+      return;
+    }
     if (action === 'download-backup') {
       await downloadBackup(button.dataset.backupStamp, button.dataset.backupKind);
       return;
     }
     if (action === 'validate-backup') {
       button.disabled = true;
-      button.textContent = 'Validating…';
+      showToast('Checking the backup…', 'info');
       await checkedApi(`/api/admin/backups/${button.dataset.backupStamp}/validate`, 'POST', {});
       showToast('The database dump and uploads archive are readable.', 'success');
       await loadRecoveryPanel();
@@ -3884,7 +3923,7 @@ async function handleModerationClick(event) {
       if (typed === null) return;
       if (typed.trim() !== phrase) { showToast('The confirmation did not match. Nothing was restored.', 'error'); return; }
       button.disabled = true;
-      button.textContent = 'Restoring…';
+      showToast('Restoring the workspace…', 'info');
       await checkedApi(`/api/admin/backups/${stamp}/restore`, 'POST', { confirmation: phrase });
       showToast('Workspace restored. Reloading…', 'success');
       setTimeout(() => window.location.reload(), 1000);
