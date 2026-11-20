@@ -114,6 +114,11 @@ signed-in client, so treat it as shared; use a long random one.
 To check it really relays, the call test in [`docs/CALL_TEST.md`](../docs/CALL_TEST.md) includes a "relay only"
 step.
 
+> **If this computer's network address changes** (a new router, a different Wi-Fi), the proxy stops answering at the new address: the
+> browser shows a **white page** (an empty reply) and the app cannot connect. Run `deploy\local-https.ps1` again, add the new address
+> to `LOCAL_SITE_ADDRESSES` in `.env`, run `docker compose --profile tls up -d proxy`, and update the link and the server address people
+> use. Reserving a fixed address for this computer in the router avoids it.
+
 ## App updates (automatic updates and the changelog)
 
 The desktop app updates itself from your own server; nothing is published to GitHub or anywhere else.
