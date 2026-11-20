@@ -8401,7 +8401,7 @@ mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; 
 .dm-search input:focus { outline: 2px solid var(--purple); outline-offset: 0; }
 
 /* The people panel: coworkers on the right, grouped Online and Offline */
-#btn-people-panel.active { color: var(--purple); border-color: var(--purple); }
+#btn-channel-members.active { color: var(--purple); border-color: var(--purple); }
 .people-panel { flex: 0 0 264px; width: 264px; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--surface); overflow: hidden; }
 .people-panel[hidden] { display: none; }
 .pp-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 6px; font-size: 15px; }

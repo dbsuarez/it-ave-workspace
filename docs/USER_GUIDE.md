@@ -45,8 +45,8 @@ Slash commands that post to everyone (**/poll** and **/announce**) do not work i
 ### Who is in my Direct Messages list?
 Only the people you have talked with, with the most recent conversation at the top. To start a new conversation, type a name in **Find a coworker to message** at the top of the list: it searches employees only. Pick one (or press **Enter** for the first) and write your message. Once you send something, the person stays in your list.
 
-### How do I see who is online?
-Press the **People** button at the top right of the window (next to Help). A panel opens on the right with your coworkers under **Online** and **Offline**, each with the status they set. Click a group's title to fold it away, use the search box to find someone, and click a person to open their profile card. The panel remembers whether you left it open. Press the button again, or the × in the panel, to hide it.
+### How do I see who is in a channel or forum, and who is online?
+In a channel or forum, press the **Members** button in the header (the two-people icon, next to Pins). A panel opens on the right with the people in that channel or forum under **Online** and **Offline**, each with the status they set. Click a group's title to fold it away, use the search box to find someone, and click a person to open their profile card. The panel stays open as you move between channels and shows each one's members; it remembers whether you left it open. Press the button again, or the × in the panel, to hide it.
 
 ## Department forums
 

@@ -3190,6 +3190,7 @@ function showView(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
   const el = document.getElementById('view-' + view);
   if (el) el.classList.add('active');
+  if (typeof renderPeoplePanel === 'function') renderPeoplePanel(); // the member list belongs to a channel or forum
 }
 
 function showPane(pane) {
