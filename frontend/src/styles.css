@@ -8432,3 +8432,8 @@ mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; 
 .pcard2-inline { position: relative; margin: 0 -6px 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .pcard2-inline:empty { display: none; }
 .pcard2-inline .pcard2-banner { border-radius: 9px 9px 0 0; }
+
+/* the rail's menus pass a light text colour down; the card sits on the light menu surface, so it sets its own */
+.pcard2, .pcard2-inline { color: var(--text); }
+.pcard2-name, .pcard2-status-text, .pcard2-chip, .pcard2-title { color: var(--text); }
+.pcard2-username, .pcard2-shared { color: var(--text-muted); }
