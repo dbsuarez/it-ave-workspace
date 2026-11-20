@@ -40,6 +40,14 @@ Type **/** in a channel to see what you can use.
 
 Slash commands that post to everyone (**/poll** and **/announce**) do not work inside a forum, because a forum only takes posts inside topics.
 
+## Direct messages and the people panel
+
+### Who is in my Direct Messages list?
+Only the people you have talked with, with the most recent conversation at the top. To start a new conversation, type a name in **Find a coworker to message** at the top of the list: it searches employees only. Pick one (or press **Enter** for the first) and write your message. Once you send something, the person stays in your list.
+
+### How do I see who is online?
+Press the **People** button at the top right of the window (next to Help). A panel opens on the right with your coworkers under **Online** and **Offline**, each with the status they set. Click a group's title to fold it away, use the search box to find someone, and click a person to open their profile card. The panel remembers whether you left it open. Press the button again, or the × in the panel, to hide it.
+
 ## Department forums
 
 ### What is my department's forum?

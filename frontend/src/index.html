@@ -33,6 +33,7 @@
         </div>
       </div>
       <div class="topbar-controls">
+        <button class="icon-btn" id="btn-people-panel" type="button" title="People: who is online" aria-label="People: who is online" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg></button>
         <button class="icon-btn" id="btn-help" title="Help" aria-label="Help"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
         <div class="window-controls">
           <button class="win-btn" id="btn-win-min" title="Minimize" aria-label="Minimize">
@@ -274,6 +275,7 @@
             <div id="channel-list"></div>
           </div>
           <div id="pane-dms" hidden>
+            <div class="dm-search"><input id="dm-search" type="search" placeholder="Find a coworker to message" aria-label="Find a coworker to message" autocomplete="off" maxlength="60"></div>
             <h4 class="nav-label nav-label-action">Group messages
               <button class="nav-label-btn" id="btn-new-group" type="button" title="New group message" aria-label="New group message">+</button>
             </h4>
@@ -660,6 +662,8 @@
         </aside>
 
       </main>
+
+      <aside class="people-panel" id="people-panel" aria-label="People" hidden></aside>
     </div>
 
     <div class="emoji-picker" id="emoji-picker" role="dialog" aria-label="Choose a reaction" hidden>
@@ -1190,6 +1194,8 @@
   <script src="features/update-banner.js"></script>
   <script src="features/updates.js"></script>
   <script src="features/profile-card.js"></script>
+  <script src="features/dm-list.js"></script>
+  <script src="features/people-panel.js"></script>
   <script src="features/help-guide.js"></script>
   <script src="features/help-view.js"></script>
   <script src="features/help.js"></script>

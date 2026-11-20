@@ -107,6 +107,8 @@ let state = {
   channels: [],
   users: [],
   dms: [],
+  dmPartners: [],   // people you have a conversation with, latest first: [{ userId, lastAt }]
+  dmSearch: '',
   usersLoaded: false,
   messages: {},       // channelId -> []
   pinnedMessages: {}, // channelId -> []
@@ -585,6 +587,8 @@ function setupEventListeners() {
   setupHelp();
   setupUpdates();
   setupProfileCard();
+  setupPeoplePanel();
+  setupDmSearch();
   setupDrawings();
   setupNotes();
   setupSheets();
@@ -1208,6 +1212,8 @@ function connectSocket() {
     const otherUserId = Number(dm.senderId) === Number(state.user.id) ? dm.receiverId : dm.senderId;
     const messages = state.directMessages[otherUserId] || (state.directMessages[otherUserId] = []);
     upsertMessage(messages, dm);
+    state.dmPartners = dmBumpPartner(state.dmPartners, otherUserId, dm.createdAt || new Date().toISOString());
+    renderDmList();
 
     if (Number(state.currentDMId) === Number(otherUserId) && state.view === 'dm') {
       renderMessages('dm-messages', messages);
@@ -2036,16 +2042,15 @@ async function loadUsers() {
     state.users = data.users;
     if (typeof repaintAllAvatars === 'function') repaintAllAvatars();
     state.usersLoaded = true;
-    state.dms = data.users.filter(u => u.id !== state.user.id);
+    try {
+      const partnersResponse = await api('/api/users/dm-partners');
+      if (partnersResponse.ok) state.dmPartners = (await partnersResponse.json()).partners || [];
+    } catch (err) { /* keep the list we have */ }
     renderDmList();
+    if (typeof renderPeoplePanel === 'function') renderPeoplePanel();
     if (state.section === 'dms' && !state.currentDMId && !state.currentGroupId) {
       if (state.dms.length === 0) {
-        els.dmTitle.textContent = 'Direct Messages';
-        els.dmTopic.textContent = '';
-        els.dmMessages.innerHTML = emptyRecordMarkup(
-          'No people to message yet',
-          'Workspace members will appear here.',
-        );
+        showNoConversationsYet();
       } else {
         await openDM(state.dms[0].id);
       }
@@ -2067,22 +2072,36 @@ function presenceLabel(status) {
   return status;
 }
 
+// The Direct Messages list holds only the people you have a conversation with, the latest conversation first. Typing in the search box
+// above it lists employees instead, so you can start a new conversation.
+function showNoConversationsYet() {
+  els.dmTitle.textContent = 'Direct Messages';
+  els.dmTopic.textContent = '';
+  els.dmMessages.innerHTML = emptyRecordMarkup(
+    'No conversations yet',
+    'Find a coworker in the box at the top of the list to start one.',
+  );
+}
+
 function renderDmList() {
   renderGroupList();
   els.dmList.innerHTML = '';
-  els.dmList.classList.toggle('has-empty-record', state.usersLoaded && state.dms.length === 0);
+  const search = String(state.dmSearch || '').trim();
+  state.dms = dmConversationUsers({ users: state.users || [], partners: state.dmPartners, openId: state.section === 'dms' ? state.currentDMId : null, meId: state.user.id });
+  const shown = search
+    ? dmSearchEmployees({ users: state.users || [], query: search, meId: state.user.id, nameOf: (user) => displayName(user) })
+    : state.dms;
+  els.dmList.classList.toggle('has-empty-record', state.usersLoaded && shown.length === 0);
 
-  if (state.dms.length === 0) {
+  if (shown.length === 0) {
     if (!state.usersLoaded) return;
-    els.dmList.innerHTML = emptyRecordMarkup(
-      'No people to message yet',
-      'Workspace members will appear here.',
-      'compact sidebar-empty-record',
-    );
+    els.dmList.innerHTML = search
+      ? emptyRecordMarkup('No one found', 'Only employees can be messaged from here.', 'compact sidebar-empty-record')
+      : emptyRecordMarkup('No conversations yet', 'Find a coworker in the box above to start one.', 'compact sidebar-empty-record');
     return;
   }
 
-  state.dms.forEach((dm) => {
+  shown.forEach((dm) => {
     const active = state.currentDMId === dm.id && state.section === 'dms';
     const item = document.createElement('div');
     item.className = 'nav-item' + (active ? ' active' : '');
@@ -2093,8 +2112,27 @@ function renderDmList() {
       <span>${escapeHtml(displayName(dm))}</span>${userStatusMarkup(dm)}
       <span style="margin-left:auto; font-size:11px; opacity:0.6;">${escapeHtml(slabel)}</span>
     `;
-    item.onclick = (e) => { e.stopPropagation(); openDM(dm.id); };
+    item.onclick = (e) => { e.stopPropagation(); clearDmSearch(); openDM(dm.id); };
     els.dmList.appendChild(item);
+  });
+}
+
+function clearDmSearch() {
+  state.dmSearch = '';
+  const box = document.getElementById('dm-search');
+  if (box) box.value = '';
+}
+
+function setupDmSearch() {
+  const box = document.getElementById('dm-search');
+  if (!box) return;
+  box.addEventListener('input', () => { state.dmSearch = box.value; renderDmList(); });
+  box.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { clearDmSearch(); renderDmList(); return; }
+    if (event.key === 'Enter') {
+      const first = dmSearchEmployees({ users: state.users || [], query: box.value, meId: state.user.id, nameOf: (user) => displayName(user) })[0];
+      if (first) { clearDmSearch(); openDM(first.id); }
+    }
   });
 }
 
@@ -2112,7 +2150,7 @@ async function openDM(userId) {
   showPane('dms');
   showView('dm');
 
-  const user = state.dms.find(u => u.id === userId);
+  const user = (state.users || []).find(u => Number(u.id) === Number(userId));
   if (user) {
     els.dmTitle.textContent = displayName(user);
     els.dmTopic.textContent = dmTopicText(user);
@@ -2850,6 +2888,8 @@ async function sendDmMessage() {
       content: text,
       clientMessageId,
     });
+    state.dmPartners = dmBumpPartner(state.dmPartners, state.currentDMId, new Date().toISOString());
+    renderDmList();
   } catch (err) {
     console.error('Send DM error:', err);
   }
@@ -3190,12 +3230,7 @@ async function setSection(section) {
     } else if (state.dms.length > 0) {
       await openDM(state.dms[0].id);
     } else if (state.usersLoaded) {
-      els.dmTitle.textContent = 'Direct Messages';
-      els.dmTopic.textContent = '';
-      els.dmMessages.innerHTML = emptyRecordMarkup(
-        'No people to message yet',
-        'Workspace members will appear here.',
-      );
+      showNoConversationsYet();
     }
   } else if (section === 'files') {
     await loadFiles();

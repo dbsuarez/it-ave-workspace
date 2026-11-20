@@ -17,7 +17,7 @@ test('the card shows the full name large, the username small, the job title, sta
   assert.match(html, /Reports to Bea Cruz/);
   assert.match(html, /class="[^"]*pcard2-dot online/);
   assert.match(html, /background:\s*linear-gradient\([^)]*#7c3aed/, 'the banner uses their colour');
-  assert.match(html, /data-avatar-user="7"/, 'the photo is painted by the app\'s own avatar code');
+  assert.match(html, /data-pcard-avatar="7"/, 'the card paints the photo itself, so the app-wide avatar click handler does not reopen it');
 });
 
 test('everything printed is escaped, and no role names or contact details are printed', () => {

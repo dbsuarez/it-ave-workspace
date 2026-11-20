@@ -199,6 +199,7 @@ function handleUserStatusUpdated(event) {
   user.statusEmoji = event.statusEmoji;
   user.dndUntil = event.dndUntil;
   renderDmList();
+  if (typeof renderPeoplePanel === 'function') renderPeoplePanel();
   if (Number(state.currentDMId) === Number(user.id) && state.view === 'dm' && !state.currentGroupId) {
     els.dmTopic.textContent = dmTopicText(user);
   }

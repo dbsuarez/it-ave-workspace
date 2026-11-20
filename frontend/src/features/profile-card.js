@@ -25,7 +25,7 @@ function profileCardHtml({ card, name, isSelf }) {
     : `<input type="text" class="pcard2-message" data-pcard-message="${Number(card.id)}" placeholder="Message ${pcEscape(name)}" aria-label="Message ${pcEscape(name)}" maxlength="2000" autocomplete="off">`;
   return `<div class="pcard2-banner" style="background: linear-gradient(135deg, ${color}, ${color}99)"></div>`
     + `<div class="pcard2-tools">${buttons}${more}</div>`
-    + `<div class="pcard2-avatar" data-avatar-user="${Number(card.id)}" style="background:${color}">${initial}<span class="pcard2-dot ${status}"></span></div>`
+    + `<div class="pcard2-avatar" data-pcard-avatar="${Number(card.id)}" style="background:${color}">${initial}<span class="pcard2-dot ${status}"></span></div>`
     + `<div class="pcard2-body"><h3 class="pcard2-name">${pcEscape(name)}</h3>`
     + `<p class="pcard2-sub"><span class="pcard2-username">@${pcEscape(card.username)}</span>${card.jobTitle ? `<span class="pcard2-title">${pcEscape(card.jobTitle)}</span>` : ''}</p>`
     + `${statusLine}${shared}${chips.length ? `<div class="pcard2-chips">${chips.join('')}</div>` : ''}</div>`

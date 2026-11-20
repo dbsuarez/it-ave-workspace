@@ -5,6 +5,10 @@ Each version lists what changed, in plain words. The app shows this after it upd
 ## 1.2.0 - 2026-11-21
 ### New
 - **Profile card**: click a person's name or picture and a card opens beside it with their photo, full name, job title, status, how many channels you share, their department, location and manager. Type in the box at the bottom and press Enter to message them, use the call button, or open the full profile from the ⋯ menu. Your own picture still opens your menu.
+- **People panel**: a button at the top right opens a panel on the right with your coworkers under Online and Offline (each folds away), their status lines and a search. Click a person for their card.
+
+### Improved
+- **Direct Messages** now lists only the people you have talked with, the latest conversation first. A new search box at the top finds employees to start a chat with.
 
 ## 1.1.1 - 2026-11-20
 ### Improved
