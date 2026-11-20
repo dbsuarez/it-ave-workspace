@@ -124,6 +124,12 @@ Type in the search box at the top ("leave", "payslip", "dress code"): results ap
 ### Can I search inside a long article?
 Yes. Every article has a **Find in this article** box under its title (or press **Ctrl+F** while the article is open). Matches are highlighted and the box says "2 of 14"; press **Enter** (or the arrows) for the next one, **Shift+Enter** for the previous one, and **Esc** to clear. An article with two or more headings also shows a floating **On this page** list at the top right: click a heading to jump to it, and click the list's title to fold it away (the app remembers your choice).
 
+### How do I back up the Knowledge Base, and restore it?
+On the Knowledge Base home screen (people who manage it only) press **Backup**. Tick the categories and articles to save, and tick what else to include (Pictures and Help links are on by default; Version history and Comments are optional), then **Download backup**. You get one file to keep somewhere safe. To bring things back press **Restore** and choose that file: it lists what is inside, you tick the articles to restore, and for an article that already exists you choose to **skip** it, **replace the text** (the old text stays in History) or **add a copy**. Nothing is changed unless you choose it.
+
+### Does a Workspace Reset delete the Knowledge Base?
+Not by default. The reset panel has **Keep the Knowledge Base** ticked: the articles, pictures, comments and history are packed before the reset and put back after it. Untick it to wipe the Knowledge Base too. A copy of what was kept is also saved in the backups folder, and you can restore from it with **Restore**.
+
 ### Can I save it as a PDF?
 In the desktop app, **Save as PDF** on an article saves that article; on a category it saves all of its published articles as one document, for example the whole handbook.
 

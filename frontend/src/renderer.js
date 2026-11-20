@@ -3462,6 +3462,7 @@ async function loadWorkspaceResetPanel() {
         ${[['Messages and DMs', counts.messages], ['Uploaded files', counts.files], ['Canvases', counts.canvases], ['Lists', counts.lists], ['Audit entries', counts.auditEntries], ['Saved and scheduled items', counts.personalItems], ['Attendance and leave records', counts.workforceRecords]].map(([label, value]) => `<span><strong>${Number(value || 0).toLocaleString()}</strong><small>${escapeHtml(label)}</small></span>`).join('')}
       </div>
       <p class="recovery-error">All users will be signed out. A validated safety backup is mandatory and a clean-baseline backup is created afterward.</p>
+      <label class="kb-publish"><input type="checkbox" id="reset-keep-kb" checked> Keep the Knowledge Base${Number(counts.knowledgeBaseArticles) ? ` (${Number(counts.knowledgeBaseArticles)} article${Number(counts.knowledgeBaseArticles) === 1 ? '' : 's'}, with pictures)` : ''}. It is packed before the reset and put back after it.</label>
       <button class="btn danger superadmin-only" type="button" data-action="reset-workspace" title="Superadmin only">Reset workspace…</button>
     </div>`;
   } catch (err) {
@@ -3896,8 +3897,9 @@ async function handleModerationClick(event) {
       if (typed.trim() !== phrase) { showToast('The confirmation did not match. Nothing was reset.', 'error'); return; }
       button.disabled = true;
       button.textContent = 'Creating safety backup and resetting…';
-      await checkedApi('/api/admin/workspace-reset', 'POST', { confirmation: phrase });
-      showToast('Workspace reset complete. Everyone must sign in again.', 'success');
+      const keepKnowledgeBase = document.getElementById('reset-keep-kb')?.checked !== false;
+      const outcome = await checkedApi('/api/admin/workspace-reset', 'POST', { confirmation: phrase, keepKnowledgeBase });
+      showToast(outcome?.knowledgeBase?.kept && outcome.knowledgeBase.restored === false ? 'Workspace reset complete, but the Knowledge Base could not be put back. Restore it from the saved file in the backups folder.' : 'Workspace reset complete. Everyone must sign in again.', outcome?.knowledgeBase?.restored === false ? 'error' : 'success');
       setTimeout(() => window.location.reload(), 1200);
       return;
     }

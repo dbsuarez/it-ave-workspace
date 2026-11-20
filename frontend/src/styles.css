@@ -8323,3 +8323,12 @@ mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; 
 .cw-size-option:hover, .cw-size-option:focus-visible { background: var(--muted-bg); border-color: var(--purple); }
 .cw-size-custom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .cw-size-custom input[type="number"] { width: 56px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+
+/* Knowledge Base backup and restore */
+.kb-bk-bar { display: flex; gap: 6px; margin: 0 0 8px; }
+.kb-bk-tree, .kb-bk-articles { list-style: none; margin: 0; padding: 0; }
+.kb-bk-tree { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.kb-bk-category { margin-bottom: 8px; }
+.kb-bk-articles { margin: 4px 0 0 22px; }
+.kb-bk-articles li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; }
+.kb-bk-articles select { max-width: 240px; font-size: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px; }

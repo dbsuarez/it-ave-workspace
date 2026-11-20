@@ -480,3 +480,6 @@ See `../../.env.example` for required variables.
 supports many direct connections; configure a TURN server in this variable for users behind
 restrictive NATs/firewalls. TURN credentials are sent to authenticated huddle participants, so use
 short-lived credentials where your TURN provider supports them.
+
+### Knowledge Base backup (`/api/kb-backup`, `routes/knowledgeBaseBackup.js`)
+For people with `manage_knowledge_base` (HR, Owners); its own 120 MB JSON parser. `GET /outline` (categories with articles); `POST /export { categoryIds, articleIds, parts: { pictures, screens, history, comments } }` (nothing chosen = everything) downloads `knowledge-base-DATE.json`; `POST /preview { package }` validates the file and says which articles already exist (same category and title); `POST /restore { package, articles: [{ key, action: skip|replace|copy }], parts }` restores only the listed articles in one transaction (replace keeps the old text in `canvas_revisions`; pictures get new file ids and `file:ID` in the text is rewritten). Logic: `backend/src/knowledgeBasePackage.js`. `POST /api/admin/workspace-reset` takes `keepKnowledgeBase` (default true): `workspaceReset.preserveKnowledgeBase` packs the Knowledge Base (and keeps a copy in the backups folder) before the wipe and restores it after; the receipt has `knowledgeBase: { kept, restored, file, articles }`.

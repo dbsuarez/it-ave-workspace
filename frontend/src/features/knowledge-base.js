@@ -338,6 +338,7 @@ async function kbExportCategory() {
 function setupKnowledgeBase() {
   const host = kbHost();
   if (!host) return;
+  setupKbBackup();
   host.addEventListener('click', (event) => {
     const t = event.target;
     const open = t.closest('[data-kb-open-article]');
@@ -361,6 +362,8 @@ function setupKnowledgeBase() {
     if (t.closest('[data-kb-delete-category]')) { kbDeleteCategory(); return; }
     if (t.closest('[data-kb-new-article]')) { kbOpenDetails(null); return; }
     if (t.closest('[data-kb-import]')) { kbOpenImport(); return; }
+    if (t.closest('[data-kb-backup]')) { kbOpenBackup(); return; }
+    if (t.closest('[data-kb-restore]')) { kbOpenRestore(); return; }
     const move = t.closest('[data-kb-move]');
     if (move) { kbMove(Number(move.dataset.kbArticle), move.dataset.kbMove); return; }
     const edit = t.closest('[data-kb-edit]');

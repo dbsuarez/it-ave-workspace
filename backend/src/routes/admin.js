@@ -627,7 +627,7 @@ router.post('/workspace-reset', async (req, res) => {
   try {
     await requireSuperadmin(req);
     if (req.body?.confirmation !== 'RESET WORKSPACE') throw fail(400, 'Type RESET WORKSPACE to confirm');
-    const result = await require('../workspaceReset').resetWorkspace(req.user.userId);
+    const result = await require('../workspaceReset').resetWorkspace(req.user.userId, { keepKnowledgeBase: req.body?.keepKnowledgeBase !== false });
     req.io?.disconnectSockets?.(true);
     res.json(result);
   } catch (err) { sendError(res, err, 'Workspace reset error'); }

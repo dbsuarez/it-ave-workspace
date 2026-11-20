@@ -4,13 +4,15 @@ const { pool } = require('./db');
 const config = require('./config');
 const recovery = require('./backupRecovery');
 const { ensureDefaultChannels } = require('./defaultChannels');
+const kbPackage = require('./knowledgeBasePackage');
 
 let resetting = false;
 
 const countSql = `SELECT
   (SELECT COUNT(*) FROM messages) + (SELECT COUNT(*) FROM direct_messages) + (SELECT COUNT(*) FROM conversation_messages) AS messages,
   (SELECT COUNT(*) FROM files) AS files,
-  (SELECT COUNT(*) FROM canvases) + (SELECT COUNT(*) FROM channel_canvases) AS canvases,
+  (SELECT COUNT(*) FROM canvases WHERE id NOT IN (SELECT canvas_id FROM kb_articles WHERE canvas_id IS NOT NULL)) + (SELECT COUNT(*) FROM channel_canvases) AS canvases,
+  (SELECT COUNT(*) FROM kb_articles) AS kb_articles,
   (SELECT COUNT(*) FROM channel_lists) AS lists,
   (SELECT COUNT(*) FROM moderation_audit_log) + (SELECT COUNT(*) FROM command_audit_log) AS audit_entries,
   (SELECT COUNT(*) FROM saved_items) + (SELECT COUNT(*) FROM reminders) + (SELECT COUNT(*) FROM scheduled_messages) AS personal_items,
@@ -19,7 +21,7 @@ const countSql = `SELECT
 async function preview() {
   const row = (await pool.query(countSql)).rows[0];
   return {
-    messages: Number(row.messages), files: Number(row.files), canvases: Number(row.canvases), lists: Number(row.lists),
+    messages: Number(row.messages), files: Number(row.files), canvases: Number(row.canvases), knowledgeBaseArticles: Number(row.kb_articles), lists: Number(row.lists),
     auditEntries: Number(row.audit_entries), personalItems: Number(row.personal_items), workforceRecords: Number(row.workforce_records),
   };
 }
@@ -47,7 +49,31 @@ async function clearDatabase(client) {
   await client.query('UPDATE channel_members SET last_message_at = NULL');
 }
 
-async function resetWorkspace(actorId) {
+// The Knowledge Base is packed before work() wipes things and put back afterwards, so it survives a reset (a copy of the package is
+// also kept next to the backups). A package that cannot be built stops the reset before anything is deleted; one that cannot be put
+// back is reported, and the kept file can be restored from the Knowledge Base screen.
+async function preserveKnowledgeBase(db, work, actorId) {
+  const everything = Object.fromEntries(kbPackage.PART_NAMES.map((name) => [name, true]));
+  const pkg = kbPackage.validatePackage(JSON.parse(JSON.stringify(await kbPackage.buildPackage(db, { parts: everything }))));
+  await fs.promises.mkdir(config.BACKUP_DIR, { recursive: true });
+  const file = path.join(config.BACKUP_DIR, `knowledge-base-before-reset-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+  await fs.promises.writeFile(file, JSON.stringify(pkg));
+  const articleCount = pkg.categories.reduce((sum, category) => sum + category.articles.length, 0);
+  await work();
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await kbPackage.restorePackage(client, pkg, { userId: actorId });
+    await client.query('COMMIT');
+    return { restored: true, file, articles: articleCount, created: result.created };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Knowledge Base restore after reset failed:', err);
+    return { restored: false, file, articles: articleCount, error: err.message };
+  } finally { client.release(); }
+}
+
+async function resetWorkspace(actorId, { keepKnowledgeBase = true } = {}) {
   if (resetting) throw Object.assign(new Error('Workspace reset is already running'), { status: 409 });
   resetting = true;
   const before = await preview();
@@ -56,26 +82,31 @@ async function resetWorkspace(actorId) {
   try {
     safetyBackup = await recovery.createBackup({ reason: 'before-workspace-reset' });
     await recovery.validateBackup(safetyBackup.stamp);
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await clearDatabase(client);
-      await ensureDefaultChannels(client);
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw err;
-    } finally { client.release(); }
-    await clearUploads();
+    const wipe = async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await clearDatabase(client);
+        await ensureDefaultChannels(client);
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally { client.release(); }
+      await clearUploads();
+    };
+    let knowledgeBase = { kept: false };
+    if (keepKnowledgeBase) knowledgeBase = { kept: true, ...(await preserveKnowledgeBase(pool, wipe, actorId)) };
+    else await wipe();
     cleanBackup = await recovery.createBackup({ reason: 'clean-workspace-baseline' });
     await recovery.validateBackup(cleanBackup.stamp);
     const receipt = {
       resetAt: new Date().toISOString(), actorId, before,
-      safetyBackup: safetyBackup.stamp, cleanBaselineBackup: cleanBackup.stamp,
+      safetyBackup: safetyBackup.stamp, cleanBaselineBackup: cleanBackup.stamp, knowledgeBase,
     };
     await fs.promises.writeFile(path.join(config.BACKUP_DIR, `workspace-reset-${cleanBackup.stamp}.json`), JSON.stringify(receipt, null, 2));
     return receipt;
   } finally { resetting = false; }
 }
 
-module.exports = { clearDatabase, clearUploads, isResetting: () => resetting, preview, resetWorkspace };
+module.exports = { clearDatabase, clearUploads, isResetting: () => resetting, preserveKnowledgeBase, preview, resetWorkspace };

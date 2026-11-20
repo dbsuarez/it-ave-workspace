@@ -23,7 +23,7 @@ const KB_SEARCH_BOX = '<input type="search" class="kb-search" data-kb-search pla
 function kbHomeHtml({ categories, canManage }) {
   const cards = categories.map((category) => `<button type="button" class="kb-card" data-kb-open-category="${Number(category.id)}"><strong>${kbEscape(category.title)}</strong><span>${kbPlural(category.articleCount, 'article')}</span>${canManage && category.draftCount ? `<em class="kb-draft-count">${kbPlural(category.draftCount, 'draft')}</em>` : ''}</button>`).join('');
   const empty = categories.length ? '' : `<p class="kb-empty">${canManage ? 'No categories yet. Press New category to start the Knowledge Base.' : 'There is nothing here yet. HR will add answers soon.'}</p>`;
-  return `<div class="kb-home"><div class="kb-toolbar">${KB_SEARCH_BOX}${canManage ? '<button type="button" class="btn primary" data-kb-new-category>New category</button>' : ''}</div><div class="kb-search-results" data-kb-results hidden></div><div class="kb-cards" data-kb-cards>${cards}</div>${empty}</div>`;
+  return `<div class="kb-home"><div class="kb-toolbar">${KB_SEARCH_BOX}${canManage ? '<button type="button" class="btn" data-kb-backup>Backup</button><button type="button" class="btn" data-kb-restore>Restore</button><button type="button" class="btn primary" data-kb-new-category>New category</button>' : ''}</div><div class="kb-search-results" data-kb-results hidden></div><div class="kb-cards" data-kb-cards>${cards}</div>${empty}</div>`;
 }
 
 // articles: [{ id, title, published, updatedAt, updatedByName }]; canExport: the desktop app can save a PDF
