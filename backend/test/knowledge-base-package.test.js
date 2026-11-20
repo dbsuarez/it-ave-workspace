@@ -207,3 +207,38 @@ test('the Knowledge Base survives a workspace reset, with its pictures', async (
   assert.ok(outcome.file && fs.existsSync(outcome.file), 'a copy of the package is kept next to the backups');
   fs.rmSync(outcome.file, { force: true });
 });
+
+test('a package is saved as a zip (text as JSON, pictures as real image files) and read back, and a JSON file still opens', async (t) => {
+  if (!scratch) return t.skip('no PostgreSQL reachable');
+  await seed();
+  const built = await pkgLib.buildPackage(pool, { parts: { pictures: true, screens: true, history: true, comments: true } });
+  const zip = pkgLib.packToZip(built);
+  assert.equal(zip.subarray(0, 2).toString(), 'PK', 'a zip file');
+  const { unzipSync } = require('fflate');
+  const entries = unzipSync(new Uint8Array(zip));
+  const names = Object.keys(entries);
+  assert.ok(names.includes('knowledge-base.json'));
+  const picture = names.find((name) => name.startsWith('pictures/'));
+  assert.ok(picture && /\.png$/.test(picture), 'the picture is its own file');
+  assert.equal(Buffer.from(entries[picture]).equals(PNG), true);
+  assert.equal(Buffer.byteLength(JSON.stringify(JSON.parse(Buffer.from(entries['knowledge-base.json']).toString()))) < JSON.stringify(built).length, true, 'the picture bytes are not repeated inside the JSON');
+
+  const back = pkgLib.validatePackage(pkgLib.readPackageFile(zip));
+  const original = pkgLib.validatePackage(built);
+  assert.deepEqual(back, original);
+  assert.deepEqual(pkgLib.validatePackage(pkgLib.readPackageFile(Buffer.from(JSON.stringify(built)))), original, 'a plain JSON backup opens too');
+});
+
+test('a bad or hostile zip is refused', async (t) => {
+  if (!scratch) return t.skip('no PostgreSQL reachable');
+  const { zipSync } = require('fflate');
+  assert.throws(() => pkgLib.readPackageFile(Buffer.from('not a backup')), /Knowledge Base backup/);
+  assert.throws(() => pkgLib.readPackageFile(Buffer.from('PK\u0003\u0004 broken')), /Knowledge Base backup/);
+  const noJson = Buffer.from(zipSync({ 'readme.txt': new Uint8Array([65]) }));
+  assert.throws(() => pkgLib.readPackageFile(noJson), /Knowledge Base backup/);
+  const huge = Buffer.from(zipSync({ 'knowledge-base.json': new Uint8Array(1024), 'pictures/x.png': new Uint8Array(11 * 1024 * 1024) }));
+  assert.throws(() => pkgLib.readPackageFile(huge), /Knowledge Base backup|bigger|too/);
+  const odd = Buffer.from(zipSync({ 'knowledge-base.json': new TextEncoder().encode(JSON.stringify({ format: 'itavenue-knowledge-base', version: 1, categories: [], pictures: { 1: { name: 'a.png', mime: 'image/png', file: '../../etc/passwd' } } })) }));
+  const read = pkgLib.validatePackage(pkgLib.readPackageFile(odd));
+  assert.deepEqual(read.pictures, {}, 'a picture path that points outside the zip is ignored');
+});

@@ -52,16 +52,16 @@ function kbRestoreHtml({ preview, chosen, parts, fileName }) {
   return `<div class="modal-header"><h3>Restore the Knowledge Base</h3><button class="modal-close" type="button" data-kb-bk-close aria-label="Close">&times;</button></div><div class="modal-body"><p class="drawing-share-note"><strong>${kbBkEscape(fileName)}</strong>.${made} Tick the articles to bring back. Nothing that exists is changed unless you choose to replace it.</p><div class="kb-bk-bar"><button type="button" class="btn small" data-kb-rs-all>Select all</button><button type="button" class="btn small" data-kb-rs-none>Select none</button></div><ul class="kb-bk-tree">${tree || '<li class="kb-hint">This file has no articles.</li>'}</ul>${extras ? `<p class="poll-field-label">Bring back also</p>${extras}` : ''}</div><div class="modal-footer"><button type="button" class="btn" data-kb-bk-close>Cancel</button><button type="button" class="btn primary" data-kb-rs-run${count ? '' : ' disabled'}>Restore ${kbBkPlural(count, 'article')}</button></div>`;
 }
 
-function kbRestoreRequest({ pkg, preview, chosen, parts }) {
+function kbRestoreRequest({ preview, chosen, parts }) {
   const articles = preview.categories.flatMap((category) => category.articles).filter((article) => chosen.has(article.key)).map((article) => ({ key: article.key, action: chosen.get(article.key) }));
   const asked = {};
   for (const [key] of KB_BK_PARTS) asked[key] = Boolean(preview.parts[key]) && parts[key] !== false;
-  return { package: pkg, articles, parts: asked };
+  return { articles, parts: asked };
 }
 
 // ---- the dialogs ------------------------------------------------------------------------------------------------------
 
-const kbBk = { outline: null, articles: new Set(), categories: new Set(), parts: { pictures: true, screens: true, history: false, comments: false }, pkg: null, preview: null, chosen: new Map(), restoreParts: {}, fileName: '' };
+const kbBk = { outline: null, articles: new Set(), categories: new Set(), parts: { pictures: true, screens: true, history: false, comments: false }, file: null, preview: null, chosen: new Map(), restoreParts: {}, fileName: '' };
 const kbBkModal = () => document.getElementById('kb-backup-modal');
 
 function kbBkRenderBackup() {
@@ -89,7 +89,7 @@ async function kbRunBackup() {
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url; link.download = `knowledge-base-${new Date().toISOString().slice(0, 10)}.json`;
+    link.href = url; link.download = `knowledge-base-${new Date().toISOString().slice(0, 10)}.zip`;
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
     closeSettingsModal();
@@ -104,16 +104,27 @@ function kbBkRenderRestore() {
   kbBkModal().innerHTML = kbRestoreHtml({ preview: kbBk.preview, chosen: kbBk.chosen, parts: kbBk.restoreParts, fileName: kbBk.fileName });
 }
 
+// The backup file goes up as a file; what to do with it (the choices) goes next to it.
+async function kbUploadBackup(path, file, choice) {
+  const form = new FormData();
+  form.append('file', file);
+  if (choice) form.append('choice', JSON.stringify(choice));
+  const response = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${state.token}` }, body: form });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Something went wrong');
+  return data;
+}
+
 function kbOpenRestore() {
   const picker = document.createElement('input');
-  picker.type = 'file'; picker.accept = '.json,application/json';
+  picker.type = 'file'; picker.accept = '.zip,.json,application/zip,application/json';
   picker.addEventListener('change', async () => {
     const file = picker.files && picker.files[0];
     if (!file) return;
     try {
-      kbBk.pkg = JSON.parse(await file.text());
-      kbBk.preview = await kbJson('/api/kb-backup/preview', { method: 'POST', body: JSON.stringify({ package: kbBk.pkg }) });
-    } catch (err) { showToast(err instanceof SyntaxError ? 'That file is not a Knowledge Base backup.' : (err.message || 'Could not read that file.'), 'error'); return; }
+      kbBk.preview = await kbUploadBackup('/api/kb-backup/preview', file);
+    } catch (err) { showToast(err.message || 'Could not read that file.', 'error'); return; }
+    kbBk.file = file;
     kbBk.fileName = file.name;
     kbBk.chosen = new Map(kbBk.preview.categories.flatMap((category) => category.articles).map((article) => [article.key, 'skip']));
     kbBk.restoreParts = {};
@@ -127,11 +138,11 @@ async function kbRunRestore() {
   const button = kbBkModal().querySelector('[data-kb-rs-run]');
   button.disabled = true; button.textContent = 'Restoring…';
   try {
-    const result = await kbJson('/api/kb-backup/restore', { method: 'POST', body: JSON.stringify(kbRestoreRequest({ pkg: kbBk.pkg, preview: kbBk.preview, chosen: kbBk.chosen, parts: kbBk.restoreParts })) });
+    const result = await kbUploadBackup('/api/kb-backup/restore', kbBk.file, kbRestoreRequest({ preview: kbBk.preview, chosen: kbBk.chosen, parts: kbBk.restoreParts }));
     closeSettingsModal();
     const bits = [[result.created, 'added'], [result.replaced, 'replaced'], [result.copied, 'copied'], [result.skipped, 'skipped']].filter(([n]) => n).map(([n, word]) => `${n} ${word}`);
     showToast(`Restored: ${bits.join(', ') || 'nothing to do'}.`, 'success');
-    kbBk.pkg = null;
+    kbBk.file = null;
     if (typeof showKnowledgeBaseHome === 'function') showKnowledgeBaseHome();
   } catch (err) {
     showToast(err.message || 'Could not restore.', 'error');

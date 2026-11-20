@@ -43,7 +43,18 @@ const call = async (user, method, path, body) => {
     method, headers: { Authorization: `Bearer ${jwt.sign({ userId: ids[user], username: 'u', tokenVersion: 0 }, config.JWT_SECRET)}`, 'Content-Type': 'application/json' },
     body: body === undefined || method === 'GET' ? undefined : JSON.stringify(body),
   });
-  return { status: res.status, json: await res.json().catch(() => ({})), disposition: res.headers.get('content-disposition') };
+  const bytes = Buffer.from(await res.arrayBuffer());
+  let json = {};
+  try { json = JSON.parse(bytes.toString('utf8')); } catch { /* a zip */ }
+  return { status: res.status, json, bytes, disposition: res.headers.get('content-disposition'), type: res.headers.get('content-type') };
+};
+// the backup file goes up as a file with the choices next to it
+const upload = async (user, path, zip, choice) => {
+  const form = new FormData();
+  form.append('file', new Blob([zip]), 'kb.zip');
+  if (choice) form.append('choice', JSON.stringify(choice));
+  const res = await fetch(`${baseUrl}/api/kb-backup${path}`, { method: 'POST', headers: { Authorization: `Bearer ${jwt.sign({ userId: ids[user], username: 'u', tokenVersion: 0 }, config.JWT_SECRET)}` }, body: form });
+  return { status: res.status, json: await res.json().catch(() => ({})) };
 };
 
 test('backup, check and restore: HR only, chosen articles only, an existing article is left alone unless told otherwise', async (t) => {
@@ -64,19 +75,24 @@ test('backup, check and restore: HR only, chosen articles only, an existing arti
 
   const exported = await call('hr', 'POST', '/export', { articleIds: [first], parts: {} });
   assert.equal(exported.status, 200);
-  assert.match(exported.disposition, /attachment; filename="knowledge-base-\d{4}-\d{2}-\d{2}\.json"/);
-  assert.deepEqual(exported.json.categories[0].articles.map((a) => a.title), ['How to file']);
+  assert.match(exported.disposition, /attachment; filename="knowledge-base-\d{4}-\d{2}-\d{2}\.zip"/);
+  assert.equal(exported.type, 'application/zip');
+  const zip = exported.bytes;
+  const pkg = require('../src/knowledgeBasePackage').validatePackage(require('../src/knowledgeBasePackage').readPackageFile(zip));
+  assert.deepEqual(pkg.categories[0].articles.map((a) => a.title), ['How to file']);
 
-  assert.equal((await call('hr', 'POST', '/preview', { package: { format: 'nope' } })).status, 400);
-  const preview = await call('hr', 'POST', '/preview', { package: exported.json });
+  assert.equal((await upload('hr', '/preview', Buffer.from('nope'))).status, 400);
+  assert.equal((await upload('emp', '/preview', zip)).status, 403);
+  const preview = await upload('hr', '/preview', zip);
   assert.equal(preview.json.categories[0].articles[0].exists, true);
 
   await admin.query("UPDATE canvases SET content = 'edited since' WHERE title = 'How to file'");
-  assert.equal((await call('hr', 'POST', '/restore', { package: exported.json })).status, 400, 'the articles to restore must be chosen');
-  const skipped = await call('hr', 'POST', '/restore', { package: exported.json, articles: [{ key: exported.json.categories[0].articles[0].key, action: 'skip' }] });
+  assert.equal((await upload('hr', '/restore', zip, {})).status, 400, 'the articles to restore must be chosen');
+  const key = pkg.categories[0].articles[0].key;
+  const skipped = await upload('hr', '/restore', zip, { articles: [{ key, action: 'skip' }] });
   assert.deepEqual([skipped.json.skipped, skipped.json.replaced], [1, 0]);
   assert.equal((await admin.query("SELECT content FROM canvases WHERE title = 'How to file'")).rows[0].content, 'edited since');
-  const replaced = await call('hr', 'POST', '/restore', { package: exported.json, articles: [{ key: exported.json.categories[0].articles[0].key, action: 'replace' }] });
+  const replaced = await upload('hr', '/restore', zip, { articles: [{ key, action: 'replace' }] });
   assert.equal(replaced.json.replaced, 1);
   assert.equal((await admin.query("SELECT content FROM canvases WHERE title = 'How to file'")).rows[0].content, 'step one');
 });

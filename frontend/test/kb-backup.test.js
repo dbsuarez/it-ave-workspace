@@ -45,9 +45,9 @@ test('the restore screen lists what the file holds, asks what to do with article
 });
 
 test('the restore request carries only the ticked articles, each with its action', () => {
-  const body = kbRestoreRequest({ pkg: { format: 'x' }, preview, chosen: new Map([['a1', 'replace']]), parts: { pictures: true, screens: false, history: true, comments: true } });
+  const body = kbRestoreRequest({ preview, chosen: new Map([['a1', 'replace']]), parts: { pictures: true, screens: false, history: true, comments: true } });
   assert.deepEqual(body.articles, [{ key: 'a1', action: 'replace' }]);
   assert.deepEqual(body.parts, { pictures: true, screens: false, history: false, comments: true }, 'a part the file does not have is not asked for');
-  assert.deepEqual(body.package, { format: 'x' });
+  assert.equal(body.package, undefined, 'the file itself goes up beside the choices, not inside them');
   assert.match(kbRestoreHtml({ preview, chosen: new Map(), parts: {}, fileName: 'f' }), /disabled/);
 });

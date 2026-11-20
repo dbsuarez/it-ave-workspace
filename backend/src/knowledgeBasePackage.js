@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { zipSync, unzipSync } = require('fflate');
 const config = require('./config');
 const kb = require('./knowledgeBase');
 const { fullName } = require('./personName');
@@ -102,6 +103,61 @@ async function buildPackage(db, { selection = null, parts = {} } = {}) {
       .map((category) => ({ key: `c${category.id}`, title: category.title, position: category.position, articles: byCategory.get(category.id) || [] })),
     pictures,
   };
+}
+
+// ---- the file: a zip (knowledge-base.json + pictures/ID.ext), or plain JSON -------------------------------------------------
+
+const JSON_ENTRY = 'knowledge-base.json';
+const MAX_JSON_BYTES = 60 * 1024 * 1024;
+const PICTURE_ENTRY = /^pictures\/[A-Za-z0-9_.-]+$/;
+const notABackup = () => kb.fail(400, 'This is not a Knowledge Base backup file');
+
+// The package as a zip: the pictures leave the JSON and become real image files in pictures/.
+function packToZip(built) {
+  const files = {};
+  const pictures = {};
+  for (const [key, picture] of Object.entries(built.pictures || {})) {
+    const file = `pictures/${key}.${IMAGE_TYPES[picture.mime] || 'bin'}`;
+    files[file] = [new Uint8Array(Buffer.from(picture.data, 'base64')), { level: 0 }];
+    pictures[key] = { name: picture.name, mime: picture.mime, file };
+  }
+  files[JSON_ENTRY] = [new TextEncoder().encode(JSON.stringify({ ...built, pictures })), { level: 6 }];
+  return Buffer.from(zipSync(files));
+}
+
+// Opens an uploaded backup (zip, or the plain JSON of an older one) into the raw package object. It is still checked by validatePackage.
+function readPackageFile(buffer) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length) throw notABackup();
+  if (buffer.subarray(0, 2).toString('latin1') !== 'PK') {
+    try { return JSON.parse(buffer.toString('utf8')); } catch { throw notABackup(); }
+  }
+  let refused = false;
+  let entries = 0;
+  let total = 0;
+  let files;
+  try {
+    files = unzipSync(new Uint8Array(buffer), {
+      filter: (file) => {
+        entries += 1;
+        total += file.originalSize;
+        const limit = file.name === JSON_ENTRY ? MAX_JSON_BYTES : PICTURE_ENTRY.test(file.name) ? MAX_PICTURE_BYTES : 0;
+        if (entries > MAX_PICTURES + 1 || total > MAX_JSON_BYTES + MAX_TOTAL_PICTURE_BYTES || file.originalSize > limit) { if (limit) refused = true; return false; }
+        return true;
+      },
+    });
+  } catch { throw notABackup(); }
+  if (refused) throw kb.fail(400, 'This backup holds a file that is bigger than allowed');
+  if (!files[JSON_ENTRY]) throw notABackup();
+  let raw;
+  try { raw = JSON.parse(Buffer.from(files[JSON_ENTRY]).toString('utf8')); } catch { throw notABackup(); }
+  if (raw && typeof raw === 'object' && raw.pictures && typeof raw.pictures === 'object') {
+    for (const picture of Object.values(raw.pictures)) {
+      if (picture && typeof picture.file === 'string' && PICTURE_ENTRY.test(picture.file) && files[picture.file]) picture.data = Buffer.from(files[picture.file]).toString('base64');
+      if (picture) delete picture.file;
+    }
+    for (const [key, picture] of Object.entries(raw.pictures)) if (!picture || typeof picture.data !== 'string') delete raw.pictures[key];
+  }
+  return raw;
 }
 
 // ---- checking a file ---------------------------------------------------------------------------------------------------
@@ -309,4 +365,4 @@ async function restorePackage(client, pkg, { userId, articles = null, parts = {}
   return { ...result, written };
 }
 
-module.exports = { FORMAT, VERSION, PART_NAMES, buildPackage, validatePackage, describePackage, restorePackage };
+module.exports = { FORMAT, VERSION, PART_NAMES, packToZip, readPackageFile, buildPackage, validatePackage, describePackage, restorePackage };

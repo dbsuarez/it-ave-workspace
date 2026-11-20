@@ -56,8 +56,8 @@ async function preserveKnowledgeBase(db, work, actorId) {
   const everything = Object.fromEntries(kbPackage.PART_NAMES.map((name) => [name, true]));
   const pkg = kbPackage.validatePackage(JSON.parse(JSON.stringify(await kbPackage.buildPackage(db, { parts: everything }))));
   await fs.promises.mkdir(config.BACKUP_DIR, { recursive: true });
-  const file = path.join(config.BACKUP_DIR, `knowledge-base-before-reset-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-  await fs.promises.writeFile(file, JSON.stringify(pkg));
+  const file = path.join(config.BACKUP_DIR, `knowledge-base-before-reset-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`);
+  await fs.promises.writeFile(file, kbPackage.packToZip(pkg));
   const articleCount = pkg.categories.reduce((sum, category) => sum + category.articles.length, 0);
   await work();
   const client = await db.connect();

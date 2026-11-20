@@ -8,7 +8,7 @@
 **Approaches considered.** (1) a package used by Backup, Restore and the reset (chosen); (2) skipping KB rows inside the reset (many tables, nothing for Backup/Restore); (3) both separately (duplicate work).
 
 **Decisions (the user said "go with your suggestion").**
-- Package = one JSON file (`itavenue-knowledge-base`, version 1): categories, articles (text, published, order), and optionally pictures (base64), Help-screen links, version history, comments. *Ruling: JSON, not zip, so no new dependency; readable by hand.*
+- Package = one zip: `knowledge-base.json` (format `itavenue-knowledge-base`, version 1: categories, articles with text, published, order, and optionally Help-screen links, version history, comments) plus the pictures as real image files in `pictures/`. A plain JSON backup (earlier format) still opens. Uses `fflate` (pure JavaScript). Uploads are checked: entry names and sizes, no paths outside the zip.
 - Who: people with Manage knowledge base (HR by default, Owners always), via `/api/kb-backup` (`outline`, `export`, `preview`, `restore`).
 - Restore matches by category title and article title. An existing article is skipped unless the person chooses Replace the text (the old text is kept in History) or Add a copy ("(restored)"). Nothing is changed that was not chosen.
 - Reset: "Keep the Knowledge Base" is ticked by default in the reset panel. The package is built (and a copy kept in the backups folder) before anything is deleted; if it cannot be built the reset stops. If putting it back fails the reset reports it and the kept file can be restored with Restore.
