@@ -584,6 +584,7 @@ function setupEventListeners() {
   setupForumScreens();
   setupHelp();
   setupUpdates();
+  setupProfileCard();
   setupDrawings();
   setupNotes();
   setupSheets();
@@ -4576,11 +4577,13 @@ function handleDocumentClick(event) {
 }
 
 let activeUserContextMenuId = null;
+let activeUserContextAnchor = null;
 
 function openUserContextMenu(anchor, userId, usernameHint) {
   const menu = els.userContextMenu;
   if (!menu) return;
   activeUserContextMenuId = String(userId);
+  activeUserContextAnchor = anchor;
   const isSelf = Number(userId) === Number(state.user.id);
   const user = (state.users || []).find((u) => Number(u.id) === Number(userId));
   const name = user?.username || usernameHint || 'Unknown';
@@ -4645,6 +4648,12 @@ function handleAvatarContextClick(avatar, event) {
 }
 
 function toggleUserContextMenu(anchor, userId, name) {
+  // someone else: the profile card opens right beside them. Your own picture keeps the menu (Preferences, Sign out, ...)
+  if (Number(userId) !== Number(state.user.id) && typeof openProfileCard === 'function') {
+    closeAllMenus();
+    openProfileCard(userId, anchor);
+    return;
+  }
   const menu = els.userContextMenu;
   if (!menu) { openUserContextMenu(anchor, userId, name); return; }
   const isOpenForSameUser = menu.classList.contains('open') && activeUserContextMenuId === String(userId);
@@ -4666,42 +4675,9 @@ function formatLastSeen(iso, status) {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-async function showUserProfile(userId) {
-  try {
-    const res = await api(`/api/users/${userId}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not load profile');
-    const u = data.user;
-    const isSelf = Number(u.id) === Number(state.user.id);
-
-    if (els.userProfileAvatar) {
-      els.userProfileAvatar.textContent = (u.username || 'U').charAt(0).toUpperCase();
-      els.userProfileAvatar.style.background = u.avatarColor || '#A855F7';
-      els.userProfileAvatar.style.backgroundImage = '';
-      els.userProfileAvatar.dataset.avatarUser = String(u.id);
-      delete els.userProfileAvatar.dataset.photoPainted;
-      paintAvatarElement(els.userProfileAvatar);
-    }
-    if (els.userProfileName) els.userProfileName.textContent = displayName(u, 'User');
-    if (els.userProfileDot) els.userProfileDot.className = `user-profile-dot ${u.status || 'offline'}`;
-    if (els.userProfileStatusText) els.userProfileStatusText.textContent = statusLabelFor(u.status);
-    if (els.userProfileEmailRow) els.userProfileEmailRow.hidden = false;
-    if (els.userProfileEmail) els.userProfileEmail.textContent = u.email || '';
-    if (els.userProfileMemberSince) els.userProfileMemberSince.value = formatMemberSince(u.createdAt);
-    if (els.userProfileLastSeen) els.userProfileLastSeen.value = formatLastSeen(u.lastSeen, u.status);
-    if (els.userProfileMessageBtn) {
-      els.userProfileMessageBtn.hidden = isSelf;
-      els.userProfileMessageBtn.onclick = () => { closeSettingsModal(); openDM(userId); };
-    }
-    if (els.userProfileEditBtn) {
-      els.userProfileEditBtn.hidden = !isSelf;
-      els.userProfileEditBtn.onclick = () => { closeSettingsModal(); openProfileModal(); };
-    }
-    openSettingsModal(els.userProfileModal);
-  } catch (err) {
-    console.error('Show user profile error:', err);
-    showToast(err.message || 'Could not load this profile.', 'error');
-  }
+// A person's profile: the small card beside whatever was clicked (features/profile-card.js).
+function showUserProfile(userId, anchor) {
+  return openProfileCard(userId, anchor || activeUserContextAnchor);
 }
 
 function positionMoreMenu(anchor, menu) {

@@ -8,6 +8,7 @@ const authenticateToken = require('../middleware/auth');
 const config = require('../config');
 const { ensureDirectMessageAccess } = require('../security');
 const { checkUploadedFile, mimeForFilename } = require('../uploadContent');
+const { fullName } = require('../personName');
 
 // ---- profile photos -----------------------------------------------------------------------------
 // One small picture per person (PNG or JPEG, 2 MB at most; the app crops and shrinks it first). It is
@@ -174,6 +175,75 @@ router.post('/heartbeat', authenticateToken, async (req, res) => {
 });
 
 // Get user by ID
+// The people you have a direct-message conversation with, the most recent conversation first (the DM list in the sidebar).
+router.get('/dm-partners', authenticateToken, async (req, res) => {
+  try {
+    const me = req.user.userId;
+    const rows = (await query(
+      `SELECT other_id, MAX(created_at) AS last_at FROM (
+         SELECT CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END AS other_id, created_at
+         FROM direct_messages WHERE sender_id = $1 OR receiver_id = $1
+       ) t WHERE other_id IS NOT NULL AND other_id <> $1 GROUP BY other_id ORDER BY last_at DESC LIMIT 300`,
+      [me]
+    )).rows;
+    res.json({ partners: rows.map((row) => ({ userId: row.other_id, lastAt: new Date(row.last_at).toISOString() })) });
+  } catch (err) {
+    console.error('Get DM partners error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// The small profile card shown next to a person's name or picture. Only what a coworker needs at a glance: no email, no phone, no role names.
+// Not for the built-in admin account or people who are deactivated; a guest only gets people they share a channel with.
+router.get('/:userId/card', authenticateToken, async (req, res) => {
+  try {
+    if (!/^\d+$/.test(req.params.userId)) return res.status(400).json({ error: 'A valid person is required' });
+    const id = Number(req.params.userId);
+    const viewer = req.user.userId;
+    const row = (await query(
+      `SELECT u.id, u.username, u.first_name, u.middle_name, u.last_name, u.avatar_color, u.status, u.status_text, u.status_emoji, u.job_title,
+              u.department, u.location, u.profile, u.photo_file, u.photo_updated_at, u.last_seen, u.created_at, u.account_type,
+              m.username AS manager_username, m.first_name AS manager_first, m.middle_name AS manager_middle, m.last_name AS manager_last,
+              CASE WHEN u.id = $2 THEN NULL ELSE (SELECT COUNT(*)::int FROM channel_members a JOIN channel_members b ON b.channel_id = a.channel_id
+                                                   WHERE a.user_id = $2 AND b.user_id = u.id) END AS shared_channels,
+              (EXISTS (SELECT 1 FROM users me WHERE me.id = $2 AND me.account_type = 'guest')
+               AND u.id <> $2
+               AND NOT EXISTS (SELECT 1 FROM channel_members a JOIN channel_members b ON b.channel_id = a.channel_id WHERE a.user_id = $2 AND b.user_id = u.id)) AS hidden_from_guest
+       FROM users u LEFT JOIN users m ON m.id = u.manager_id
+       WHERE u.id = $1 AND u.account_type <> 'bot' AND u.deactivated_at IS NULL AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')`,
+      [id, viewer]
+    )).rows[0];
+    if (!row || row.hidden_from_guest) return res.status(404).json({ error: 'Person not found' });
+    const profile = row.profile && typeof row.profile === 'object' ? row.profile : {};
+    const own = Number(row.id) === Number(viewer);
+    res.json({
+      card: {
+        id: row.id,
+        username: row.username,
+        firstName: row.first_name || '',
+        middleName: row.middle_name || '',
+        lastName: row.last_name || '',
+        avatarColor: row.avatar_color,
+        photoVersion: photoVersion(row),
+        status: row.status,
+        statusText: row.status_text || '',
+        statusEmoji: row.status_emoji || '',
+        jobTitle: row.job_title || '',
+        department: row.department || '',
+        location: own || !(profile.hide && profile.hide.location) ? row.location || '' : '',
+        managerName: fullName({ first_name: row.manager_first, middle_name: row.manager_middle, last_name: row.manager_last }) || '',
+        accountType: row.account_type || 'member',
+        lastSeen: row.last_seen,
+        memberSince: row.created_at,
+        sharedChannels: row.shared_channels,
+      },
+    });
+  } catch (err) {
+    console.error('Get user card error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;

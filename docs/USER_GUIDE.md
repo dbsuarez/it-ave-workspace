@@ -215,6 +215,11 @@ Open **People > Org chart** and press **SVG** or **PNG** under **Save as** in th
 ### Who is the head of a department?
 Open **People > Manage > Departments**: each department shows its head. Ask HR to change it.
 
+## Profiles
+
+### How do I see who someone is?
+Click their name or picture anywhere (in a message, a list, a call) and a small **profile card** opens beside it. It shows their photo, full name, job title, status, how many channels you share, and their department, location and manager. Type in **Message** at the bottom and press **Enter** to send them a message, press the phone button to call them, or open **⋯ > View full profile** for their page. Press **Esc** or click elsewhere to close it. Clicking your own picture opens your menu (Preferences, Sign out); there you can choose **Edit profile**.
+
 ## Updates
 
 ### How does the app update itself?
