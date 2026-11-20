@@ -145,7 +145,9 @@ async function toggleHuddleScreen() {
     await setLocalHuddleVideo('screen', track);
   } catch (err) {
     console.error('Start screen share error:', err);
-    showToast('Could not share the screen.', 'error');
+    // say why, so a person can tell "I cancelled it" from "the computer would not let the app capture the screen"
+    const reason = err && err.name === 'NotAllowedError' ? 'The computer did not allow it.' : err && err.name === 'NotFoundError' ? 'No screen was found to share.' : err && err.name === 'NotReadableError' ? 'The screen could not be read. Close other apps that record the screen and try again.' : (err && err.message) || '';
+    showToast(`Could not share the screen. ${reason}`.trim(), 'error');
   }
 }
 

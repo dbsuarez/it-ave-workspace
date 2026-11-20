@@ -180,3 +180,41 @@ test('concurrent joins produce a consistent roster and enforce the six-person ca
     memberships.delete(`${id}:${channelId}`);
   }
 });
+
+test('someone who joins a call late is told who already has a camera or screen share on', async () => {
+  const io = createIo();
+  const channelId = 405;
+  memberships.add(`1:${channelId}`);
+  memberships.add(`2:${channelId}`);
+  memberships.add(`3:${channelId}`);
+  const alice = await connectUser(io, 1, 'alice');
+  const bob = await connectUser(io, 2, 'bob');
+  const carol = await connectUser(io, 3, 'carol');
+
+  await alice.handlers.get('huddle:join')(channelId);
+  await alice.handlers.get('huddle:media-state')({ video: 'screen' });
+  await bob.handlers.get('huddle:join')(channelId);
+  bob.take('huddle:joined');
+  const told = bob.take('huddle:media-state');
+  assert.deepEqual(told, { peerId: alice.id, video: 'screen' }, 'bob learns alice is sharing her screen');
+
+  // a state that was turned off is not replayed, and a bad value is not stored
+  await alice.handlers.get('huddle:media-state')({ video: null });
+  await carol.handlers.get('huddle:join')(channelId);
+  assert.equal(carol.take('huddle:media-state'), null);
+  await bob.handlers.get('huddle:media-state')({ video: 'hologram' });
+  await alice.handlers.get('huddle:leave')();
+  while (alice.take('huddle:media-state'));
+  await alice.handlers.get('huddle:join')(channelId);
+  alice.take('huddle:joined');
+  assert.equal(alice.take('huddle:media-state'), null, 'an invalid value is treated as off');
+
+  // leaving clears it: someone who rejoins later is not shown a share that ended with the call
+  await carol.handlers.get('huddle:media-state')({ video: 'camera' });
+  await carol.handlers.get('huddle:leave')();
+  const dave = await connectUser(io, 4, 'dave');
+  memberships.add(`4:${channelId}`);
+  await dave.handlers.get('huddle:join')(channelId);
+  assert.equal(dave.take('huddle:media-state'), null, 'carol left, so her camera is not announced');
+  for (const id of [1, 2, 3, 4]) memberships.delete(`${id}:${channelId}`);
+});

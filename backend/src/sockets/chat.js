@@ -234,6 +234,7 @@ module.exports = (io, socket) => {
     huddleChannelId = null;
     socket.huddleChannelId = null;
     socket.data.huddleChannelId = null;
+    socket.data.huddleVideo = null; // a camera or screen share ends with the call
   };
 
   // Authenticate socket connection
@@ -403,6 +404,7 @@ module.exports = (io, socket) => {
           const previousRoom = `huddle_${huddleChannelId}`;
           socket.to(previousRoom).emit('huddle:participant-left', { peerId: socket.id });
           socket.leave(previousRoom);
+          socket.data.huddleVideo = null;
           huddleChannelId = null;
           socket.huddleChannelId = null;
           socket.data.huddleChannelId = null;
@@ -424,6 +426,10 @@ module.exports = (io, socket) => {
           participants,
           iceServers: config.WEBRTC_ICE_SERVERS,
         });
+        // media-state is only relayed as it changes, so someone arriving late is told who already has a camera or screen share on
+        for (const peer of connectedPeers) {
+          if (peer.data && peer.data.huddleVideo) socket.emit('huddle:media-state', { peerId: peer.id, video: peer.data.huddleVideo });
+        }
         socket.to(room).emit('huddle:participant-joined', {
           peerId: socket.id,
           channelId: parsedKey,
@@ -497,6 +503,7 @@ module.exports = (io, socket) => {
   socket.on('huddle:media-state', ({ video } = {}) => {
     if (!currentUserId || !huddleChannelId) return;
     const mode = video === 'camera' || video === 'screen' ? video : null;
+    socket.data.huddleVideo = mode;
     socket.to(`huddle_${huddleChannelId}`).emit('huddle:media-state', { peerId: socket.id, video: mode });
   });
 

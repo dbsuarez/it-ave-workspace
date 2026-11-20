@@ -243,6 +243,7 @@ app.whenReady().then(() => {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     const fromMainApp = mainWindow && request.frame === mainWindow.webContents.mainFrame;
     if (!fromMainApp) {
+      console.warn('Screen sharing refused: the request did not come from the main window');
       callback({});
       return;
     }
