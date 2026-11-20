@@ -1,7 +1,7 @@
 {
   "name": "itavenue-frontend",
   "productName": "IT Avenue Workspace",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "IT Avenue Workspace desktop client",
   "main": "main.js",
   "scripts": {

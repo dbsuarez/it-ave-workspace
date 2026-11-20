@@ -2,6 +2,15 @@
 
 Each version lists what changed, in plain words. The app shows this after it updates.
 
+## 1.1.1 - 2026-11-20
+### Improved
+- **Help articles open in a floating window** over the screen you are working in, so you no longer leave it. Drag the window by its title bar, resize it from the corner, and press Esc to close it. "Open in the Knowledge Base" is still there when you want the full page.
+- The Help tab for a screen is now a slim tab on the right edge, so it no longer covers buttons such as Share.
+
+### Fixed
+- In a call, you now see a camera or screen share that was already on before you joined.
+- When screen sharing cannot start, the message now says why.
+
 ## 1.1.0 - 2026-11-20
 ### New
 - **Knowledge Base**: answers to common questions, by topic, with search, a find box inside long articles and a floating "On this page" list. The Help button on a screen opens the articles for that screen.

@@ -57,12 +57,14 @@ async function kbOpenHelpArticle(id) {
 }
 
 if (typeof document !== 'undefined') {
+  setupKbHelpWindow();
   document.addEventListener('click', (event) => {
     const chip = event.target.closest && event.target.closest('#kb-help-chip');
     const item = event.target.closest && event.target.closest('[data-kb-help-article]');
-    if (item) { kbOpenHelpArticle(Number(item.dataset.kbHelpArticle)); return; }
+    // an article opens in a floating window over this screen, not in the Knowledge Base screen
+    if (item) { document.getElementById('kb-help-menu')?.remove(); kbOpenHelpWindow(Number(item.dataset.kbHelpArticle)); return; }
     if (chip) {
-      if (kbHelpArticles.length === 1) { kbOpenHelpArticle(kbHelpArticles[0].id); return; }
+      if (kbHelpArticles.length === 1) { kbOpenHelpWindow(kbHelpArticles[0].id); return; }
       const existing = document.getElementById('kb-help-menu');
       if (existing) { existing.remove(); return; }
       const menu = document.createElement('div');
