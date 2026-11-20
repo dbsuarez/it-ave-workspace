@@ -7,6 +7,8 @@ Each version lists what changed, in plain words. The app shows this after it upd
 - **Profile card**: click a person's name or picture and a card opens beside it with their photo, full name, job title, status, how many channels you share, their department, location and manager. Type in the box at the bottom and press Enter to message them, use the call button, or open the full profile from the ⋯ menu. Your own picture still opens your menu.
 - **Member list**: the Members button in a channel's or forum's header opens a panel on the right with the people in that channel or forum, under Online and Offline (each folds away), with their status lines and a search. Click a person for their card.
 
+- **Cover photo**: on your own page, press **Change cover**, choose a picture and drag it to pick the part to show. It appears at the top of your page and on your profile card. **Remove cover** goes back to your colour. Only you can change your own cover.
+
 ### Improved
 - **Your own picture in the left rail** now opens the same card as everyone else's, with your photo, full name, job title, status, department, location and manager, above the menu (Set status, Preferences, Sign out...).
 - **Direct Messages** now lists only the people you have talked with, the latest conversation first. A new search box at the top finds employees to start a chat with.

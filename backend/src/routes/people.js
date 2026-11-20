@@ -90,7 +90,7 @@ function cleanProfile(body) {
 }
 
 const PERSON_COLUMNS = `u.id, u.username, u.last_name, u.first_name, u.middle_name, u.email, u.avatar_color, u.status, u.status_text, u.status_emoji, u.job_title,
-  u.department, u.location, u.manager_id, u.photo_file, u.photo_updated_at, u.profile, u.profile_visit_count, u.created_at, u.account_type,
+  u.department, u.location, u.manager_id, u.photo_file, u.photo_updated_at, u.cover_file, u.cover_updated_at, u.profile, u.profile_visit_count, u.created_at, u.account_type,
   COALESCE((SELECT array_agg(sm.manager_id ORDER BY sm.position, sm.manager_id) FROM user_secondary_managers sm WHERE sm.user_id = u.id), '{}') AS secondary_manager_ids,
   COALESCE((SELECT json_agg(json_build_object('name', r.name, 'color', r.color) ORDER BY r.position, r.id) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id), '[]'::json) AS role_chips`;
 
@@ -110,6 +110,7 @@ function mapPerson(row, viewerId, { full = false } = {}) {
     middleName: row.middle_name || '',
     avatarColor: row.avatar_color,
     photoVersion: photoVersion(row),
+    coverVersion: row.cover_file && row.cover_updated_at ? new Date(row.cover_updated_at).getTime() : null,
     status: row.status,
     statusText: row.status_text || '',
     statusEmoji: row.status_emoji || '',

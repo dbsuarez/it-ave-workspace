@@ -506,6 +506,9 @@ module.exports = [
 
   // Profile photo: the stored file name and when it last changed (the client uses that as a cache key)
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_file VARCHAR(255)',
+  // the wide picture at the top of a person's page and card (set by the person themself)
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_file VARCHAR(255)',
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_updated_at TIMESTAMP WITH TIME ZONE',
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMP WITH TIME ZONE',
 
   // A channel canvas used to be titled with the channel's number ("#23"); give it the channel's name

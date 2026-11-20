@@ -8437,3 +8437,12 @@ mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; 
 .pcard2, .pcard2-inline { color: var(--text); }
 .pcard2-name, .pcard2-status-text, .pcard2-chip, .pcard2-title { color: var(--text); }
 .pcard2-username, .pcard2-shared { color: var(--text-muted); }
+
+/* Cover photos: a taller bar on a person's page, a rectangular crop window, the buttons on your own page */
+.pp-cover { height: 190px; position: relative; }
+.pp-hero { margin-top: -56px; }
+.pp-cover-actions { position: absolute; top: 12px; right: 16px; display: flex; gap: 8px; }
+.pp-cover-actions .btn { background: rgba(0, 0, 0, 0.55); color: #fff; border-color: transparent; }
+.pp-cover-actions .btn:hover { background: rgba(0, 0, 0, 0.75); }
+.cover-crop-dialog { width: min(700px, 94vw); }
+.cover-crop-window { border-radius: 6px; border: 2px solid rgba(255, 255, 255, 0.85); }

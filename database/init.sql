@@ -561,6 +561,8 @@ CREATE INDEX IF NOT EXISTS idx_secondary_managers_manager ON user_secondary_mana
 
 -- Profile photo; mirrors backend/src/migrations.js.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_file VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_file VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_updated_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMP WITH TIME ZONE;
 
 -- Job title on profiles; mirrors backend/src/migrations.js.

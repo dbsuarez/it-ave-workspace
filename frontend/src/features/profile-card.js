@@ -20,7 +20,7 @@ function profileCardHeaderHtml({ card, name, isSelf }) {
     ? `<p class="pcard2-status-text">${card.statusEmoji ? `${pcEscape(card.statusEmoji)} ` : ''}${pcEscape(card.statusText)}</p>` : '';
   const shared = !isSelf && Number.isInteger(card.sharedChannels)
     ? `<p class="pcard2-shared">${card.sharedChannels} shared channel${card.sharedChannels === 1 ? '' : 's'}</p>` : '';
-  return `<div class="pcard2-banner" style="background: linear-gradient(135deg, ${color}, ${color}99)"></div>`
+  return `<div class="pcard2-banner" data-cover-version="${Number(card.coverVersion) || ''}" style="background: linear-gradient(135deg, ${color}, ${color}99)"></div>`
     + `<div class="pcard2-avatar" data-pcard-avatar="${Number(card.id)}" style="background:${color}">${initial}<span class="pcard2-dot ${status}"></span></div>`
     + `<div class="pcard2-body"><h3 class="pcard2-name">${pcEscape(name)}</h3>`
     + `<p class="pcard2-sub"><span class="pcard2-username">@${pcEscape(card.username)}</span>${card.jobTitle ? `<span class="pcard2-title">${pcEscape(card.jobTitle)}</span>` : ''}</p>`
@@ -80,6 +80,7 @@ async function openProfileCard(userId, anchor) {
     document.body.appendChild(el);
     pcState.el = el; pcState.userId = Number(card.id);
     const avatar = el.querySelector('.pcard2-avatar');
+    if (card.coverVersion && typeof paintCover === 'function') paintCover(el.querySelector('.pcard2-banner'), { id: card.id, coverVersion: card.coverVersion });
     // their photo comes from the card itself (the person may not be in the loaded list); with none, the initial on their colour stays
     if (avatar && card.photoVersion && typeof paintAvatar === 'function') paintAvatar(avatar, { id: card.id, photoVersion: card.photoVersion });
     const spot = profileCardPosition({ anchor: rect, width: el.offsetWidth, height: el.offsetHeight, vw: window.innerWidth, vh: window.innerHeight });
@@ -111,6 +112,7 @@ async function refreshAccountCard() {
     if (!response.ok || !data.card) return;
     host.innerHTML = profileCardHeaderHtml({ card: data.card, name: displayName(data.card, 'Me'), isSelf: true });
     document.getElementById('user-menu')?.classList.add('has-card');
+    if (data.card.coverVersion && typeof paintCover === 'function') paintCover(host.querySelector('.pcard2-banner'), { id: data.card.id, coverVersion: data.card.coverVersion });
     const avatar = host.querySelector('.pcard2-avatar');
     if (avatar && data.card.photoVersion && typeof paintAvatar === 'function') paintAvatar(avatar, { id: data.card.id, photoVersion: data.card.photoVersion });
   } catch (err) { console.error('Account card error:', err); }

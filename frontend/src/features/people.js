@@ -441,7 +441,7 @@ function renderPersonPage() {
   const empty = !person.about && !person.sections.length && !person.links.length;
   const personCard = (p) => `<button type="button" class="pp-mini" data-person="${p.id}">${peopleAvatar(p, 'sm')}<span><strong>${escapeText(personName(p))}</strong><em>${escapeText(personLine(p))}</em></span></button>`;
   body.innerHTML = `
-    <div class="pp-cover" style="background:${color}"></div>
+    <div class="pp-cover" data-cover-user="${person.id}" style="background:${color}">${mine ? '<div class="pp-cover-actions"><button type="button" class="btn" data-cover-change>Change cover</button>' + (person.coverVersion ? '<button type="button" class="btn" data-cover-remove>Remove cover</button>' : '') + '</div>' : ''}</div>
     <div class="pp-hero">
       ${peopleAvatar(person, 'xl')}
       <div class="pp-hero-text">
@@ -492,6 +492,7 @@ function renderPersonPage() {
       </aside>
     </div>`;
   paintPeoplePhotos(body);
+  if (person.coverVersion && typeof paintCover === 'function') paintCover(body.querySelector('.pp-cover'), { id: person.id, coverVersion: person.coverVersion });
 }
 
 // ---- editing my own page ----------------------------------------------------------------------
@@ -626,6 +627,8 @@ if (typeof document !== 'undefined') {
     if (profile) { openPersonPage(Number(profile.dataset.profileUser)); return; }
     if (t.closest('[data-people-back]')) { peopleState.pageId = null; peopleState.page = null; renderPeople(); return; }
     if (t.closest('[data-edit-page]')) { openPageEditor(); return; }
+    if (t.closest('[data-cover-change]')) { chooseCoverFile(); return; }
+    if (t.closest('[data-cover-remove]')) { removeOwnCover(); return; }
     const message = t.closest('[data-page-message]');
     if (message) { openDM(Number(message.dataset.pageMessage)); return; }
     const huddle = t.closest('[data-page-huddle]');

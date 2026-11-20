@@ -37,6 +37,7 @@ const photoUpload = multer({
 });
 
 const photoVersion = (row) => (row.photo_file && row.photo_updated_at ? new Date(row.photo_updated_at).getTime() : null);
+const coverVersion = (row) => (row.cover_file && row.cover_updated_at ? new Date(row.cover_updated_at).getTime() : null);
 const removeStoredPhoto = (name) => (name ? fs.promises.unlink(path.join(config.UPLOAD_DIR, name)).catch(() => {}) : Promise.resolve());
 
 router.put('/me/photo', authenticateToken, (req, res) => {
@@ -75,6 +76,96 @@ router.delete('/me/photo', authenticateToken, async (req, res) => {
     res.json({ photoVersion: null });
   } catch (err) {
     console.error('Remove profile photo error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ---- cover photos: the wide picture at the top of a person's page and card. Only the person themself sets or removes it (there is no route
+// that takes another person's id); stored like a profile photo, and seen by whoever can see the profile.
+const MAX_COVER_BYTES = 3 * 1024 * 1024;
+const coverUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(config.UPLOAD_DIR, { recursive: true });
+      cb(null, config.UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+      const ext = (/\.([A-Za-z0-9]+)$/.exec(file.originalname || '') || [])[1].toLowerCase();
+      cb(null, `cover-${req.user.userId}-${Date.now()}.${ext}`);
+    },
+  }),
+  limits: { fileSize: MAX_COVER_BYTES },
+  fileFilter: (req, file, cb) => {
+    const ext = (/\.([A-Za-z0-9]+)$/.exec(file.originalname || '') || [])[1];
+    if (!ext || !PHOTO_EXTENSIONS.has(ext.toLowerCase())) return cb(new Error('A cover photo must be a PNG or JPEG picture'));
+    cb(null, true);
+  },
+});
+
+router.put('/me/cover', authenticateToken, (req, res) => {
+  coverUpload.single('file')(req, res, async (err) => {
+    const discard = () => (req.file ? fs.promises.unlink(req.file.path).catch(() => {}) : Promise.resolve());
+    if (err) {
+      const tooBig = err.code === 'LIMIT_FILE_SIZE';
+      return res.status(400).json({ error: tooBig ? 'A cover photo can be at most 3MB' : (err.message || 'Invalid upload') });
+    }
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No picture uploaded' });
+      const problem = await checkUploadedFile(req.file.path, req.file.originalname);
+      if (problem) { await discard(); return res.status(400).json({ error: problem }); }
+      const previous = (await query('SELECT cover_file FROM users WHERE id = $1', [req.user.userId])).rows[0];
+      const saved = await query(
+        'UPDATE users SET cover_file = $1, cover_updated_at = NOW() WHERE id = $2 RETURNING cover_file, cover_updated_at',
+        [req.file.filename, req.user.userId]
+      );
+      if (previous && previous.cover_file && previous.cover_file !== req.file.filename) await removeStoredPhoto(previous.cover_file);
+      res.json({ coverVersion: coverVersion(saved.rows[0]) });
+    } catch (uploadErr) {
+      await discard();
+      console.error('Cover photo upload error:', uploadErr);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+});
+
+router.delete('/me/cover', authenticateToken, async (req, res) => {
+  try {
+    const previous = (await query('SELECT cover_file FROM users WHERE id = $1', [req.user.userId])).rows[0];
+    await query('UPDATE users SET cover_file = NULL, cover_updated_at = NULL WHERE id = $1', [req.user.userId]);
+    if (previous) await removeStoredPhoto(previous.cover_file);
+    res.json({ coverVersion: null });
+  } catch (err) {
+    console.error('Remove cover photo error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/:userId/cover', authenticateToken, async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isSafeInteger(userId) || userId < 1) return res.status(400).json({ error: 'A valid user ID is required' });
+    const found = await query(
+      `SELECT u.cover_file, u.cover_updated_at FROM users u
+       WHERE u.id = $2 AND u.cover_file IS NOT NULL AND (
+         u.id = $1
+         OR NOT EXISTS (SELECT 1 FROM users me WHERE me.id = $1 AND me.account_type = 'guest')
+         OR EXISTS (SELECT 1 FROM channel_members a JOIN channel_members b ON a.channel_id = b.channel_id
+                    WHERE a.user_id = $1 AND b.user_id = u.id))`,
+      [req.user.userId, userId]
+    );
+    const row = found.rows[0];
+    if (!row) return res.status(404).json({ error: 'No cover photo' });
+    const file = path.join(config.UPLOAD_DIR, row.cover_file);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'No cover photo' });
+    const etag = `"cover-${coverVersion(row)}"`;
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', mimeForFilename(row.cover_file));
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    fs.createReadStream(file).pipe(res);
+  } catch (err) {
+    console.error('Get cover photo error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -202,7 +293,7 @@ router.get('/:userId/card', authenticateToken, async (req, res) => {
     const viewer = req.user.userId;
     const row = (await query(
       `SELECT u.id, u.username, u.first_name, u.middle_name, u.last_name, u.avatar_color, u.status, u.status_text, u.status_emoji, u.job_title,
-              u.department, u.location, u.profile, u.photo_file, u.photo_updated_at, u.last_seen, u.created_at, u.account_type,
+              u.department, u.location, u.profile, u.photo_file, u.photo_updated_at, u.cover_file, u.cover_updated_at, u.last_seen, u.created_at, u.account_type,
               m.username AS manager_username, m.first_name AS manager_first, m.middle_name AS manager_middle, m.last_name AS manager_last,
               CASE WHEN u.id = $2 THEN NULL ELSE (SELECT COUNT(*)::int FROM channel_members a JOIN channel_members b ON b.channel_id = a.channel_id
                                                    WHERE a.user_id = $2 AND b.user_id = u.id) END AS shared_channels,
@@ -225,6 +316,7 @@ router.get('/:userId/card', authenticateToken, async (req, res) => {
         lastName: row.last_name || '',
         avatarColor: row.avatar_color,
         photoVersion: photoVersion(row),
+        coverVersion: coverVersion(row),
         status: row.status,
         statusText: row.status_text || '',
         statusEmoji: row.status_emoji || '',
