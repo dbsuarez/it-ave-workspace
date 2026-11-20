@@ -159,7 +159,7 @@ router.get('/', async (req, res) => {
     const status = req.query.status === undefined ? 'active' : String(req.query.status);
     if (!['active', 'inactive'].includes(status)) throw fail(400, 'status must be active or inactive');
     if (status === 'inactive') {
-      if (!(await maySeeInactive(req.user.userId))) throw fail(403, 'Only HR and Owners can see inactive people');
+      if (!(await maySeeInactive(req.user.userId))) throw fail(403, 'Only HR can see inactive people');
       const former = await query(
         `SELECT ${PERSON_COLUMNS} FROM users u
          WHERE u.account_type = 'member' AND u.deactivated_at IS NOT NULL AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')
@@ -238,7 +238,7 @@ router.put('/preferences', async (req, res) => {
     if (body.view !== undefined && !['card', 'list'].includes(body.view)) throw fail(400, 'view must be card or list');
     if (body.status !== undefined && !['active', 'inactive'].includes(body.status)) throw fail(400, 'status must be active or inactive');
     const current = await readPeoplePrefs(req.user.userId);
-    if (body.status === 'inactive' && !current.canSeeInactive) throw fail(403, 'Only HR and Owners can see inactive people');
+    if (body.status === 'inactive' && !current.canSeeInactive) throw fail(403, 'Only HR can see inactive people');
     const next = { view: body.view || current.stored.view, status: body.status || current.stored.status };
     await query(
       `UPDATE users SET ui_prefs = jsonb_set(COALESCE(ui_prefs, '{}'::jsonb), '{people}', $2::jsonb, true) WHERE id = $1`,
@@ -337,7 +337,7 @@ router.put('/:id/like', async (req, res) => {
 router.put('/:id/names', async (req, res) => {
   try {
     const me = await requireMember(req.user.userId);
-    if (!canManageEmployees(me)) throw fail(403, 'Only the Superadmin or HR can change someone else\'s name');
+    if (!canManageEmployees(me)) throw fail(403, 'Only HR can change someone else\'s name');
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     const { columns } = cleanProfile({ lastName: req.body && req.body.lastName, firstName: req.body && req.body.firstName, middleName: req.body && req.body.middleName });
@@ -360,7 +360,7 @@ router.put('/:id/names', async (req, res) => {
 router.put('/:id/manager', async (req, res) => {
   try {
     const me = await requireMember(req.user.userId);
-    if (!canManageEmployees(me)) throw fail(403, 'Only the Superadmin or HR can change reporting lines');
+    if (!canManageEmployees(me)) throw fail(403, 'Only HR can change reporting lines');
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     const managerId = req.body && req.body.managerId === null ? null : parseId(req.body && req.body.managerId);
@@ -395,7 +395,7 @@ const MAX_SECONDARY_MANAGERS = 5;
 router.put('/:id/secondary-managers', async (req, res) => {
   try {
     const me = await requireMember(req.user.userId);
-    if (!canManageEmployees(me)) throw fail(403, 'Only the Superadmin or HR can change reporting lines');
+    if (!canManageEmployees(me)) throw fail(403, 'Only HR can change reporting lines');
     const id = parseId(req.params.id);
     if (id === null) throw fail(400, 'A valid person ID is required');
     const given = req.body && req.body.managerIds;

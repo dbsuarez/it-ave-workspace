@@ -700,7 +700,7 @@ router.delete('/:canvasId', authenticateToken, async (req, res) => {
            )`,
           [canvas.channel_id, req.user.userId]
         );
-        if (mod.rows.length === 0) return res.status(403).json({ error: 'Only the creator, a channel moderator or the Superadmin can delete this canvas' });
+        if (mod.rows.length === 0) return res.status(403).json({ error: 'Only the creator or a channel moderator can delete this canvas' });
       }
     } else if (canvas.kind === 'dm') {
       if (Number(canvas.created_by) !== Number(req.user.userId)) {

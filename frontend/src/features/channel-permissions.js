@@ -93,7 +93,7 @@ function renderChannelPermissions() {
       </div>
       ${tab === 'departments'
         ? `<p class="moderation-help">A department only decides who can <strong>see and read</strong> this channel. Allow gives everyone in that department access; Deny blocks them; Inherit leaves it to their roles. Department membership follows each employee's current HR department automatically. What people can do (send, attach, react) is set on the Roles &amp; people tab.</p>`
-        : `<p class="moderation-help">Choose what each role or person can do in this channel. Inherit means "whatever their role allows". Deny beats Inherit; a person's own setting beats their roles. Owners always have everything.</p>`}
+        : `<p class="moderation-help">Choose what each role or person can do in this channel. Inherit means "whatever their role allows". Deny beats Inherit; a person's own setting beats their roles.</p>`}
       <div class="role-table-wrap"><table class="role-table"><thead>${head}</thead><tbody>${tab === 'departments' ? (departmentRows || '<tr><td colspan="3" class="moderation-help">No departments yet.</td></tr>') : `${roleRows}${personRows}`}</tbody></table></div>
       ${tab === 'departments' ? '' : `<div class="moderation-inline perm-add">
         <select id="perm-add-person" aria-label="Add a person"><option value="">Add a person…</option>${addable.map((m) => `<option value="${m.id}">${escapeHtml(typeof mentionLabel === 'function' ? mentionLabel(m) : m.username)}</option>`).join('')}</select>

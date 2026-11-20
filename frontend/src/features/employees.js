@@ -137,7 +137,7 @@ function renderEmployeeManagement(body) {
       <tbody>${rows.map((e) => {
     const boss = e.managerId ? byId.get(e.managerId) : null;
     return `<tr data-emp-row="${e.id}" tabindex="0">
-        <td><span class="emp-person">${peopleAvatar(e, 'sm')}<span><strong>${escapeText(employeeFullName(e))}</strong><em>@${escapeText(e.username)}${e.isHr ? ' · HR' : ''}${e.isSuperadmin ? ' · Superadmin' : ''}</em></span></span></td>
+        <td><span class="emp-person">${peopleAvatar(e, 'sm')}<span><strong>${escapeText(employeeFullName(e))}</strong><em>@${escapeText(e.username)}${e.isHr ? ' · HR' : ''}${e.isSuperadmin && state.moderation?.isSuperadmin ? ' · Superadmin' : ''}</em></span></span></td>
         <td>${escapeText(e.employeeNo) || '<span class="pp-muted">—</span>'}</td>
         <td>${escapeText(e.department) || '<span class="pp-muted">—</span>'}</td>
         <td>${escapeText(e.jobTitle) || '<span class="pp-muted">—</span>'}</td>

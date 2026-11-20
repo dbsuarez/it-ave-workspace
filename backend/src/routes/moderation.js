@@ -379,7 +379,7 @@ router.post('/channels/:channelId/timeouts/:userId', async (req, res) => {
     if (!target.rows.length) return res.status(404).json({ error: 'User not found' });
     if (!target.rows[0].is_member) return res.status(400).json({ error: 'The user is not a member of this channel' });
     if (target.rows[0].is_superadmin && !actor.rows[0].is_superadmin) {
-      return res.status(403).json({ error: 'Channel moderators cannot timeout a Superadmin' });
+      return res.status(403).json({ error: 'You cannot time out this person' });
     }
     const settings = await query(
       'SELECT default_timeout_minutes, max_timeout_minutes FROM moderation_settings WHERE id = 1'
@@ -565,7 +565,7 @@ router.delete('/messages/:messageId', async (req, res) => {
     req.io?.to(`channel_${channelId}`).emit('message_deleted', { messageId, channelId });
     if (cleanupFailures.length) {
       return res.status(500).json({
-        error: 'The message was removed, but some stored attachments could not be deleted. Contact the workspace administrator.',
+        error: 'The message was removed, but some stored attachments could not be deleted. Contact IT.',
       });
     }
     res.json({ deleted: true, messageId });

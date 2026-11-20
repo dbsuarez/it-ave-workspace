@@ -230,7 +230,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
         console.error('Deleted file record but failed to remove stored file:', err);
         emitFileDeleted(req.io, deletedFile);
         return res.status(500).json({
-          error: 'The attachment was removed from messages, but its stored file could not be deleted. Contact the workspace administrator.',
+          error: 'The attachment was removed from messages, but its stored file could not be deleted. Contact IT.',
         });
       }
     }

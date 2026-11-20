@@ -9,7 +9,7 @@ Short answers to the things people ask most. Use the search box at the top of He
 The strip on the left has the main places: **Home** (channels and forums), **DMs**, **Activity** (mentions, replies and reactions to you), **Later** (saved items and reminders), **Files**, **Notes**, **Canvas**, **People**, **Huddle** (audio calls) and **More** (Lists and Canvases). **Moderation** appears only if you are allowed to moderate or manage the workspace.
 
 ### Which channels does everyone have?
-The **OFFICIAL** section at the top of the sidebar holds four channels everyone is in: **#welcome**, **#rules** (the workspace rules and code of conduct, so read it first), **#announcements** and **#general**. They are mandatory: everyone is in them, nobody can leave, and they cannot be renamed, archived or deleted. An Owner can make other channels built-in too, and they appear in the same section.
+The **OFFICIAL** section at the top of the sidebar holds four channels everyone is in: **#welcome**, **#rules** (the workspace rules and code of conduct, so read it first), **#announcements** and **#general**. They are mandatory: everyone is in them, nobody can leave, and they cannot be renamed, archived or deleted. Other channels can be made built-in too, and they appear in the same section.
 
 ### Keyboard shortcuts
 - **Ctrl+K** searches messages, people and files.
@@ -43,7 +43,7 @@ Slash commands that post to everyone (**/poll** and **/announce**) do not work i
 ## Department forums
 
 ### What is my department's forum?
-Each department has a private forum called `dept-` and the department name, for example `dept-mis`. Only people in that department can open it. Find it in the sidebar by its speech-bubble icon. If your administrator has grouped forums into a section, look there.
+Each department has a private forum called `dept-` and the department name, for example `dept-mis`. Only people in that department can open it. Find it in the sidebar by its speech-bubble icon. If forums have been grouped into a section, look there.
 
 ### How do I start a topic?
 Open the forum, press **New topic**, give it a title (up to 120 characters), write the first post, optionally attach files, and press **Start topic**. The topic opens straight away.
@@ -58,11 +58,11 @@ Click a topic to open it. The posts appear like an ordinary conversation, and yo
 Yes. Search finds topics by their title, posts by their text, and attachments by their file name (not by what is inside the file).
 
 ### Why can't I see a forum, or why did it disappear?
-A forum is open only to people currently in that department. If you were moved to another department, you lose that forum straight away and get the new one. An Owner who is not in the department does not see it either, unless the Owner private-channel switch in Moderation is on.
+A forum is open only to people currently in that department. If you were moved to another department, you lose that forum straight away and get the new one. People outside the department do not see it.
 
 ## Moderating a forum
 
-Only the **department head**, an **Owner who can open the forum**, and people whose role has the **Manage messages** permission see these buttons. They are small icons; hover over one to see what it does.
+Only the **department head** and people whose role has the **Manage messages** permission see these buttons. They are small icons; hover over one to see what it does.
 
 ### How do I pin a topic?
 Click the **pin** icon on the topic (in the list or at the top of the open topic). Pinned topics move to a **Pinned** group at the top of the forum and stay there, however busy other topics are. A pinned topic works well as that forum's announcement. Click the same icon again to **unpin**.
@@ -104,7 +104,7 @@ You can keep 1000 notes, 50 labels, 200 items in a checklist and 10 pictures (PN
 The rail on the left lists the sections of the app. If your window is short, scroll the rail with the mouse wheel (there is no scrollbar): the **More** button, the **+** (Create) button and your picture always stay in view at the bottom.
 
 ### Can the rail be rearranged?
-Yes, by an Owner (anyone who manages the workspace), and it applies to **everyone**. Open your picture menu and choose **Customize the rail**: move sections up and down, or send a section into the **More** menu (and bring it back). Home always stays first. **Save for everyone** applies it at once for everybody who is signed in; **Reset to default** puts it back as it was. Employees cannot change it. A section such as Moderation still only shows for the people who may use it.
+Yes, by the people who manage the workspace, and it applies to **everyone**. If you are one of them, open your picture menu and choose **Customize the rail**: move sections up and down, or send a section into the **More** menu (and bring it back). Home always stays first. **Save for everyone** applies it at once for everybody who is signed in; **Reset to default** puts it back as it was. Employees cannot change it.
 
 ## Canvas text: size, colour and table alignment
 
@@ -127,14 +127,11 @@ Yes. Every article has a **Find in this article** box under its title (or press 
 ### How do I back up the Knowledge Base, and restore it?
 On the Knowledge Base home screen (people who manage it only) press **Backup**. Tick the categories and articles to save, and tick what else to include (Pictures and Help links are on by default; Version history and Comments are optional), then **Download backup**. You get one file to keep somewhere safe. To bring things back press **Restore** and choose that file: it lists what is inside, you tick the articles to restore, and for an article that already exists you choose to **skip** it, **replace the text** (the old text stays in History) or **add a copy**. Nothing is changed unless you choose it.
 
-### Does a Workspace Reset delete the Knowledge Base?
-Not by default. The reset panel has **Keep the Knowledge Base** ticked: the articles, pictures, comments and history are packed before the reset and put back after it. Untick it to wipe the Knowledge Base too. A copy of what was kept is also saved in the backups folder, and you can restore from it with **Restore**.
-
 ### Can I save it as a PDF?
 In the desktop app, **Save as PDF** on an article saves that article; on a category it saves all of its published articles as one document, for example the whole handbook.
 
 ### Who can write in it?
-People with the **Manage knowledge base** permission (Owners, and the HR role by default). Everyone else can read and search only.
+People with the **Manage knowledge base** permission (HR by default). Everyone else can read and search only.
 
 ### How does HR add content?
 - **New category** on the Knowledge Base screen (for example Leave, Payroll, Employee Handbook). **Rename**, **Delete** (this deletes its articles too) and the up and down arrows (put the articles in reading order) are on the category page.
@@ -147,13 +144,13 @@ People with the **Manage knowledge base** permission (Owners, and the HR role by
 Sheets are spreadsheets you make inside the app. They look and work like a normal spreadsheet (type, paste from Excel, formulas, several tabs), they save by themselves, and the rest of the app can read the data you publish from them. Open **Sheets** in the left rail.
 
 ### Who can make a sheet?
-People with the **Manage sheets** permission (Owners, and the HR role by default). Everyone else sees only the sheets shared with them, under **Shared with me**.
+People with the **Manage sheets** permission (HR by default). Everyone else sees only the sheets shared with them, under **Shared with me**.
 
 ### How do I work in a sheet?
 Press **New sheet**, name it, and type. There is no Save button: the bar says "Unsaved changes", then "Saved" a moment later. The **+** beside the tabs adds a tab; right-click a cell for rows and columns. If someone else saved the sheet while you were editing, your changes are merged into theirs and a note tells you (when you both changed the same cell, yours is kept). Adding or deleting rows while someone else edits the same sheet can mix cells up, so take turns for that.
 
 ### How do I share a sheet?
-The owner presses **Share**, picks a person and chooses **Can edit** or **Can view**. Only members can be added. Only the owner can share or delete the sheet. Being an Owner of the workspace does not open other people's sheets.
+The owner presses **Share**, picks a person and chooses **Can edit** or **Can view**. Only members can be added. Only the owner can share or delete the sheet.
 
 ### How do I get data in and out?
 **Import CSV** adds the rows of a CSV file (from Excel, with commas, semicolons or tabs) as a new tab. **Export CSV** saves the open tab as a CSV that Excel opens; cells that could run as a formula in Excel are marked with a leading apostrophe. Pasting straight from Excel into the grid also works.
@@ -210,56 +207,10 @@ The person who made it, and moderators of the conversation it belongs to. Deleti
 ## People
 
 ### Where do I see who works here?
-**People** has the **Directory** (switch between cards and a list, and show active or inactive people), **My team** (your direct reports), the **Org chart**, **Leave**, and **Attendance**. **Manage** appears for HR and Owners.
+**People** has the **Directory** (switch between cards and a list, and show active or inactive people), **My team** (your direct reports), the **Org chart**, **Leave**, and **Attendance**. **Manage** appears for HR.
 
 ### How do I save the org chart as a picture?
 Open **People > Org chart** and press **SVG** or **PNG** under **Save as** in the chart's toolbar. The picture shows the chart as it is on screen: the search filter is applied, and a team you have collapsed stays collapsed and shows "+N hidden" (expand everyone first to save the whole company). It includes photos, titles, departments and the dotted "also reports to" lines, with the date underneath. **SVG** is the best choice: it stays sharp at any size, even on a poster, and opens in a browser, Word, PowerPoint or Inkscape. **PNG** is for places that only take pictures; it is saved twice as sharp as the screen, and PNG keeps text and lines crisp, which JPG would blur.
 
 ### Who is the head of a department?
-Open **People > Manage > Departments**: each department shows its head. Ask HR or an Owner to change it.
-
-## For administrators
-
-### How do I set a department head, or rename a department?
-Go to **People > Manage > Departments** (HR and Owners).
-1. Change the name, or click the head box and start typing a name. The list is alphabetical and shows `Name (username)`. Clear the box for no head.
-2. Rows you changed get a purple bar, and the footer counts the unsaved changes.
-3. Press **Save changes** once. Only the changed departments are saved.
-
-The new head becomes the moderator of that department's forum immediately, and the old head loses it. Moderators someone added by hand keep their role.
-
-### How do I add a department?
-In the same dialog, fill in **New department** and press **Add**. Its forum is created automatically. Deleting a department archives its forum and keeps its content.
-
-### How do I group channels and forums into a section?
-Open the **Channel organizer**: click the gear icon beside **Channels** in the sidebar.
-1. Under **Workspace sections**, press **+ Add** and name the section.
-2. Move channels and forums into it with the dropdown beside each one, or drag them in.
-3. Press **Save sections**.
-
-Forums appear in the list for administrators by name only: you can place them in a section without being able to read them. Members only see a forum in the section if they are allowed to open it. Forums are created by creating a department, not by hand.
-
-### How do I make a channel built-in, or change the order?
-Only an **Owner** can do this.
-- **Make one built-in:** open the channel's settings (**Moderation** > the channel), find **Built-in channel**, and press **Make built-in**. Everyone is added to it at once, new people join automatically, nobody can leave or be removed, and it cannot be renamed, archived or deleted. It moves into the **OFFICIAL** section. Press **Turn off built-in** to make it an ordinary channel again; people stay in it, but it leaves OFFICIAL. You can also tick **Built-in channel** when creating a channel.
-- **What can be built-in:** a public, shared channel. Personal channels, private channels and department forums cannot. #welcome, #rules, #announcements and #general are required by the app and always stay built-in.
-- **Change the order:** open the **Channel organizer**, and use the up and down arrows next to each channel in the **OFFICIAL** section. The new order is saved straight away and everyone sees it.
-
-### How do I give someone more rights?
-**Moderation > Roles** holds the roles and the **Assignments** table (the header stays visible as you scroll). Give a role the **Manage messages** permission to let its members moderate every forum and channel they can open. Roles also decide the colour of a person's name.
-
-### How do I give a role to everyone in a department automatically?
-In **Moderation > Roles**, press **Edit** on a role and tick the departments under **Given automatically to members of**. Everyone in those departments gets the role now, anyone who joins later gets it too, and anyone who leaves loses it. In the Assignments table such a box is ticked and cannot be changed by hand (hover it to see why); to take the role away from one person, remove them from the department or change the role's departments. A role someone was given by hand is never taken away by this, and the built-in Owner and Everyone roles can never be given this way.
-
-Good to know: a person belongs to every department listed on their record, not only their main one. Changing someone's **main** department on their record keeps the old one as an extra, so they keep what it gave. To take them out of the old department, remove it in the department list on their record. You can only choose roles below your own rank, and every change appears in the audit log.
-
-### Why can an Owner not read a private channel or forum?
-By design. Owners see private channels and forums they are not members of only when the **private-channel switch** (Moderation, Superadmin tab) is on, and turning it on is recorded.
-
-### The sidebar does not look right, or something is missing
-Check you are a member of the department or channel, then reload with **Ctrl+R**. If it is still wrong, tell an administrator what you expected to see and in which section.
-
-### How do I keep the list of workspace backups tidy?
-Under **Moderation > Recovery**, every backup has icon buttons (hover one to see its full name): **rename** (give it a name such as "Before payroll change" so you can tell it apart; the date stays beside it), **keep** (the star: a backup marked Keep is never deleted by a clean-up and cannot be deleted until Keep is turned off), **download** the database or the uploaded files, **check** that it can be read, **restore** from it, and **delete** it. Backups made by the app say why, for example "Before a workspace reset".
-
-A backup that stopped halfway (missing its database or its uploaded files) cannot be restored. These are hidden behind a line such as "2 incomplete backups are hidden": the eye button shows them and the bin button deletes them all. The broom button above the list deletes every complete backup except the newest ones you choose to keep (and those marked Keep).
+Open **People > Manage > Departments**: each department shows its head. Ask HR to change it.

@@ -111,7 +111,7 @@ router.put('/:channelId/permissions', async (req, res) => {
     if (subjectType === 'role') {
       const role = (await query('SELECT builtin_key FROM roles WHERE id = $1', [subjectId])).rows[0];
       if (!role) throw fail(404, 'Role not found');
-      if (role.builtin_key === 'owner') throw fail(400, 'Owners always have every permission');
+      if (role.builtin_key === 'owner') throw fail(400, 'This role always has every permission');
     } else if (subjectType === 'department') {
       if (!(await query('SELECT 1 FROM departments WHERE id = $1', [subjectId])).rows.length) throw fail(404, 'Department not found');
     } else if (!(await query("SELECT 1 FROM users WHERE id = $1 AND account_type = 'member'", [subjectId])).rows.length) {

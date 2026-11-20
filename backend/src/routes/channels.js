@@ -171,7 +171,7 @@ router.patch('/:channelId', authenticateToken, async (req, res) => {
     );
 
     if (permission.rows.length === 0 && !(await can(query, req.user.userId, 'manage_channels'))) {
-      return res.status(403).json({ error: 'Only the channel creator, a channel moderator or the Superadmin can edit the channel description' });
+      return res.status(403).json({ error: 'Only the channel creator or a channel moderator can edit the channel description' });
     }
 
     const result = await query(
@@ -609,7 +609,7 @@ router.post('/:channelId/join', authenticateToken, async (req, res) => {
         [req.user.userId]
       );
       if (!membership.rows.length || !(await ownerPrivateAccessOn(query))) {
-        return res.status(403).json({ error: 'Private channels require an invitation from a Superadmin' });
+        return res.status(403).json({ error: 'Private channels are by invitation only. Ask HR or IT' });
       }
     }
 

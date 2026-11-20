@@ -34,7 +34,7 @@ async function requireHr(userId) {
   const actor = await hrActor(userId);
   // the Superadmin and HR flags, or any role that grants manage_people
   if (!canManageEmployees(actor) && !(actor.account_type === 'member' && await can(query, userId, 'manage_people'))) {
-    throw fail(403, 'Only the Superadmin or HR can do that');
+    throw fail(403, 'Only HR can do that');
   }
   return actor;
 }
