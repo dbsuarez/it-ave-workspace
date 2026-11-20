@@ -210,7 +210,7 @@ router.get('/:userId/card', authenticateToken, async (req, res) => {
                AND u.id <> $2
                AND NOT EXISTS (SELECT 1 FROM channel_members a JOIN channel_members b ON b.channel_id = a.channel_id WHERE a.user_id = $2 AND b.user_id = u.id)) AS hidden_from_guest
        FROM users u LEFT JOIN users m ON m.id = u.manager_id
-       WHERE u.id = $1 AND u.account_type <> 'bot' AND u.deactivated_at IS NULL AND NOT (u.is_superadmin AND LOWER(u.username) = 'admin')`,
+       WHERE u.id = $1 AND u.account_type <> 'bot' AND u.deactivated_at IS NULL AND (u.id = $2 OR NOT (u.is_superadmin AND LOWER(u.username) = 'admin'))`,
       [id, viewer]
     )).rows[0];
     if (!row || row.hidden_from_guest) return res.status(404).json({ error: 'Person not found' });

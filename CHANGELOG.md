@@ -8,6 +8,7 @@ Each version lists what changed, in plain words. The app shows this after it upd
 - **Member list**: the Members button in a channel's or forum's header opens a panel on the right with the people in that channel or forum, under Online and Offline (each folds away), with their status lines and a search. Click a person for their card.
 
 ### Improved
+- **Your own picture in the left rail** now opens the same card as everyone else's, with your photo, full name, job title, status, department, location and manager, above the menu (Set status, Preferences, Sign out...).
 - **Direct Messages** now lists only the people you have talked with, the latest conversation first. A new search box at the top finds employees to start a chat with.
 
 ## 1.1.1 - 2026-11-20

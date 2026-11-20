@@ -90,6 +90,7 @@ test('the card never carries an email, a phone number or role names, and a hidde
 test('the built-in admin account, deactivated people and unknown people have no card', async (t) => {
   if (!scratch) return t.skip('no PostgreSQL reachable');
   assert.equal((await get('viewer', ids.root)).status, 404);
+  assert.equal((await get('root', ids.root)).status, 200, 'the built-in admin account sees its own card, nobody else does');
   assert.equal((await get('viewer', 999999)).status, 404);
   assert.equal((await get('viewer', 'abc')).status, 400);
   await admin.query('UPDATE users SET deactivated_at = NOW() WHERE id = $1', [ids.shy]);

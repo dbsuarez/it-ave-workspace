@@ -413,7 +413,7 @@ function setupEventListeners() {
 
   // User menu
   // opening the account menu first catches up with the account, so the name and email are never stale
-  on('btn-user-menu', 'click', (e) => { e.stopPropagation(); refreshOwnProfile(); toggleMenu('user-menu', 'btn-user-menu'); });
+  on('btn-user-menu', 'click', (e) => { e.stopPropagation(); refreshOwnProfile(); refreshAccountCard(); toggleMenu('user-menu', 'btn-user-menu'); });
   document.querySelectorAll('#user-menu .menu-item').forEach((item) => {
     item.addEventListener('click', () => {
       closeAllMenus();

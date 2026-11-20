@@ -8423,3 +8423,12 @@ mark.kb-find.kb-find-current { background: #f59e0b; outline: 2px solid #b45309; 
 .pp-row-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-row-status { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-empty { padding: 14px; color: var(--text-muted); font-size: 13px; }
+
+/* The account menu in the left rail opens with the same card as everyone else's */
+.user-menu.has-card { min-width: 300px; padding-top: 0; }
+.user-menu.has-card .menu-account .menu-account-name,
+.user-menu.has-card .menu-account .menu-account-sub:not(.account-type-tag) { display: none; }
+.user-menu.has-card .menu-account { padding: 0; }
+.pcard2-inline { position: relative; margin: 0 -6px 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.pcard2-inline:empty { display: none; }
+.pcard2-inline .pcard2-banner { border-radius: 9px 9px 0 0; }

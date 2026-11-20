@@ -1,7 +1,7 @@
 // The small profile card: markup and where it opens. Pure: data in, HTML or numbers out.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { profileCardHtml, profileCardPosition } = require('../src/features/profile-card');
+const { profileCardHtml, profileCardHeaderHtml, profileCardPosition } = require('../src/features/profile-card');
 
 const card = { id: 7, username: 'dante.suarez', firstName: 'Dante', lastName: 'Suarez', avatarColor: '#7c3aed', status: 'online', statusText: 'In a <b>meeting</b>', statusEmoji: '📅',
   jobTitle: 'Developer', department: 'MIS', location: 'Makati', managerName: 'Bea Cruz', sharedChannels: 3 };
@@ -60,4 +60,18 @@ test('the card opens beside the name or picture that was clicked, and always sta
   // never above the top or off the left
   const small = profileCardPosition({ anchor: { left: 2, top: 2, right: 8, bottom: 8 }, vw: 300, vh: 300, width: 320, height: 380 });
   assert.equal(small.left >= 0 && small.top >= 0, true);
+});
+
+test('your account menu uses the same card header: banner, photo, full name, title, status and chips, with no message box, call or menu', () => {
+  const html = profileCardHeaderHtml({ card: { ...card, sharedChannels: null }, name: 'Dante Suarez', isSelf: true });
+  assert.match(html, /pcard2-banner/);
+  assert.match(html, /data-pcard-avatar="7"/);
+  assert.match(html, /<h3[^>]*>Dante Suarez<\/h3>/);
+  assert.match(html, /@dante\.suarez/);
+  assert.match(html, /Developer/);
+  assert.match(html, /MIS/);
+  assert.match(html, /pcard2-status-text/);
+  assert.doesNotMatch(html, /data-pcard-message|data-pcard-huddle|data-pcard-more|data-pcard-edit|shared channel/);
+  // the full card is this header plus the buttons and the footer
+  assert.ok(profileCardHtml({ card, name: 'Dante Suarez', isSelf: false }).includes(profileCardHeaderHtml({ card, name: 'Dante Suarez', isSelf: false })));
 });

@@ -7,8 +7,10 @@
 const pcEscape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const PC_STATUSES = new Set(['online', 'away', 'offline']);
 
-// card: the API's card; name: the person's full name (username only as the fallback), already worked out by the caller
-function profileCardHtml({ card, name, isSelf }) {
+// The top of the card: banner, photo with status dot, full name, @username and job title, status line, shared channels, department / location /
+// manager. Also the top of the account menu in the left rail (with isSelf). card: the API's card; name: the person's full name (the username
+// only as the fallback), already worked out by the caller.
+function profileCardHeaderHtml({ card, name, isSelf }) {
   const color = /^#[0-9a-f]{6}$/i.test(card.avatarColor || '') ? card.avatarColor : '#6b21a8';
   const status = PC_STATUSES.has(card.status) ? card.status : 'offline';
   const initial = pcEscape(String(name || card.username || '?').trim().charAt(0).toUpperCase() || '?');
@@ -18,18 +20,21 @@ function profileCardHtml({ card, name, isSelf }) {
     ? `<p class="pcard2-status-text">${card.statusEmoji ? `${pcEscape(card.statusEmoji)} ` : ''}${pcEscape(card.statusText)}</p>` : '';
   const shared = !isSelf && Number.isInteger(card.sharedChannels)
     ? `<p class="pcard2-shared">${card.sharedChannels} shared channel${card.sharedChannels === 1 ? '' : 's'}</p>` : '';
+  return `<div class="pcard2-banner" style="background: linear-gradient(135deg, ${color}, ${color}99)"></div>`
+    + `<div class="pcard2-avatar" data-pcard-avatar="${Number(card.id)}" style="background:${color}">${initial}<span class="pcard2-dot ${status}"></span></div>`
+    + `<div class="pcard2-body"><h3 class="pcard2-name">${pcEscape(name)}</h3>`
+    + `<p class="pcard2-sub"><span class="pcard2-username">@${pcEscape(card.username)}</span>${card.jobTitle ? `<span class="pcard2-title">${pcEscape(card.jobTitle)}</span>` : ''}</p>`
+    + `${statusLine}${shared}${chips.length ? `<div class="pcard2-chips">${chips.join('')}</div>` : ''}</div>`;
+}
+
+// The whole card: the header, the call and more buttons at the top right, and the message box (or Edit profile, for your own) at the bottom.
+function profileCardHtml({ card, name, isSelf }) {
   const buttons = isSelf ? '' : `<button type="button" class="pcard2-icon" data-pcard-huddle="${Number(card.id)}" title="Start a call" aria-label="Start a call"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg></button>`;
   const more = `<span class="pcard2-more-wrap"><button type="button" class="pcard2-icon" data-pcard-more title="More" aria-label="More" aria-haspopup="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button><div class="pcard2-menu" data-pcard-menu hidden><button type="button" data-pcard-page="${Number(card.id)}">View full profile</button></div></span>`;
   const footer = isSelf
     ? '<button type="button" class="btn pcard2-edit" data-pcard-edit>Edit profile</button>'
     : `<input type="text" class="pcard2-message" data-pcard-message="${Number(card.id)}" placeholder="Message ${pcEscape(name)}" aria-label="Message ${pcEscape(name)}" maxlength="2000" autocomplete="off">`;
-  return `<div class="pcard2-banner" style="background: linear-gradient(135deg, ${color}, ${color}99)"></div>`
-    + `<div class="pcard2-tools">${buttons}${more}</div>`
-    + `<div class="pcard2-avatar" data-pcard-avatar="${Number(card.id)}" style="background:${color}">${initial}<span class="pcard2-dot ${status}"></span></div>`
-    + `<div class="pcard2-body"><h3 class="pcard2-name">${pcEscape(name)}</h3>`
-    + `<p class="pcard2-sub"><span class="pcard2-username">@${pcEscape(card.username)}</span>${card.jobTitle ? `<span class="pcard2-title">${pcEscape(card.jobTitle)}</span>` : ''}</p>`
-    + `${statusLine}${shared}${chips.length ? `<div class="pcard2-chips">${chips.join('')}</div>` : ''}</div>`
-    + `<div class="pcard2-foot">${footer}</div>`;
+  return `${profileCardHeaderHtml({ card, name, isSelf })}<div class="pcard2-tools">${buttons}${more}</div><div class="pcard2-foot">${footer}</div>`;
 }
 
 // Where the card's top-left corner goes: beside the clicked name or picture (on the right if there is room, otherwise on the left),
@@ -43,7 +48,7 @@ function profileCardPosition({ anchor, width, height, vw, vh, margin = 12 }) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { profileCardHtml, profileCardPosition };
+  module.exports = { profileCardHtml, profileCardHeaderHtml, profileCardPosition };
 }
 
 // ---- the card on screen ------------------------------------------------------------------------------------------------------
@@ -93,6 +98,22 @@ async function sendFromProfileCard(userId, text) {
   if (!body) return;
   els.dmMessageInput.value = body;
   sendDmMessage();
+}
+
+// The top of the account menu in the left rail is the same card as everyone else's, for you: photo, full name, title, status, department,
+// location and manager. Until it loads (or if it cannot), the plain name and email lines below it stay.
+async function refreshAccountCard() {
+  const host = document.getElementById('user-card');
+  if (!host || !state.user) return;
+  try {
+    const response = await api(`/api/users/${state.user.id}/card`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.card) return;
+    host.innerHTML = profileCardHeaderHtml({ card: data.card, name: displayName(data.card, 'Me'), isSelf: true });
+    document.getElementById('user-menu')?.classList.add('has-card');
+    const avatar = host.querySelector('.pcard2-avatar');
+    if (avatar && data.card.photoVersion && typeof paintAvatar === 'function') paintAvatar(avatar, { id: data.card.id, photoVersion: data.card.photoVersion });
+  } catch (err) { console.error('Account card error:', err); }
 }
 
 function setupProfileCard() {
