@@ -11,6 +11,7 @@ const { spawnSync } = require('child_process');
 const { parseChangelog, notesFor } = require('../src/features/changelog');
 
 const root = path.join(__dirname, '..');
+const STABLE_INSTALLER = 'IT-Avenue-Workspace-Setup.exe';
 
 // latest.yml with the release notes added as a YAML block (replacing any notes already there).
 function addReleaseNotes(yamlText, notes) {
@@ -56,10 +57,12 @@ function main() {
   fs.mkdirSync(dest, { recursive: true });
   // the installer and block map first, the update file last: an app never sees a version whose installer is not there yet
   for (const name of [...files.filter((f) => f !== 'latest.yml'), 'latest.yml']) fs.copyFileSync(path.join(dist, name), path.join(dest, name));
+  // a link that never changes: always the newest installer (for the install note and for sending to new people)
+  fs.copyFileSync(path.join(dist, `IT-Avenue-Workspace-Setup-${version}.exe`), path.join(dest, STABLE_INSTALLER));
   fs.copyFileSync(path.join(root, '..', 'CHANGELOG.md'), path.join(dest, 'CHANGELOG.md'));
   console.log(`\nVersion ${version} is in ${dest}\nApps will find it at <server address>/updates/ within a few hours (or at their next start).`);
 }
 
 if (require.main === module) main();
 
-module.exports = { addReleaseNotes, filesToPublish };
+module.exports = { addReleaseNotes, filesToPublish, STABLE_INSTALLER };

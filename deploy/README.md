@@ -134,6 +134,8 @@ The desktop app updates itself from your own server; nothing is published to Git
      `latest.yml` and copies the installer, its block map and `latest.yml` into the updates folder (`UPDATES_DIR` overrides the folder;
      point it at a mounted or shared folder, or copy the three files to the server afterwards). `latest.yml` is copied last, so an
      app never sees a version whose installer is not there yet.
+   The installer is also copied to `IT-Avenue-Workspace-Setup.exe` (no version number), so the download link never changes:
+   `<server address>/updates/IT-Avenue-Workspace-Setup.exe` is always the newest.
 3. **What people see:** the app checks a few seconds after it starts and every four hours. A new version downloads quietly, then a notice
    says "Version X is ready" with **Restart now** or **Later**; if they ignore it, it installs when the app is quit. After the update the
    app shows **What's new** once (the changelog since the version they last saw), and Help has a **What's new** button with every version.
